@@ -1,6 +1,6 @@
 # OTRYX Flow Worker Quickstart
 
-Java 21 + Spring Boot 3.5.4 + OTRYX RPC `1.0.0-SNAPSHOT`, using Nacos 3.2.4 for **application-level Consumer** registration. This Quickstart embeds the reusable [`flow-worker-sdk`](../flow-worker-sdk) instead of exposing a public HTTP task execution API.
+Java 21 + Spring Boot 3.5.4 + OTRYX RPC `1.0.0-SNAPSHOT`, using Nacos 3.2.4 for **application-level Consumer** registration. This Quickstart embeds the reusable [`flow-worker-sdk`](../flow-worker-sdk/pom.xml) instead of exposing a public HTTP task execution API.
 
 ## Running in the isolated development Compose network
 
