@@ -1,0 +1,4 @@
+2026-10-26 M1 candidate:
+PASS M0 docs: 28 FR / 10 NFR / 17 AT / 30 planned Issues; 51 markdown files.
+PASS M1 static source contracts; XML/YAML parse; bash syntax; standalone Java21 DTO compile; TS API typecheck.
+NOT RUN: Maven, npm Vue build, Docker, RPC two JVM, browser, GitHub push, public TLS.

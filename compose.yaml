@@ -1,0 +1,94 @@
+# M1 only: an isolated developer network. NOT a public production deployment.
+name: otryx-flow
+x-backend-build: &backend-build
+  context: .
+  dockerfile: deploy/Dockerfile.backend
+  args:
+    OTRYX_RPC_SHA: ${OTRYX_RPC_SHA:?Set the RPC commit SHA in .env}
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${FLOW_DB_ROOT_PASSWORD:?Set a root password in .env}
+      MYSQL_DATABASE: flow_identity
+      MYSQL_USER: flow_app
+      MYSQL_PASSWORD: ${FLOW_DB_PASSWORD:?Set an app password in .env}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./deploy/mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", 'mysqladmin ping -h localhost -uroot -p"$$MYSQL_ROOT_PASSWORD" --silent']
+      interval: 5s
+      timeout: 4s
+      retries: 25
+    networks: [internal]
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.21
+    command:
+      - /usr/local/bin/etcd
+      - --name=flow-etcd
+      - --data-dir=/etcd-data
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --advertise-client-urls=http://etcd:2379
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-advertise-peer-urls=http://etcd:2380
+      - --initial-cluster=flow-etcd=http://etcd:2380
+      - --initial-cluster-state=new
+    volumes: [etcd_data:/etcd-data]
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/etcdctl", "--endpoints=http://127.0.0.1:2379", "endpoint", "health"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+    networks: [internal]
+
+  flow-metadata:
+    image: otryx-flow-backend:m1
+    command: ["/apps/flow-metadata.jar"]
+    environment:
+      FLOW_DB_JDBC_URL: jdbc:mysql://mysql:3306/flow_metadata?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      FLOW_DB_USER: flow_app
+      FLOW_DB_PASSWORD: ${FLOW_DB_PASSWORD:?Set an app password in .env}
+      OTRYX_REGISTRY_ENDPOINTS: http://etcd:2379
+      FLOW_RPC_ADVERTISED_HOST: flow-metadata
+    depends_on:
+      mysql: {condition: service_healthy}
+      etcd: {condition: service_healthy}
+    networks: [internal]
+
+  flow-api:
+    build: *backend-build
+    image: otryx-flow-backend:m1
+    command: ["/apps/flow-api.jar"]
+    environment:
+      FLOW_DB_JDBC_URL: jdbc:mysql://mysql:3306/flow_identity?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      FLOW_DB_USER: flow_app
+      FLOW_DB_PASSWORD: ${FLOW_DB_PASSWORD:?Set an app password in .env}
+      FLOW_ADMIN_USERNAME: ${FLOW_ADMIN_USERNAME:?Set an admin username in .env}
+      FLOW_ADMIN_PASSWORD: ${FLOW_ADMIN_PASSWORD:?Set an admin password in .env}
+      OTRYX_REGISTRY_ENDPOINTS: http://etcd:2379
+    depends_on:
+      mysql: {condition: service_healthy}
+      etcd: {condition: service_healthy}
+      flow-metadata: {condition: service_started}
+    networks: [internal]
+
+  flow-web:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.web
+    image: otryx-flow-web:m1
+    ports:
+      - 127.0.0.1:8088:80
+    depends_on: [flow-api]
+    networks: [internal, ingress]
+
+networks:
+  ingress: {} # only Nginx joins this network; enable host loopback publishing
+  internal:
+    internal: true # block runtime egress; Docker image pulls happen outside the container network
+volumes:
+  mysql_data:
+  etcd_data:

@@ -1,0 +1,45 @@
+PASS: OTRYX Flow M0 documentation
+  markdown_files: 51
+  requirements: 28 FR, 10 NFR
+  acceptance: 17 AT, all linked to test-cases
+  github_backlog: 30 planned issues
+  README bilingual markers: 7 matching sections
+  relative links and fenced code blocks: checked
+  Mermaid declarations: 12 structurally checked (not rendered)
+  Mermaid rendered preview, runtime E2E and deployment: NOT RUN at M0
+PASS: M1 static contracts (36 source/config files)
+NOTE: This does not run Maven, MySQL, network Etcd, OTRYX RPC, npm or a browser.
+TAP version 13
+# (node:3299) ExperimentalWarning: Type Stripping is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: CSRF bootstrap, login, project request, idempotent replay and logout share an HTTP session
+ok 1 - CSRF bootstrap, login, project request, idempotent replay and logout share an HTTP session
+  ---
+  duration_ms: 27.584408
+  type: 'test'
+  ...
+# Subtest: HTTP adapter surfaces typed API errors, and never silently treats 503 as success
+ok 2 - HTTP adapter surfaces typed API errors, and never silently treats 503 as success
+  ---
+  duration_ms: 0.683008
+  type: 'test'
+  ...
+# Subtest: HTTP adapter uses HTTP status when response is not a JSON error
+ok 3 - HTTP adapter uses HTTP status when response is not a JSON error
+  ---
+  duration_ms: 0.373041
+  type: 'test'
+  ...
+1..3
+# tests 3
+# suites 0
+# pass 3
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 158.985435
+PASS: shell E2E probes 401, login, CSRF, replay, conflict, input error and logout against mock HTTP server
+NOTE: Fake API only; does not verify the Java backend or OTRYX RPC
+PASS: Java 21 DTO model classes compiled with javac
+PASS: available M1 offline checks; full Maven, Vue build, real RPC E2E and browser remain unverified
