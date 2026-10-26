@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en-US.md)
 
-> **M1 + M2 FLOW-008 verified and merged:** M2 JobDefinition/revision PR [#10](https://github.com/Ryan-Guizhou/otryx-flow/pull/10), `main@97d29bb3e340071b8d144bdb267ce4b9316555b8` (five green CI checks including real Etcd/RPC/MySQL/Jobs E2E). **FLOW-009 Cron preview is a development candidate** until PR-head CI passes. Public HTTPS deployment remains outstanding.
+> **已验证并合并：M1、FLOW-008 (#10)、FLOW-009 (#11)**；当前 `main@86b7091806d3bc517b6e989390d87f0f37db3348` 已通过 Maven、Vue、真实 Docker Compose + RPC/MySQL 验收。**FLOW-010 (#5) 为持久化 Scheduler + Outbox 开发候选，待新 CI 验证。** Engine/Worker 与公网 HTTPS 站点尚未完成。
 
 <!-- doc-section:overview -->
 ## 简介
@@ -51,7 +51,7 @@ flowchart TB
 ## M1 已验收，M2 开发中
 M1 在 [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2) 通过 Maven、Vue、源码、文档以及真实 Docker Compose 跨 JVM RPC 集成验收，已合并 main。
 
-M2 FLOW-008 已在 [PR #10](https://github.com/Ryan-Guizhou/otryx-flow/pull/10) 完成：任务草稿、幂等创建、乐观版本 CAS、不可变发布 Revision 及 Vue 任务页面。参见 [M2 RPC/REST 契约](docs/04-api/m2-job-contracts.md) 和 [M2 验收计划](docs/06-testing/m2-job-acceptance.md)。FLOW-009 继续开发无副作用的 Cron/IANA 时区预览（[设计](docs/03-design/cron-timezone.md) · [API](docs/04-api/cron-preview.md)）。这不等于已实现任务调度、执行或公网部署。
+M2 FLOW-008 已在 [PR #10](https://github.com/Ryan-Guizhou/otryx-flow/pull/10) 完成：任务草稿、幂等创建、乐观版本 CAS、不可变发布 Revision 及 Vue 任务页面。参见 [M2 RPC/REST 契约](docs/04-api/m2-job-contracts.md) 和 [M2 验收计划](docs/06-testing/m2-job-acceptance.md)。FLOW-009 已于 [PR #11](https://github.com/Ryan-Guizhou/otryx-flow/pull/11) 合并无副作用的 Cron/IANA 时区预览（[设计](docs/03-design/cron-timezone.md) · [API](docs/04-api/cron-preview.md)）。FLOW-010 [Issue #5](https://github.com/Ryan-Guizhou/otryx-flow/issues/5) 研发双副本持久化 Scheduler、唯一 Trigger 与事务 Outbox；参见 [实现](docs/03-design/m2-scheduler-implementation.md)、[API](docs/04-api/m2-scheduler-contracts.md) 与 [验收](docs/06-testing/m2-scheduler-acceptance.md)。Engine/Worker 还没有执行任务的能力，公网部署也未完成。
 
 隔离开发配置 `TRUSTED_DEVELOPMENT` 不能用于不可信网络。
 

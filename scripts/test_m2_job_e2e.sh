@@ -62,4 +62,7 @@ code="$(curl --max-time 12 -sS -o /dev/null -w '%{http_code}' -c "$FLOW_M2_COOKI
 [ "$code" = 400 ] || { echo "Malformed Cron expected 400, got $code"; exit 1; }
 echo 'PASS: pure Cron + IANA zone + DST gap preview (not a scheduled trigger)'
 
+if [ "${FLOW_E2E_M2_SCHEDULES:-0}" = 1 ]; then
+  FLOW_M2_JOB_ID="$JOB_ID" bash scripts/test_m2_scheduler_e2e.sh
+fi
 echo 'PASS: M2 persisted draft + stable idempotency + CAS + immutable revisions + RPC (and optional restart)'

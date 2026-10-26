@@ -1,4 +1,4 @@
-# M1 only: an isolated developer network. NOT a public production deployment.
+# M1/M2 only: isolated developer network with two Scheduler replicas. NOT public production.
 name: otryx-flow
 x-backend-build: &backend-build
   context: .
@@ -58,6 +58,39 @@ services:
       etcd: {condition: service_healthy}
     networks: [internal]
 
+
+  flow-scheduler:
+    image: otryx-flow-backend:m1
+    command: ["/apps/flow-scheduler.jar"]
+    environment:
+      FLOW_DB_JDBC_URL: jdbc:mysql://mysql:3306/flow_scheduler?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
+      FLOW_DB_USER: flow_app
+      FLOW_DB_PASSWORD: ${FLOW_DB_PASSWORD:?Set an app password in .env}
+      OTRYX_REGISTRY_ENDPOINTS: http://etcd:2379
+      FLOW_RPC_ADVERTISED_HOST: flow-scheduler
+      FLOW_SCHEDULER_POLL_MS: 1000
+    depends_on:
+      mysql: {condition: service_healthy}
+      etcd: {condition: service_healthy}
+      flow-metadata: {condition: service_started}
+    networks: [internal]
+
+  flow-scheduler-replica:
+    image: otryx-flow-backend:m1
+    command: ["/apps/flow-scheduler.jar"]
+    environment:
+      FLOW_DB_JDBC_URL: jdbc:mysql://mysql:3306/flow_scheduler?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
+      FLOW_DB_USER: flow_app
+      FLOW_DB_PASSWORD: ${FLOW_DB_PASSWORD:?Set an app password in .env}
+      OTRYX_REGISTRY_ENDPOINTS: http://etcd:2379
+      FLOW_RPC_ADVERTISED_HOST: flow-scheduler-replica
+      FLOW_SCHEDULER_POLL_MS: 1000
+    depends_on:
+      mysql: {condition: service_healthy}
+      etcd: {condition: service_healthy}
+      flow-metadata: {condition: service_started}
+    networks: [internal]
+
   flow-api:
     build: *backend-build
     image: otryx-flow-backend:m1
@@ -73,6 +106,8 @@ services:
       mysql: {condition: service_healthy}
       etcd: {condition: service_healthy}
       flow-metadata: {condition: service_started}
+      flow-scheduler: {condition: service_started}
+      flow-scheduler-replica: {condition: service_started}
     networks: [internal]
 
   flow-web:

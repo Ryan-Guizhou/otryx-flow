@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import SchedulePanel from './SchedulePanel.vue'
 import type { Project, Job, SessionUser, ApiError, CronPreview } from './api'
 import { createProject, currentUser, listProjects, login, logout, refreshCsrf, listJobs, createJobDraft, publishJob, previewCron } from './api'
 
@@ -207,6 +208,7 @@ function selectView(id: ViewKey) { activeView.value = id; error.value = ''; if (
               <tbody><tr v-for="job in jobs" :key="job.id"><td><strong>{{ job.name }}</strong><small class="muted"> {{ job.id }}</small></td><td class="mono">{{ job.handlerKey }}</td><td>v{{ job.draftVersion }}</td><td>r{{ job.publishedRevision || 'none' }}</td><td><button class="btn btn-outline" @click="releaseJob(job)" :disabled="busy || job.draftVersion <= job.lastPublishedDraftVersion">Publish revision</button></td></tr></tbody></table>
             <div v-else class="empty-state"><div class="empty-icon">J</div><h3>No jobs in this project</h3><p>Create a safe Handler draft; execution becomes available in the Dispatcher milestone.</p></div>
           </div>
+          <SchedulePanel :project-id="activeJobProject" :jobs="jobs" />
           <div class="panel cron-panel">
             <h3>Cron &amp; time-zone preview</h3>
             <p class="muted">Preview only: these times are not yet saved or scheduled. Six fields (seconds minutes hours day month weekday). DST gaps are skipped and ambiguous clock times run at the earlier offset.</p>

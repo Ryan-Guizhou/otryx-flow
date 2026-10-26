@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en-US.md)
 
-> **M1 and M2 FLOW-008 verified and merged:** the versioned job PR [#10](https://github.com/Ryan-Guizhou/otryx-flow/pull/10), `main@97d29bb3e340071b8d144bdb267ce4b9316555b8`, passed five checks including real Etcd/RPC/MySQL/Jobs E2E. **FLOW-009 Cron preview is an unverified development candidate.** Public HTTPS deployment is not complete.
+> **Verified and merged: M1, FLOW-008 (#10) and FLOW-009 (#11)**; `main@86b7091806d3bc517b6e989390d87f0f37db3348` passed Maven, Vue and real Compose/OTRYX RPC/MySQL E2E. **FLOW-010 (#5) is a durable Scheduler/Outbox candidate pending new CI.** Engine/Worker and the public HTTPS site are not implemented.
 
 <!-- doc-section:overview -->
 ## Overview
@@ -51,7 +51,7 @@ Read the [docs index](docs/index.md), then [requirements](docs/01-product/requir
 ## M1 verified; M2 in progress
 M1 passed Maven, Vue, source, docs and real cross-JVM Docker Compose / Etcd / MySQL E2E and was squash-merged in [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2).
 
-The implemented M2 FLOW-008 [PR #10](https://github.com/Ryan-Guizhou/otryx-flow/pull/10) adds job drafts, durable idempotent creation, optimistic draft CAS, immutable published revisions, and a Vue Jobs page. See [M2 RPC/REST contracts](docs/04-api/m2-job-contracts.md) and [M2 acceptance](docs/06-testing/m2-job-acceptance.md). FLOW-009 adds a pure Cron/IANA time-zone preview candidate ([design](docs/03-design/cron-timezone.md) · [API](docs/04-api/cron-preview.md)). This is **not yet** job scheduling, execution or public deployment.
+The implemented M2 FLOW-008 [PR #10](https://github.com/Ryan-Guizhou/otryx-flow/pull/10) adds job drafts, durable idempotent creation, optimistic draft CAS, immutable published revisions, and a Vue Jobs page. See [M2 RPC/REST contracts](docs/04-api/m2-job-contracts.md) and [M2 acceptance](docs/06-testing/m2-job-acceptance.md). FLOW-009 merged in [PR #11](https://github.com/Ryan-Guizhou/otryx-flow/pull/11), adding a pure Cron/IANA time-zone preview ([design](docs/03-design/cron-timezone.md) · [API](docs/04-api/cron-preview.md)). FLOW-010 [Issue #5](https://github.com/Ryan-Guizhou/otryx-flow/issues/5) introduces a two-replica durable Scheduler, unique Trigger and transactional Outbox ([implementation](docs/03-design/m2-scheduler-implementation.md) · [API](docs/04-api/m2-scheduler-contracts.md) · [acceptance](docs/06-testing/m2-scheduler-acceptance.md)); Engine/Worker execution and public deployment remain future work.
 
 Do not deploy `TRUSTED_DEVELOPMENT` on untrusted networks.
 
