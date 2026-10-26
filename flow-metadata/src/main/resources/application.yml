@@ -1,0 +1,28 @@
+spring:
+  application:
+    name: flow-metadata
+  datasource:
+    url: ${FLOW_DB_JDBC_URL:jdbc:mysql://localhost:3306/flow_metadata?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${FLOW_DB_USER:flow_app}
+    password: ${FLOW_DB_PASSWORD:}
+  flyway:
+    enabled: true
+server:
+  port: ${FLOW_HTTP_PORT:8081}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+otryx:
+  rpc:
+    security-profile: TRUSTED_DEVELOPMENT # Developer-only isolated Compose network.
+    registry:
+      type: etcd
+      endpoints: ${OTRYX_REGISTRY_ENDPOINTS:127.0.0.1:2379}
+      namespace: flow-dev
+    server:
+      host: 0.0.0.0
+      port: 19090
+      advertised-host: ${FLOW_RPC_ADVERTISED_HOST:127.0.0.1}
+      advertised-port: 19090

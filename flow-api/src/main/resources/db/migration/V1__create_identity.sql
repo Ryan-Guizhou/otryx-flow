@@ -1,0 +1,6 @@
+CREATE TABLE flow_user (
+  username VARCHAR(64) NOT NULL PRIMARY KEY,
+  password_hash VARCHAR(100) NOT NULL,
+  role_name VARCHAR(16) NOT NULL,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

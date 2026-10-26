@@ -1,0 +1,182 @@
+[
+  {
+    "id": "FLOW-001",
+    "milestone": "M0",
+    "title": "[M0][FLOW-001] 冻结 PRD、ADR、FR/NFR/AT 可追踪基线",
+    "body": "## Goal\n冻结 PRD、ADR、FR/NFR/AT 可追踪基线\n\n## Scope and acceptance\nDocs QA；无依赖\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-002",
+    "milestone": "M1",
+    "title": "[M1][FLOW-002] 新建独立仓库与 CI 文档门禁",
+    "body": "## Goal\n新建独立仓库与 CI 文档门禁\n\n## Scope and acceptance\n`check_docs.py` 通过；依赖 001\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-003",
+    "milestone": "M1",
+    "title": "[M1][FLOW-003] 固定 OTRYX RPC 提交与双 JVM 跨进程 E2E",
+    "body": "## Goal\n固定 OTRYX RPC 提交与双 JVM 跨进程 E2E\n\n## Scope and acceptance\n真实应用级发现、超时、错误、身份校验；依赖 002\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-004",
+    "milestone": "M1",
+    "title": "[M1][FLOW-004] 初始化 Maven 契约模块、Flyway、服务启动骨架",
+    "body": "## Goal\n初始化 Maven 契约模块、Flyway、服务启动骨架\n\n## Scope and acceptance\nJDK21 编译、服务就绪；依赖 003\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-005",
+    "milestone": "M1",
+    "title": "[M1][FLOW-005] 构建 Vue3 前端外壳与 REST OpenAPI Client",
+    "body": "## Goal\n构建 Vue3 前端外壳与 REST OpenAPI Client\n\n## Scope and acceptance\n前端构建/类型检查/登录占位转真实 API；依赖 004\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-006",
+    "milestone": "M1",
+    "title": "[M1][FLOW-006] 实现用户项目、RBAC、会话和审计",
+    "body": "## Goal\n实现用户项目、RBAC、会话和审计\n\n## Scope and acceptance\nFR-001/002/003/022，AT-02；依赖 004\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-007",
+    "milestone": "M1",
+    "title": "[M1][FLOW-007] 增加开发 Compose 与首个跨服务查询业务流",
+    "body": "## Goal\n增加开发 Compose 与首个跨服务查询业务流\n\n## Scope and acceptance\nAT-01/03；依赖 004/006\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-008",
+    "milestone": "M2",
+    "title": "[M2][FLOW-008] 实现 Metadata JobDefinition 与不可变 Revision",
+    "body": "## Goal\n实现 Metadata JobDefinition 与不可变 Revision\n\n## Scope and acceptance\nFR-004、AT-03；依赖 004\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-009",
+    "milestone": "M2",
+    "title": "[M2][FLOW-009] 实现 ScheduleDefinition、Cron 解析、TZ/DST 预览",
+    "body": "## Goal\n实现 ScheduleDefinition、Cron 解析、TZ/DST 预览\n\n## Scope and acceptance\nFR-005/007、AT-04；依赖 008\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-010",
+    "milestone": "M2",
+    "title": "[M2][FLOW-010] 实现多 Scheduler 火点唯一领取与 Outbox",
+    "body": "## Goal\n实现多 Scheduler 火点唯一领取与 Outbox\n\n## Scope and acceptance\nFR-007/008、AT-07/09；依赖 009\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-011",
+    "milestone": "M2",
+    "title": "[M2][FLOW-011] 实现 Engine createRun 与状态持久化/Inbox",
+    "body": "## Goal\n实现 Engine createRun 与状态持久化/Inbox\n\n## Scope and acceptance\nFR-012/019、AT-09；依赖 010\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-012",
+    "milestone": "M2",
+    "title": "[M2][FLOW-012] 实现 Dispatcher 持久队列、租约与 Fencing",
+    "body": "## Goal\n实现 Dispatcher 持久队列、租约与 Fencing\n\n## Scope and acceptance\nFR-016/018、AT-08/09；依赖 011\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-013",
+    "milestone": "M2",
+    "title": "[M2][FLOW-013] 实现 Worker SDK、主动 Claim、Heartbeat、Complete",
+    "body": "## Goal\n实现 Worker SDK、主动 Claim、Heartbeat、Complete\n\n## Scope and acceptance\nFR-015/017/025、AT-08/10；依赖 012\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-014",
+    "milestone": "M2",
+    "title": "[M2][FLOW-014] 完成短任务闭环与重复/宕机集成测试",
+    "body": "## Goal\n完成短任务闭环与重复/宕机集成测试\n\n## Scope and acceptance\nAT-03/07/08/09；依赖 010-013\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-015",
+    "milestone": "M3",
+    "title": "[M3][FLOW-015] 实现 WorkflowDefinition/DAG 后端校验与版本",
+    "body": "## Goal\n实现 WorkflowDefinition/DAG 后端校验与版本\n\n## Scope and acceptance\nFR-009/010/011，AT-05；依赖 008/011\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-016",
+    "milestone": "M3",
+    "title": "[M3][FLOW-016] 实现 Engine DAG 依赖推进、并行及条件分支",
+    "body": "## Goal\n实现 Engine DAG 依赖推进、并行及条件分支\n\n## Scope and acceptance\nFR-012/013，AT-05/09；依赖 015/014\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-017",
+    "milestone": "M3",
+    "title": "[M3][FLOW-017] 实现取消、Retry、最终状态竞态收敛",
+    "body": "## Goal\n实现取消、Retry、最终状态竞态收敛\n\n## Scope and acceptance\nFR-013/014，AT-10；依赖 016\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-018",
+    "milestone": "M3",
+    "title": "[M3][FLOW-018] 实现 Vue Flow 工作流画布/编辑/发布",
+    "body": "## Goal\n实现 Vue Flow 工作流画布/编辑/发布\n\n## Scope and acceptance\nFR-009/010/011，AT-05；依赖 005/015\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-019",
+    "milestone": "M3",
+    "title": "[M3][FLOW-019] 实现 Run 详情、Attempt 进度、日志视图",
+    "body": "## Goal\n实现 Run 详情、Attempt 进度、日志视图\n\n## Scope and acceptance\nFR-019/020，AT-06/12；依赖 013/016/018\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-020",
+    "milestone": "M4",
+    "title": "[M4][FLOW-020] 接入受保护 Etcd、mTLS、证书绑定与方法 AuthZ",
+    "body": "## Goal\n接入受保护 Etcd、mTLS、证书绑定与方法 AuthZ\n\n## Scope and acceptance\nNFR-001，AT-11；依赖 003/014\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-021",
+    "milestone": "M4",
+    "title": "[M4][FLOW-021] 接入 OpenTelemetry、业务指标、告警及审计",
+    "body": "## Goal\n接入 OpenTelemetry、业务指标、告警及审计\n\n## Scope and acceptance\nFR-021/023/028，AT-12/17；依赖 014/019\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-022",
+    "milestone": "M4",
+    "title": "[M4][FLOW-022] 实现项目配额、Backpressure、Worker Drain",
+    "body": "## Goal\n实现项目配额、Backpressure、Worker Drain\n\n## Scope and acceptance\nFR-008/015/017，AT-13；依赖 013/020\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-023",
+    "milestone": "M4",
+    "title": "[M4][FLOW-023] 实现备份、恢复、对账和历史清理",
+    "body": "## Goal\n实现备份、恢复、对账和历史清理\n\n## Scope and acceptance\nFR-026/027，AT-15；依赖 014/017\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-024",
+    "milestone": "M4",
+    "title": "[M4][FLOW-024] 限制 Demo Handler、访客权限及敏感输入",
+    "body": "## Goal\n限制 Demo Handler、访客权限及敏感输入\n\n## Scope and acceptance\nFR-024，AT-16；依赖 006/019/020\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-025",
+    "milestone": "M5",
+    "title": "[M5][FLOW-025] 全量两 JVM、DB 及网络 mTLS 故障注入",
+    "body": "## Goal\n全量两 JVM、DB 及网络 mTLS 故障注入\n\n## Scope and acceptance\nAT-07/08/09/10/11；依赖 020/023\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-026",
+    "milestone": "M5",
+    "title": "[M5][FLOW-026] 固定环境业务吞吐与 10k RPC 基线对比",
+    "body": "## Goal\n固定环境业务吞吐与 10k RPC 基线对比\n\n## Scope and acceptance\nNFR-007，AT-13；依赖 022/025\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-027",
+    "milestone": "M5",
+    "title": "[M5][FLOW-027] 契约 Rolling N/N+1 和回滚矩阵",
+    "body": "## Goal\n契约 Rolling N/N+1 和回滚矩阵\n\n## Scope and acceptance\nNFR-008，AT-14；依赖 020/025\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-028",
+    "milestone": "M5",
+    "title": "[M5][FLOW-028] 前后端 Playwright E2E、规范与发行验收",
+    "body": "## Goal\n前后端 Playwright E2E、规范与发行验收\n\n## Scope and acceptance\nAT-01~17；依赖 018/021/026/027\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-029",
+    "milestone": "M6",
+    "title": "[M6][FLOW-029] 实现 GHCR 镜像、受限 HTTPS Demo 部署",
+    "body": "## Goal\n实现 GHCR 镜像、受限 HTTPS Demo 部署\n\n## Scope and acceptance\nAT-16；依赖 024/028\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  },
+  {
+    "id": "FLOW-030",
+    "milestone": "M6",
+    "title": "[M6][FLOW-030] 执行公开站点业务验收、Release 与运维交付",
+    "body": "## Goal\n执行公开站点业务验收、Release 与运维交付\n\n## Scope and acceptance\nAT-01~17、Release Check；依赖 029\n\n## Engineering contract\n- Exactly one Issue per PR; deliver source, tests, schemas, and documentation as a coherent vertical slice.\n- Respect OTRYX RPC 1.0.0-SNAPSHOT pinned source revision and provider application-level discovery.\n- Add both normal and failure/concurrency tests, explicit rollback and evidence from actual PR Head SHA.\n- Update relevant requirements and acceptance matrix; do not mark tests PASS until actually run.\n\n## References\n- docs/08-roadmap/issue-backlog.md\n- docs/06-testing/acceptance-plan.md\n"
+  }
+]

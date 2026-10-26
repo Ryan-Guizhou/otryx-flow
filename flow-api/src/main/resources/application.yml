@@ -1,0 +1,37 @@
+spring:
+  application:
+    name: flow-api
+  datasource:
+    url: ${FLOW_DB_JDBC_URL:jdbc:mysql://localhost:3306/flow_identity?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${FLOW_DB_USER:flow_app}
+    password: ${FLOW_DB_PASSWORD:}
+  flyway:
+    enabled: true
+server:
+  port: ${FLOW_HTTP_PORT:8080}
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        same-site: lax
+        secure: ${FLOW_SECURE_COOKIES:false}
+flow:
+  bootstrap:
+    admin-username: ${FLOW_ADMIN_USERNAME:admin}
+    admin-password: ${FLOW_ADMIN_PASSWORD:}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+otryx:
+  rpc:
+    security-profile: TRUSTED_DEVELOPMENT # Developer-only isolated Compose network.
+    registry:
+      type: etcd
+      endpoints: ${OTRYX_REGISTRY_ENDPOINTS:127.0.0.1:2379}
+      namespace: flow-dev
+    server:
+      enabled: false
+    client:
+      timeout: 3s

@@ -1,0 +1,66 @@
+name: M1 source and build
+on:
+  pull_request:
+    paths:
+      - 'pom.xml'
+      - 'flow-api/**'
+      - 'flow-contracts/**'
+      - 'flow-metadata/**'
+      - 'flow-web/**'
+      - 'deploy/**'
+      - 'compose.yaml'
+      - 'scripts/check_m1_source.py'
+      - 'scripts/test_m1_e2e.sh'
+      - 'scripts/test_frontend_api.mjs'
+      - 'scripts/test_e2e_harness_offline.mjs'
+      - '.github/workflows/m1-quality.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/check_m1_source.py
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Restore compiled RPC artifacts for exact revision
+        id: rpc-artifacts
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/com/peachsoft/otryx
+          key: otryx-rpc-706b6506e49e1ade70de9c6c64c844fdd4631e17-jdk21-m1-modules
+      - name: Build pinned OTRYX RPC locally
+        if: steps.rpc-artifacts.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          git clone https://github.com/Ryan-Guizhou/otryx-rpc.git /tmp/otryx-rpc
+          cd /tmp/otryx-rpc
+          git checkout 706b6506e49e1ade70de9c6c64c844fdd4631e17
+          test "$(git rev-parse HEAD)" = 706b6506e49e1ade70de9c6c64c844fdd4631e17
+          ./mvnw -B -ntp -pl :otryx-codegen,:otryx-spring-boot-starter,:otryx-registry-etcd -am -DskipTests install
+      - run: mvn -B -ntp clean verify
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: flow-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Offline API contract tests (Node built-in test runner)
+        run: node --experimental-strip-types --test ../scripts/test_frontend_api.mjs
+      - name: Verify REST E2E shell harness against offline HTTP mock
+        run: node ../scripts/test_e2e_harness_offline.mjs
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
