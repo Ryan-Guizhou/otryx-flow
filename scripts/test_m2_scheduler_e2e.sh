@@ -58,7 +58,7 @@ duplicate="$(mysql_query "SELECT COUNT(*) FROM (SELECT schedule_id, schedule_rev
 [ "$duplicate" = 0 ] || { echo 'Duplicate logical Cron fires detected'; exit 1; }
 code="$(curl --max-time 12 -sS -o "$WORK/triggers.json" -w '%{http_code}' -b "$FLOW_M2_COOKIE" "$URL/$SCHEDULE_ID/triggers")"
 [ "$code" = 200 ] || { echo "Scheduler triggers expected 200, got $code"; exit 1; }
-python3 -c 'import json,sys;events=json.load(open(sys.argv[1]));assert len(events)>0 and all(e["status"]=="PENDING_ENGINE" for e in events)' "$WORK/triggers.json"
+python3 -c 'import json,sys;events=json.load(open(sys.argv[1]));assert len(events)>0 and all(e["status"] in ("PENDING_ENGINE","ENGINE_ACCEPTED") for e in events)' "$WORK/triggers.json"
 # Verify a scanner replica survives a peer restart and continues to create new fire rows.
 before="$fired"
 docker compose restart flow-scheduler
@@ -81,5 +81,8 @@ code="$(curl --max-time 12 -sS -o /dev/null -w '%{http_code}' -b "$FLOW_M2_COOKI
   -H 'Content-Type: application/json' -H "X-XSRF-TOKEN: $FLOW_M2_TOKEN" \
   -d "{\"expectedVersion\":$version,\"enabled\":true}" "$URL/$SCHEDULE_ID/enabled")"
 [ "$code" = 409 ] || { echo "Stale schedule toggle expected 409, got $code"; exit 1; }
-echo 'PASS: dual Scheduler replicas, unique logical fire, atomic pending Outbox, RPC/REST create, CAS and restart recovery'
-echo 'NOTE: PENDING_ENGINE is not an actual executed task; Engine remains a subsequent milestone.'
+if [ "${FLOW_E2E_M2_ENGINE:-0}" = 1 ]; then
+  FLOW_M2_SCHEDULE_ID="$SCHEDULE_ID" bash scripts/test_m2_engine_e2e.sh
+fi
+echo 'PASS: dual Scheduler replicas, unique logical fire, atomic Outbox, RPC/REST create, CAS and restart recovery'
+echo 'NOTE: ENGINE_ACCEPTED is an acknowledged logical fire, not an executed Worker task.'

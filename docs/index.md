@@ -21,4 +21,6 @@ M1 verified main@3291adcb: [Developer Compose](07-operations/m1-developer-compos
 
 M2 FLOW-008 verified in PR #10 (main@97d29bb3): [Job REST/RPC contract](04-api/m2-job-contracts.md) | [Job acceptance plan](06-testing/m2-job-acceptance.md). FLOW-009 Cron preview is [design candidate](03-design/cron-timezone.md) + [REST API](04-api/cron-preview.md). Preview is not execution or persisted scheduling.
 
-FLOW-010 / Issue #5 (Scheduler PR candidate): [Implementation](03-design/m2-scheduler-implementation.md) | [API contracts](04-api/m2-scheduler-contracts.md) | [Acceptance](06-testing/m2-scheduler-acceptance.md). Durable fires / Outbox do **not** mean a Handler has run; Engine/Worker are future milestones.
+FLOW-010 / merged PR #12: [Implementation](03-design/m2-scheduler-implementation.md) | [API contracts](04-api/m2-scheduler-contracts.md) | [Acceptance](06-testing/m2-scheduler-acceptance.md). Durable fires / Outbox do **not** mean a Handler has run; FLOW-011 Engine acceptance is the next step, while Dispatcher/Worker remain future milestones.
+
+FLOW-011 / Issue #6 (Engine PR candidate): [Inbox + Relay implementation](03-design/m2-engine-outbox.md) | [RPC/REST contracts](04-api/m2-engine-contracts.md) | [Acceptance](06-testing/m2-engine-acceptance.md). `WAITING_DISPATCH` proves Run persistence, not physical task execution.

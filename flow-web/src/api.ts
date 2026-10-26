@@ -141,3 +141,21 @@ export async function toggleSchedule(projectId: string, scheduleId: string,
     method: 'POST', body: JSON.stringify({ expectedVersion, enabled })
   })
 }
+
+/** Engine Run is durable; WAITING_DISPATCH is not task execution. */
+export interface EngineRun {
+  id: string
+  eventId: string
+  projectId: string
+  scheduleId: string
+  scheduleRevision: number
+  jobId: string
+  jobRevision: number
+  plannedFireUtc: string
+  origin: string
+  status: 'WAITING_DISPATCH'
+  createdAt: string
+}
+export async function listRuns(projectId: string): Promise<EngineRun[]> {
+  return call(`/api/v1/projects/${encodeURIComponent(projectId)}/runs`)
+}

@@ -1,4 +1,4 @@
-# M1/M2 only: isolated developer network with two Scheduler replicas. NOT public production.
+# M2 development: isolated network, two Schedulers and one Engine. NOT a public deployment.
 name: otryx-flow
 x-backend-build: &backend-build
   context: .
@@ -91,6 +91,21 @@ services:
       flow-metadata: {condition: service_started}
     networks: [internal]
 
+
+  flow-engine:
+    image: otryx-flow-backend:m1
+    command: ["/apps/flow-engine.jar"]
+    environment:
+      FLOW_DB_JDBC_URL: jdbc:mysql://mysql:3306/flow_engine?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
+      FLOW_DB_USER: flow_app
+      FLOW_DB_PASSWORD: ${FLOW_DB_PASSWORD:?Set an app password in .env}
+      OTRYX_REGISTRY_ENDPOINTS: http://etcd:2379
+      FLOW_RPC_ADVERTISED_HOST: flow-engine
+    depends_on:
+      mysql: {condition: service_healthy}
+      etcd: {condition: service_healthy}
+    networks: [internal]
+
   flow-api:
     build: *backend-build
     image: otryx-flow-backend:m1
@@ -108,6 +123,7 @@ services:
       flow-metadata: {condition: service_started}
       flow-scheduler: {condition: service_started}
       flow-scheduler-replica: {condition: service_started}
+      flow-engine: {condition: service_started}
     networks: [internal]
 
   flow-web:

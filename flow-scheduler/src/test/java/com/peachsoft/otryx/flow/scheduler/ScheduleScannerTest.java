@@ -22,6 +22,7 @@ class ScheduleScannerTest {
         source.setURL("jdbc:h2:mem:scan-" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1");
         JdbcTemplate jdbc = new JdbcTemplate(source);
         jdbc.execute("CREATE TABLE flow_schedule_definition (id VARCHAR(36) PRIMARY KEY, "
+                + "owner_username VARCHAR(64), project_id VARCHAR(36), "
                 + "job_id VARCHAR(36), job_revision INT, schedule_revision INT, cron_expr VARCHAR(120), "
                 + "time_zone VARCHAR(64), misfire_policy VARCHAR(16), enabled BOOLEAN, "
                 + "next_fire_at_utc TIMESTAMP(3), version BIGINT, updated_at TIMESTAMP(3))");
@@ -34,8 +35,8 @@ class ScheduleScannerTest {
                 + "created_at TIMESTAMP(3), UNIQUE(trigger_id))");
         String schedule = UUID.randomUUID().toString();
         Instant due = Instant.now().minusSeconds(1);
-        jdbc.update("INSERT INTO flow_schedule_definition VALUES (?,?,1,1,'0 0 * * * *'," 
-                        + "'Etc/UTC','FIRE_ONCE',true,?,1,?)", schedule, UUID.randomUUID().toString(),
+        jdbc.update("INSERT INTO flow_schedule_definition VALUES (?,'admin',?, ?,1,1,'0 0 * * * *'," 
+                        + "'Etc/UTC','FIRE_ONCE',true,?,1,?)", schedule, UUID.randomUUID().toString(), UUID.randomUUID().toString(),
                 Timestamp.from(due), Timestamp.from(due));
         var manager = new DataSourceTransactionManager(source);
         ScheduleScanner a = new ScheduleScanner(jdbc, manager, new ObjectMapper());
