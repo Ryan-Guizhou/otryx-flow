@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: flow-worker-demo
+  main:
+    web-application-type: none
+flow:
+  worker:
+    id: ${FLOW_WORKER_ID:flow-worker-demo}
+otryx:
+  rpc:
+    security-profile: TRUSTED_DEVELOPMENT # Only isolated local demo / CI; never production.
+    registry:
+      type: nacos
+      endpoints: ${OTRYX_REGISTRY_ENDPOINTS:127.0.0.1:8848}
+      namespace: public
+      nacos:
+        group: OTRYX_RPC
+        cluster: DEFAULT
+    client:
+      timeout: 3s
+    server:
+      host: 0.0.0.0
+      port: 0
+      advertised-host: ${FLOW_RPC_ADVERTISED_HOST:127.0.0.1}
+      advertised-port: 0
