@@ -30,3 +30,5 @@ FLOW-012 / merged PR #14: [Lease + Fencing design](03-design/m2-dispatcher-lease
 Current registry migration (Issue #15): [Nacos 3.2.4-only setup and exclusive V2 mapping bootstrap](07-operations/nacos-registry.md) | [Developer Compose](07-operations/m1-developer-compose.md). Etcd is only historical CI evidence, not an active runtime option.
 
 FLOW-013 / Issue #8 candidate: [bounded Worker SDK design](03-design/m2-worker-sdk.md) | [Quickstart](../flow-worker-quickstart/README.md) | [real-Worker acceptance](06-testing/m2-worker-acceptance.md). Worker `SUCCEEDED` proves Dispatcher attempt completion; Engine outcome reconciliation is Issue #9.
+
+FLOW-014 / Issue #9 development candidate: [terminal Dispatcher Outcome Outbox and Engine Inbox](03-design/m2-outcome-reconciliation.md) | [full Nacos distributed execution acceptance](06-testing/m2-final-acceptance.md). Terminal states must be backed by actual Worker executions; production mTLS and full DAG are separate milestones.

@@ -13,10 +13,10 @@ docker compose --profile worker-demo up -d flow-worker-demo
 docker compose --profile worker-demo logs --tail=100 flow-worker-demo
 ```
 
-The only registered handler is `safe.echo` (no external side effects). It is defined directly in `QuickstartWorkerLauncher`, and cannot be replaced by remote class names, scripts or uploaded JARs. The SDK polls Dispatcher by `handlerKey`, obtains a bounded lease, executes the Handler, and confirms success/failure using `leaseEpoch` and `leaseToken`. Unknown RPC completion responses remain ambiguous until the Dispatcher lease recovers.
+Registered handlers are `safe.echo` (no side effects) and `safe.fail` (intentional failure for bounded retry E2E only). It is defined directly in `QuickstartWorkerLauncher`, and cannot be replaced by remote class names, scripts or uploaded JARs. The SDK polls Dispatcher by `handlerKey`, obtains a bounded lease, executes the Handler, and confirms success/failure using `leaseEpoch` and `leaseToken`. Unknown RPC completion responses remain ambiguous until the Dispatcher lease recovers.
 
 ## Building a custom trusted worker
 
 Use `WorkerRuntime(dispatcherRpc, WorkerSettings.development("my-worker-1"), Map.of("safe.echo", handler))` after obtaining a Spring `@OtryxRpcReference` to `DispatcherRpc`. Handlers should use `WorkerContext.checkCancelled()` during blocking work, and must implement idempotency for any external side effect. Shutdown via `WorkerRuntime.close()` to stop new leases and drain in-flight tasks.
 
-**This is a developer-only demo.** Current Nacos Adapter accepts only `TRUSTED_DEVELOPMENT`; do not expose it on untrusted networks. Engine terminal outcome aggregation, full workflow execution and public HTTPS are not part of this example.
+**This is a developer-only demo.** Current Nacos Adapter accepts only `TRUSTED_DEVELOPMENT`; do not expose it on untrusted networks. Engine terminal reconciliation is implemented only in Issue #9 and is not supplied by this Worker module alone. Full DAG execution and public HTTPS are not part of this example.

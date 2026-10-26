@@ -153,7 +153,7 @@ export interface EngineRun {
   jobRevision: number
   plannedFireUtc: string
   origin: string
-  status: 'WAITING_DISPATCH' | 'DISPATCHED'
+  status: 'WAITING_DISPATCH' | 'DISPATCHED' | 'SUCCEEDED' | 'FAILED'
   createdAt: string
 }
 export async function listRuns(projectId: string): Promise<EngineRun[]> {

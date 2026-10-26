@@ -43,6 +43,7 @@ jobs:
           FLOW_E2E_M2_ENGINE: ${{ hashFiles('scripts/test_m2_engine_e2e.sh') != '' && '1' || '0' }}
           FLOW_E2E_M2_DISPATCHER: ${{ hashFiles('scripts/test_m2_dispatcher_e2e.sh') != '' && '1' || '0' }}
           FLOW_E2E_M2_WORKER: ${{ hashFiles('scripts/test_m2_worker_e2e.sh') != '' && '1' || '0' }}
+          FLOW_E2E_M2_FINAL: ${{ hashFiles('scripts/test_m2_final_e2e.sh') != '' && '1' || '0' }}
         run: |
           set -euo pipefail
           set -a

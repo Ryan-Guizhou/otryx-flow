@@ -127,9 +127,17 @@ public class EngineDispatchRelay {
             if (changed == 0) return false;
             int advanced = jdbc.update("UPDATE flow_workflow_run SET status = 'DISPATCHED', "
                             + "updated_at = CURRENT_TIMESTAMP(3) "
-                            + "WHERE id = ? AND status IN ('WAITING_DISPATCH','DISPATCHED')",
+                            + "WHERE id = ? AND status = 'WAITING_DISPATCH'",
                     claimed.runId());
-            if (advanced != 1) throw new IllegalStateException("Run disappeared during dispatch ACK");
+            if (advanced == 0) {
+                String persisted = jdbc.queryForObject(
+                        "SELECT status FROM flow_workflow_run WHERE id = ?",
+                        String.class, claimed.runId());
+                if (!("DISPATCHED".equals(persisted) || "SUCCEEDED".equals(persisted)
+                        || "FAILED".equals(persisted))) {
+                    throw new IllegalStateException("Run disappeared during dispatch ACK");
+                }
+            }
             return true;
         });
         return Boolean.TRUE.equals(confirmed);

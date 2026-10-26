@@ -199,6 +199,9 @@ public class DispatcherRpcService implements DispatcherRpc {
                             + "WHERE task_id = ? AND lease_epoch = ? AND lease_token = ? AND status = 'LEASED'",
                     command.outcome(), now, task, command.leaseEpoch(), token);
             if (recorded != 1) throw new IllegalStateException("Attempt record missing");
+            if (SUCCEEDED.equals(nextStatus) || FAILED.equals(nextStatus)) {
+                stageOutcome(task, command.leaseEpoch(), nextStatus, now);
+            }
             return new DispatchMutationReply("OK", nextStatus);
         });
     }
@@ -220,10 +223,23 @@ public class DispatcherRpcService implements DispatcherRpc {
                 jdbc.update("UPDATE flow_dispatch_attempt SET status = 'EXPIRED', finished_at = ? "
                                 + "WHERE task_id = ? AND lease_epoch = ? AND status = 'LEASED'",
                         now, row.id(), row.epoch());
+                stageOutcome(row.id(), row.epoch(), FAILED, now);
             }
             return rows.size();
         });
         return expired == null ? 0 : expired;
+    }
+
+
+    /** 将终态任务作为唯一、持久的 Engine 结果事件写入 Dispatcher 自有事务。 */
+    private void stageOutcome(String taskId, long epoch, String outcome, Timestamp now) {
+        int inserted = jdbc.update("INSERT INTO flow_dispatch_outcome_outbox "
+                        + "(event_id,engine_run_id,task_id,project_id,lease_epoch,outcome,"
+                        + "delivery_state,attempts,created_at) "
+                        + "SELECT ?,engine_run_id,id,project_id,?,?,'PENDING',0,? "
+                        + "FROM flow_dispatch_task WHERE id = ?",
+                UUID.randomUUID().toString(), epoch, outcome, now, taskId);
+        if (inserted != 1) throw new IllegalStateException("No dispatch task for terminal outcome");
     }
 
     private DispatchEnqueueReply replay(DispatchEnqueueCommand c, String fingerprint) {
