@@ -33,6 +33,10 @@ class EngineRpcServiceTest {
                 + "schedule_revision INT, job_id VARCHAR(36), job_revision INT, planned_fire_at_utc TIMESTAMP(3), "
                 + "origin VARCHAR(16), status VARCHAR(24), created_at TIMESTAMP(3), updated_at TIMESTAMP(3), "
                 + "UNIQUE(schedule_id, schedule_revision, planned_fire_at_utc, origin))");
+        jdbc.execute("CREATE TABLE flow_engine_dispatch_outbox (run_id VARCHAR(36) PRIMARY KEY, "
+                + "event_id VARCHAR(36) UNIQUE, delivery_state VARCHAR(16), claim_token VARCHAR(36), "
+                + "lease_until TIMESTAMP(3), attempts INT, next_attempt_at TIMESTAMP(3), "
+                + "last_error VARCHAR(120), delivered_at TIMESTAMP(3), created_at TIMESTAMP(3))");
         engine = new EngineRpcService(jdbc, new DataSourceTransactionManager(ds));
     }
 
@@ -49,6 +53,7 @@ class EngineRpcServiceTest {
                 "admin", PROJECT, SCHEDULE, 1, JOB, 9, first.plannedFireUtc(), "CRON")).code());
         assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM flow_engine_inbox", Integer.class));
         assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM flow_workflow_run", Integer.class));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM flow_engine_dispatch_outbox", Integer.class));
     }
 
     @Test
@@ -78,6 +83,7 @@ class EngineRpcServiceTest {
             assertEquals(a.runId(), b.runId());
         }
         assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM flow_workflow_run", Integer.class));
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM flow_engine_dispatch_outbox", Integer.class));
         assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM flow_engine_inbox", Integer.class));
     }
 
@@ -87,6 +93,7 @@ class EngineRpcServiceTest {
         assertThrows(RuntimeException.class, () -> engine.acceptScheduledFire(
                 event(UUID.randomUUID().toString(), "2026-10-26T08:10:00Z")));
         assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM flow_engine_inbox", Integer.class));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM flow_engine_dispatch_outbox", Integer.class));
     }
 
     @Test
@@ -95,6 +102,7 @@ class EngineRpcServiceTest {
                 SCHEDULE, 0, JOB, 2, "2026-10-26T08:00:00Z", "CRON");
         assertThrows(IllegalArgumentException.class, () -> engine.acceptScheduledFire(invalid));
         assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM flow_engine_inbox", Integer.class));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM flow_engine_dispatch_outbox", Integer.class));
     }
 
     private static ScheduleFireCommand event(String id, String instant) {

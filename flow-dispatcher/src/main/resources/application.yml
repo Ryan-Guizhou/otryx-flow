@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: flow-dispatcher
+  datasource:
+    url: ${FLOW_DB_JDBC_URL:jdbc:mysql://localhost:3306/flow_dispatcher?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true}
+    username: ${FLOW_DB_USER:flow_app}
+    password: ${FLOW_DB_PASSWORD:}
+  flyway:
+    enabled: true
+server:
+  port: ${FLOW_HTTP_PORT:8084}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+flow:
+  dispatcher:
+    reaper-poll-ms: ${FLOW_DISPATCHER_REAPER_POLL_MS:1000}
+otryx:
+  rpc:
+    security-profile: TRUSTED_DEVELOPMENT # Isolated dev only; production requires authenticated NETWORK_MTLS.
+    registry:
+      type: etcd
+      endpoints: ${OTRYX_REGISTRY_ENDPOINTS:http://127.0.0.1:2379}
+      namespace: flow-dev
+    server:
+      host: 0.0.0.0
+      port: 19093
+      advertised-host: ${FLOW_RPC_ADVERTISED_HOST:127.0.0.1}
+      advertised-port: 19093
+    client:
+      timeout: 3s

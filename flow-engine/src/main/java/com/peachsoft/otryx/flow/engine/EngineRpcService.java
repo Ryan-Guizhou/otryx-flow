@@ -63,6 +63,9 @@ public class EngineRpcService implements EngineRpc {
                         runId, event.id(), event.owner(), event.project(), event.schedule(),
                         event.scheduleRevision(), event.job(), event.jobRevision(),
                         Timestamp.from(event.planned()), event.origin(), WAITING_DISPATCH, now, now);
+                jdbc.update("INSERT INTO flow_engine_dispatch_outbox "
+                                + "(run_id, event_id, delivery_state, attempts, created_at) "
+                                + "VALUES (?, ?, 'PENDING', 0, ?)", runId, event.id(), now);
                 return new EngineFireReply(CREATED, runId, WAITING_DISPATCH);
             });
         } catch (DuplicateKeyException duplicate) {

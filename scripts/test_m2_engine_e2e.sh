@@ -26,7 +26,7 @@ done
 code="$(curl --connect-timeout 3 --max-time 15 -sS -o "$WORK/runs.json" -w '%{http_code}' -b "$FLOW_M2_COOKIE" \
   "$BASE/api/v1/projects/$FLOW_M2_PROJECT_ID/runs")"
 [ "$code" = 200 ] || { echo "Engine REST query expected 200, got $code"; cat "$WORK/runs.json"; exit 1; }
-python3 -c 'import json,sys;rs=json.load(open(sys.argv[1])); sid=sys.argv[2]; assert any(r["scheduleId"]==sid and r["status"]=="WAITING_DISPATCH" for r in rs)' "$WORK/runs.json" "$FLOW_M2_SCHEDULE_ID"
+python3 -c 'import json,sys;rs=json.load(open(sys.argv[1])); sid=sys.argv[2]; assert any(r["scheduleId"]==sid and r["status"] in ("WAITING_DISPATCH","DISPATCHED") for r in rs)' "$WORK/runs.json" "$FLOW_M2_SCHEDULE_ID"
 # Simulate a lost scheduler ACK after Engine has already committed, then restart the Engine.
 event="$(query flow_scheduler "SELECT o.event_id FROM flow_schedule_outbox o JOIN flow_schedule_trigger t ON t.id=o.trigger_id WHERE t.schedule_id='$FLOW_M2_SCHEDULE_ID' ORDER BY o.event_id LIMIT 1")"
 [ -n "$event" ] || { echo 'No persisted Outbox event found'; exit 1; }
@@ -46,4 +46,7 @@ after="$(query flow_engine "SELECT COUNT(*) FROM flow_workflow_run WHERE schedul
 unique="$(query flow_engine "SELECT COUNT(*) FROM (SELECT schedule_id,schedule_revision,planned_fire_at_utc,origin,COUNT(*) cnt FROM flow_workflow_run WHERE schedule_id='$FLOW_M2_SCHEDULE_ID' GROUP BY schedule_id,schedule_revision,planned_fire_at_utc,origin HAVING cnt > 1) x")"
 [ "$unique" = 0 ] || { echo 'Duplicate Run logical fire unique key'; exit 1; }
 echo 'PASS: Engine Inbox + Run atomic persistence; Scheduler Outbox ack; idempotent replay across Engine restart'
-echo 'NOTE: WAITING_DISPATCH is a durable logical run; Worker execution is not yet implemented.'
+if [ "${FLOW_E2E_M2_DISPATCHER:-0}" = 1 ]; then
+  bash scripts/test_m2_dispatcher_e2e.sh
+fi
+echo 'NOTE: WAITING_DISPATCH and DISPATCHED are logical durable states, not proof of Worker execution.'

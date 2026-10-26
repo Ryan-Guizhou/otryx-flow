@@ -153,9 +153,26 @@ export interface EngineRun {
   jobRevision: number
   plannedFireUtc: string
   origin: string
-  status: 'WAITING_DISPATCH'
+  status: 'WAITING_DISPATCH' | 'DISPATCHED'
   createdAt: string
 }
 export async function listRuns(projectId: string): Promise<EngineRun[]> {
   return call(`/api/v1/projects/${encodeURIComponent(projectId)}/runs`)
+}
+
+/** Read-only durable queue; leaseToken is never included in browser responses. */
+export interface DispatchTask {
+  id: string
+  runId: string
+  projectId: string
+  handlerKey: string
+  status: 'READY' | 'LEASED' | 'SUCCEEDED' | 'FAILED'
+  attempts: number
+  maxAttempts: number
+  leaseEpoch: number
+  leaseUntilUtc: string | null
+  updatedAt: string
+}
+export async function listDispatchTasks(projectId: string): Promise<DispatchTask[]> {
+  return call(`/api/v1/projects/${encodeURIComponent(projectId)}/dispatch-tasks`)
 }

@@ -1,0 +1,41 @@
+CREATE TABLE flow_dispatch_task (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    engine_run_id VARCHAR(36) NOT NULL,
+    event_id VARCHAR(36) NOT NULL,
+    owner_username VARCHAR(64) NOT NULL,
+    project_id VARCHAR(36) NOT NULL,
+    schedule_id VARCHAR(36) NOT NULL,
+    job_id VARCHAR(36) NOT NULL,
+    job_revision INT NOT NULL,
+    handler_key VARCHAR(128) NOT NULL,
+    parameters_json TEXT NOT NULL,
+    timeout_seconds INT NOT NULL,
+    max_attempts INT NOT NULL,
+    attempts INT NOT NULL DEFAULT 0,
+    status VARCHAR(24) NOT NULL DEFAULT 'READY',
+    lease_epoch BIGINT NOT NULL DEFAULT 0,
+    lease_token VARCHAR(36) NULL,
+    worker_id VARCHAR(64) NULL,
+    lease_until DATETIME(3) NULL,
+    next_attempt_at DATETIME(3) NOT NULL DEFAULT '1970-01-01 00:00:00.000',
+    payload_fingerprint CHAR(64) NOT NULL,
+    created_at DATETIME(3) NOT NULL,
+    updated_at DATETIME(3) NOT NULL,
+    CONSTRAINT uq_dispatch_run UNIQUE (engine_run_id),
+    CONSTRAINT uq_dispatch_event UNIQUE (event_id),
+    INDEX idx_dispatch_claim (handler_key, status, next_attempt_at, lease_until),
+    INDEX idx_dispatch_project (owner_username, project_id, created_at, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE flow_dispatch_attempt (
+    task_id VARCHAR(36) NOT NULL,
+    lease_epoch BIGINT NOT NULL,
+    worker_id VARCHAR(64) NOT NULL,
+    lease_token VARCHAR(36) NOT NULL,
+    status VARCHAR(24) NOT NULL,
+    started_at DATETIME(3) NOT NULL,
+    finished_at DATETIME(3) NULL,
+    PRIMARY KEY (task_id, lease_epoch),
+    CONSTRAINT fk_dispatch_attempt_task FOREIGN KEY (task_id) REFERENCES flow_dispatch_task(id),
+    INDEX idx_dispatch_attempt_worker (worker_id, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

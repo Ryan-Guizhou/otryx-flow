@@ -1,0 +1,318 @@
+package com.peachsoft.otryx.flow.dispatcher;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchCompleteCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchEnqueueCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchEnqueueReply;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchHeartbeatCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchLeaseCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchLeaseReply;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchLeaseView;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchMutationReply;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchTaskListReply;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchTaskView;
+import com.peachsoft.otryx.flow.contracts.v1.DispatcherRpc;
+import com.peachsoft.otryx.spring.annotation.OtryxRpcService;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.UUID;
+import java.util.regex.Pattern;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
+
+/**
+ * Dispatcher 队列与租约协议：独立数据库、持久化尝试、leaseEpoch/leaseToken 双重 fencing。
+ * <p>Worker SDK 在下一阶段提供自动执行，当前仅提供受限领取与完成 RPC 契约。</p>
+ */
+@OtryxRpcService(interfaceClass = DispatcherRpc.class, version = "1.0.0")
+public class DispatcherRpcService implements DispatcherRpc {
+    private static final Pattern OWNER = Pattern.compile("[a-zA-Z0-9_.-]{1,64}");
+    private static final Pattern WORKER = Pattern.compile("[a-zA-Z0-9_.-]{3,64}");
+    private static final Pattern HANDLER = Pattern.compile("[a-z][a-z0-9_.-]{2,127}");
+    private static final int MAX_PARAMETERS_BYTES = 16 * 1024;
+    private static final int CLAIM_LIMIT = 8;
+    private static final int LIST_LIMIT = 100;
+    private static final int REAPER_LIMIT = 16;
+    private static final long LEASE_SECONDS = 30;
+    private static final String READY = "READY";
+    private static final String LEASED = "LEASED";
+    private static final String SUCCEEDED = "SUCCEEDED";
+    private static final String FAILED = "FAILED";
+    private static final String STALE = "STALE";
+    private final JdbcTemplate jdbc;
+    private final TransactionTemplate tx;
+    private final ObjectMapper mapper;
+
+    /** 数据库事务必须仅涉及 Dispatcher 自有 DataSource。 */
+    public DispatcherRpcService(JdbcTemplate jdbc, PlatformTransactionManager manager, ObjectMapper mapper) {
+        this.jdbc = jdbc;
+        this.tx = new TransactionTemplate(manager);
+        this.tx.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
+        this.tx.setTimeout(8);
+        this.mapper = mapper;
+    }
+
+    /** 稳定 engineRunId 与 payloadFingerprint 防止重复和内容篡改。 */
+    @Override
+    public DispatchEnqueueReply enqueue(DispatchEnqueueCommand command) {
+        validateEnqueue(command);
+        String fingerprint = fingerprint(command);
+        DispatchEnqueueReply prior = replay(command, fingerprint);
+        if (prior != null) return prior;
+        try {
+            return tx.execute(ignored -> {
+                String task = UUID.randomUUID().toString();
+                Timestamp now = Timestamp.from(Instant.now());
+                jdbc.update("INSERT INTO flow_dispatch_task (id, engine_run_id, event_id, "
+                                + "owner_username, project_id, schedule_id, job_id, job_revision, "
+                                + "handler_key, parameters_json, timeout_seconds, max_attempts, "
+                                + "attempts, status, lease_epoch, next_attempt_at, payload_fingerprint, "
+                                + "created_at, updated_at) "
+                                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,'READY',0,?,?,?,?)",
+                        task, command.runId(), command.eventId(), command.ownerUsername(), command.projectId(),
+                        command.scheduleId(), command.jobId(), command.jobRevision(), command.handlerKey(),
+                        command.parametersJson(), command.timeoutSeconds(), command.maxAttempts(),
+                        Timestamp.from(Instant.EPOCH), fingerprint, now, now);
+                return new DispatchEnqueueReply("CREATED", task, READY);
+            });
+        } catch (DuplicateKeyException duplicate) {
+            DispatchEnqueueReply committed = replay(command, fingerprint);
+            return committed == null ? new DispatchEnqueueReply("CONFLICT", null, null) : committed;
+        }
+    }
+
+    /** 仅读取租户拥有的任务元数据；对浏览器不暴露 leaseToken。 */
+    @Override
+    public DispatchTaskListReply list(String ownerUsername, String projectId) {
+        String owner = validateOwner(ownerUsername);
+        String project = validateUuid(projectId);
+        List<DispatchTaskView> tasks = jdbc.query("SELECT * FROM flow_dispatch_task "
+                        + "WHERE owner_username = ? AND project_id = ? "
+                        + "ORDER BY created_at DESC, id DESC LIMIT ?",
+                (rs, index) -> readView(rs), owner, project, LIST_LIMIT);
+        return new DispatchTaskListReply(tasks.toArray(DispatchTaskView[]::new));
+    }
+
+    /** 单次最多领取八个同 Handler 的任务；领取和更新租约均发生在短事务内。 */
+    @Override
+    public DispatchLeaseReply claim(DispatchLeaseCommand command) {
+        if (command == null || command.limit() < 1 || command.limit() > CLAIM_LIMIT) {
+            throw new IllegalArgumentException("Invalid dispatch claim limit");
+        }
+        String worker = validateWorker(command.workerId());
+        String handler = validateHandler(command.handlerKey());
+        DispatchLeaseReply reply = tx.execute(ignored -> {
+            Timestamp now = dbNow();
+            List<TaskRow> rows = jdbc.query("SELECT * FROM flow_dispatch_task "
+                            + "WHERE handler_key = ? AND attempts < max_attempts AND "
+                            + "((status = 'READY' AND next_attempt_at <= ?) OR "
+                            + "(status = 'LEASED' AND lease_until <= ?)) "
+                            + "ORDER BY created_at, id LIMIT ? FOR UPDATE SKIP LOCKED",
+                    (rs, index) -> readTask(rs), handler, now, now, command.limit());
+            List<DispatchLeaseView> claims = new ArrayList<>(rows.size());
+            for (TaskRow row : rows) {
+                if (LEASED.equals(row.status())) {
+                    jdbc.update("UPDATE flow_dispatch_attempt SET status = 'EXPIRED', finished_at = ? "
+                                    + "WHERE task_id = ? AND lease_epoch = ? AND status = 'LEASED'",
+                            now, row.id(), row.epoch());
+                }
+                long epoch = row.epoch() + 1;
+                String token = UUID.randomUUID().toString();
+                Timestamp leaseUntil = Timestamp.from(now.toInstant().plusSeconds(LEASE_SECONDS));
+                int changed = jdbc.update("UPDATE flow_dispatch_task SET status = 'LEASED', "
+                                + "lease_epoch = ?, lease_token = ?, worker_id = ?, lease_until = ?, "
+                                + "attempts = attempts + 1, updated_at = ? "
+                                + "WHERE id = ? AND lease_epoch = ? AND status = ? AND attempts < max_attempts",
+                        epoch, token, worker, leaseUntil, now, row.id(), row.epoch(), row.status());
+                if (changed != 1) throw new IllegalStateException("Dispatcher claim CAS lost");
+                jdbc.update("INSERT INTO flow_dispatch_attempt "
+                                + "(task_id, lease_epoch, worker_id, lease_token, status, started_at) "
+                                + "VALUES (?, ?, ?, ?, 'LEASED', ?)", row.id(), epoch, worker, token, now);
+                claims.add(new DispatchLeaseView(row.id(), row.runId(), row.eventId(), row.project(),
+                        row.handler(), row.parametersJson(), row.timeoutSeconds(), row.attempts() + 1,
+                        row.maxAttempts(), epoch, token, leaseUntil.toInstant().toString()));
+            }
+            return new DispatchLeaseReply(claims.toArray(DispatchLeaseView[]::new));
+        });
+        return reply == null ? new DispatchLeaseReply(new DispatchLeaseView[0]) : reply;
+    }
+
+    /** 心跳只允许合法且未过期的当前代际延长租约。 */
+    @Override
+    public DispatchMutationReply heartbeat(DispatchHeartbeatCommand command) {
+        if (command == null || command.leaseEpoch() < 1) throw new IllegalArgumentException("Invalid heartbeat");
+        String worker = validateWorker(command.workerId());
+        String task = validateUuid(command.taskId());
+        String token = validateUuid(command.leaseToken());
+        Timestamp now = dbNow();
+        int changed = jdbc.update("UPDATE flow_dispatch_task SET lease_until = ?, updated_at = ? "
+                        + "WHERE id = ? AND status = 'LEASED' AND worker_id = ? "
+                        + "AND lease_epoch = ? AND lease_token = ? AND lease_until > ?",
+                Timestamp.from(now.toInstant().plusSeconds(LEASE_SECONDS)), now,
+                task, worker, command.leaseEpoch(), token, now);
+        return changed == 1 ? new DispatchMutationReply("OK", LEASED)
+                : new DispatchMutationReply(STALE, null);
+    }
+
+    /** 原子完成：过期代际不能置终态，也不能把新尝试的结果覆盖。 */
+    @Override
+    public DispatchMutationReply complete(DispatchCompleteCommand command) {
+        if (command == null || command.leaseEpoch() < 1
+                || !(SUCCEEDED.equals(command.outcome()) || FAILED.equals(command.outcome()))) {
+            throw new IllegalArgumentException("Invalid dispatch completion");
+        }
+        String worker = validateWorker(command.workerId());
+        String task = validateUuid(command.taskId());
+        String token = validateUuid(command.leaseToken());
+        return tx.execute(ignored -> {
+            Timestamp now = dbNow();
+            List<int[]> attempts = jdbc.query("SELECT attempts, max_attempts FROM flow_dispatch_task "
+                            + "WHERE id = ? AND status = 'LEASED' AND worker_id = ? "
+                            + "AND lease_epoch = ? AND lease_token = ? AND lease_until > ? FOR UPDATE",
+                    (rs, idx) -> new int[]{rs.getInt("attempts"), rs.getInt("max_attempts")},
+                    task, worker, command.leaseEpoch(), token, now);
+            if (attempts.isEmpty()) return new DispatchMutationReply(STALE, null);
+            boolean retry = FAILED.equals(command.outcome()) && attempts.getFirst()[0] < attempts.getFirst()[1];
+            String nextStatus = retry ? READY : command.outcome();
+            Timestamp nextAt = Timestamp.from(now.toInstant().plusSeconds(
+                    Math.min(1L << Math.min(attempts.getFirst()[0], 5), 30L)));
+            int changed = jdbc.update("UPDATE flow_dispatch_task SET status = ?, "
+                            + "lease_token = NULL, worker_id = NULL, lease_until = NULL, "
+                            + "next_attempt_at = ?, updated_at = ? "
+                            + "WHERE id = ? AND status = 'LEASED' AND lease_epoch = ? AND lease_token = ? "
+                            + "AND lease_until > ?",
+                    nextStatus, nextAt, now, task, command.leaseEpoch(), token, now);
+            if (changed != 1) return new DispatchMutationReply(STALE, null);
+            int recorded = jdbc.update("UPDATE flow_dispatch_attempt SET status = ?, finished_at = ? "
+                            + "WHERE task_id = ? AND lease_epoch = ? AND lease_token = ? AND status = 'LEASED'",
+                    command.outcome(), now, task, command.leaseEpoch(), token);
+            if (recorded != 1) throw new IllegalStateException("Attempt record missing");
+            return new DispatchMutationReply("OK", nextStatus);
+        });
+    }
+
+    /** 有限过期回收；最后一次失败的租约变为 FAILED，非最后一次可重新领取。 */
+    public int expireExhaustedOnce() {
+        Integer expired = tx.execute(ignored -> {
+            Timestamp now = dbNow();
+            List<TaskRow> rows = jdbc.query("SELECT * FROM flow_dispatch_task "
+                            + "WHERE status = 'LEASED' AND lease_until <= ? AND attempts >= max_attempts "
+                            + "ORDER BY lease_until, id LIMIT ? FOR UPDATE SKIP LOCKED",
+                    (rs, idx) -> readTask(rs), now, REAPER_LIMIT);
+            for (TaskRow row : rows) {
+                int changed = jdbc.update("UPDATE flow_dispatch_task SET status = 'FAILED', "
+                                + "lease_token = NULL, worker_id = NULL, lease_until = NULL, updated_at = ? "
+                                + "WHERE id = ? AND status = 'LEASED' AND lease_epoch = ? AND lease_until <= ?",
+                        now, row.id(), row.epoch(), now);
+                if (changed != 1) throw new IllegalStateException("Expired lease fencing mismatch");
+                jdbc.update("UPDATE flow_dispatch_attempt SET status = 'EXPIRED', finished_at = ? "
+                                + "WHERE task_id = ? AND lease_epoch = ? AND status = 'LEASED'",
+                        now, row.id(), row.epoch());
+            }
+            return rows.size();
+        });
+        return expired == null ? 0 : expired;
+    }
+
+    private DispatchEnqueueReply replay(DispatchEnqueueCommand c, String fingerprint) {
+        List<DispatchEnqueueReply> results = jdbc.query("SELECT id, status, payload_fingerprint "
+                        + "FROM flow_dispatch_task WHERE engine_run_id = ?",
+                (rs, idx) -> fingerprint.equals(rs.getString("payload_fingerprint"))
+                        ? new DispatchEnqueueReply("DUPLICATE", rs.getString("id"), rs.getString("status"))
+                        : new DispatchEnqueueReply("CONFLICT", null, null), c.runId());
+        return results.isEmpty() ? null : results.getFirst();
+    }
+
+    private Timestamp dbNow() {
+        Timestamp clock = jdbc.queryForObject("SELECT CURRENT_TIMESTAMP(3)", Timestamp.class);
+        if (clock == null) throw new IllegalStateException("Database clock unavailable");
+        return clock;
+    }
+
+    private void validateEnqueue(DispatchEnqueueCommand c) {
+        if (c == null || c.jobRevision() < 1 || c.timeoutSeconds() < 1 || c.timeoutSeconds() > 86400
+                || c.maxAttempts() < 1 || c.maxAttempts() > 10) {
+            throw new IllegalArgumentException("Invalid dispatch task limits");
+        }
+        validateUuid(c.runId());
+        validateUuid(c.eventId());
+        validateOwner(c.ownerUsername());
+        validateUuid(c.projectId());
+        validateUuid(c.scheduleId());
+        validateUuid(c.jobId());
+        validateHandler(c.handlerKey());
+        if (c.parametersJson() == null || c.parametersJson().getBytes(StandardCharsets.UTF_8).length > MAX_PARAMETERS_BYTES) {
+            throw new IllegalArgumentException("Invalid dispatch parameters length");
+        }
+        try {
+            JsonNode json = mapper.readTree(c.parametersJson());
+            if (json == null || !json.isObject()) throw new IllegalArgumentException("Expected JSON parameters object");
+        } catch (com.fasterxml.jackson.core.JsonProcessingException invalid) {
+            throw new IllegalArgumentException("Malformed JSON parameters", invalid);
+        }
+    }
+
+    private static String fingerprint(DispatchEnqueueCommand c) {
+        String payload = String.join("\u0000", c.runId(), c.eventId(), c.ownerUsername(), c.projectId(),
+                c.scheduleId(), c.jobId(), String.valueOf(c.jobRevision()), c.handlerKey(),
+                c.parametersJson(), String.valueOf(c.timeoutSeconds()), String.valueOf(c.maxAttempts()));
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(payload.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 missing", impossible);
+        }
+    }
+
+    private static String validateOwner(String owner) {
+        if (owner == null || !OWNER.matcher(owner).matches()) throw new IllegalArgumentException("Invalid owner");
+        return owner;
+    }
+    private static String validateWorker(String worker) {
+        if (worker == null || !WORKER.matcher(worker).matches()) throw new IllegalArgumentException("Invalid worker identifier");
+        return worker;
+    }
+    private static String validateHandler(String handler) {
+        if (handler == null || !HANDLER.matcher(handler).matches()) throw new IllegalArgumentException("Invalid handler key");
+        return handler;
+    }
+    private static String validateUuid(String id) {
+        if (id == null) throw new IllegalArgumentException("Missing UUID");
+        try {
+            if (!UUID.fromString(id).toString().equals(id)) throw new IllegalArgumentException("Noncanonical UUID");
+            return id;
+        } catch (IllegalArgumentException invalid) {
+            throw new IllegalArgumentException("Invalid UUID");
+        }
+    }
+
+    private static DispatchTaskView readView(ResultSet rs) throws SQLException {
+        Timestamp leaseUntil = rs.getTimestamp("lease_until");
+        return new DispatchTaskView(rs.getString("id"), rs.getString("engine_run_id"),
+                rs.getString("project_id"), rs.getString("handler_key"), rs.getString("status"),
+                rs.getInt("attempts"), rs.getInt("max_attempts"), rs.getLong("lease_epoch"),
+                leaseUntil == null ? null : leaseUntil.toInstant().toString(),
+                rs.getTimestamp("updated_at").toInstant().toString());
+    }
+    private static TaskRow readTask(ResultSet rs) throws SQLException {
+        return new TaskRow(rs.getString("id"), rs.getString("engine_run_id"), rs.getString("event_id"),
+                rs.getString("project_id"), rs.getString("handler_key"), rs.getString("parameters_json"),
+                rs.getInt("timeout_seconds"), rs.getInt("attempts"), rs.getInt("max_attempts"),
+                rs.getLong("lease_epoch"), rs.getString("status"));
+    }
+    private record TaskRow(String id, String runId, String eventId, String project, String handler,
+                           String parametersJson, int timeoutSeconds, int attempts, int maxAttempts,
+                           long epoch, String status) { }
+}
