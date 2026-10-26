@@ -46,5 +46,6 @@ cron=files['flow-scheduler-core/src/main/java/com/peachsoft/otryx/flow/scheduler
 assert 'CronExpression.parse' in cron and 'getValidOffsets' in cron and 'MAX_COUNT = 20' in cron
 assert 'JdbcTemplate' not in cron and 'OtryxRpcClient' not in cron, 'Cron preview is a pure calculation'
 assert 'flow-scheduler-core/**' in (root/'.github/workflows/m1-quality.yml').read_text(encoding='utf-8')
+assert 'COPY flow-scheduler-core ./flow-scheduler-core' in (root/'deploy/Dockerfile.backend').read_text(encoding='utf-8'), 'Include new Maven modules in Docker build'
 print(f'PASS: M1 static contracts ({len(files)} source/config files)')
 print('NOTE: This does not run Maven, MySQL, network Etcd, OTRYX RPC, npm or a browser.')
