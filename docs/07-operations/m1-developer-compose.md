@@ -64,3 +64,7 @@ This test **restarts `flow-metadata`**; it must not run on production or on a sh
 ## Etcd endpoint URI requirement
 
 The OTRYX Etcd Registry adapter validates complete URLs. Set `OTRYX_REGISTRY_ENDPOINTS=http://etcd:2379` inside the isolated Compose network, or `http://127.0.0.1:2379` for a matching local Etcd endpoint. A bare `etcd:2379` URI is invalid and is rejected with `Registry security rejected: UNSUPPORTED_PROTECTION`. This is strictly a TRUSTED_DEVELOPMENT configuration; production requires protected Etcd and NETWORK_MTLS.
+
+## Docker internal networks and loopback ingress
+
+The `internal` network is exclusively for the Java RPC, MySQL and Etcd containers. A second `ingress` bridge is attached **only** to Nginx (`flow-web`) so Docker can publish `127.0.0.1:8088:80` to the host. Do not attach the RPC/DB services to the ingress bridge or bind any port to `0.0.0.0` for this development profile. The initial all-internal network prevented host loopback connections during GitHub Actions E2E.

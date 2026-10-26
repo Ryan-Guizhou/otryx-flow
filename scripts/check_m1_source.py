@@ -27,6 +27,7 @@ assert "@OtryxRpcIdempotent" in files['flow-contracts/src/main/java/com/peachsof
 assert 'UNIQUE (owner_username, request_key)' in src, 'Idempotent writes must be backed by a unique index'
 compose=files['compose.yaml']
 assert '127.0.0.1:8088:80' in compose and 'internal: true' in compose, 'Developer environment should not expose untrusted RPC network'
+assert 'networks: [internal, ingress]' in compose and 'ingress: {}' in compose, 'Web ingress must allow loopback port while backends stay internal'
 # Native Etcd adapter verifies absolute HTTP(S) URI scheme and authority.
 assert compose.count('OTRYX_REGISTRY_ENDPOINTS: http://etcd:2379') == 2, 'Etcd endpoints must include HTTP scheme in both JVMs'
 for app_file in ('flow-api/src/main/resources/application.yml', 'flow-metadata/src/main/resources/application.yml'):

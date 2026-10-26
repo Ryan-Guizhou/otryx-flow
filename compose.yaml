@@ -83,9 +83,10 @@ services:
     ports:
       - 127.0.0.1:8088:80
     depends_on: [flow-api]
-    networks: [internal]
+    networks: [internal, ingress]
 
 networks:
+  ingress: {} # only Nginx joins this network; enable host loopback publishing
   internal:
     internal: true # block runtime egress; Docker image pulls happen outside the container network
 volumes:
