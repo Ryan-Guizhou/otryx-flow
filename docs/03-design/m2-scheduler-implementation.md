@@ -1,6 +1,6 @@
 # M2 FLOW-010：分布式 Scheduler 实现说明
 
-> Current on #5 PR candidate. **仅提交计划触发与待交付 Outbox；Engine、Dispatcher、Worker 尚未开发，绝不展示虚构执行状态**。当前 Compose `TRUSTED_DEVELOPMENT`、Etcd 明文仅限隔离研发；严禁公网暴露。
+> Current Scheduler implementation merged in PR #12. FLOW-011 introduces Engine + Relay on Issue #6 as a separate change; **Engine 持久化不等于 Dispatcher/Worker 任务已执行**。开发 Compose 的 `TRUSTED_DEVELOPMENT` 不允许公网使用。
 
 ## 服务边界
 
@@ -26,16 +26,16 @@ sequenceDiagram
       S->>DB: Unique Trigger + Outbox + cursor CAS
       S->>DB: COMMIT
     end
-    Note over S,DB: Engine not present: Outbox remains PENDING
+    Note over S,DB: Relay to Engine is implemented separately in FLOW-011
 ```
 
 ## 唯一性与持久语义
 
-一个 Cron 火点的唯一键是 `(schedule_id, schedule_revision, planned_fire_at_utc, origin)`，事件 ID 由上述四元组稳定派生。`flow_schedule_outbox` 在与 `flow_schedule_trigger` 相同的本地 MySQL 事务内写入，游标更新完成后才提交。未创建 Engine 消费者之前，Trigger 状态 `PENDING_ENGINE`、Outbox 状态 `PENDING`，**不计作运行成功**。
+一个 Cron 火点的唯一键是 `(schedule_id, schedule_revision, planned_fire_at_utc, origin)`，事件 ID 由上述四元组稳定派生。`flow_schedule_outbox` 在与 `flow_schedule_trigger` 相同的本地 MySQL 事务内写入，游标更新完成后才提交。在 FLOW-011 Relay 尚未收到 Engine 正向回执时，Trigger 为 `PENDING_ENGINE`、Outbox 为 `PENDING`；回执后为 `ENGINE_ACCEPTED`、`DELIVERED`。两者均**不计作 Worker 运行成功**。
 
 两个或更多 Scheduler 副本使用数据库行锁领取有限计划：`READ COMMITTED` + `SELECT ... FOR UPDATE SKIP LOCKED`；单轮最多领取 12 条 Schedule，每条最多产生 8 个 Cron 火点，事务最长 10 秒，不在事务内进行 RPC。唯一索引与 cursor 版本条件更新为独立第二道防重保护。
 
-数据库连接强制 UTC Session 时区；Scheduler 使用 MySQL `UTC_TIMESTAMP(3)` 作为统一扫描时钟。任务列表和查询结果由业务 RPC 固定长度（100 条）返回。
+数据库连接强制 UTC Session 时区；Scheduler 使用 UTC MySQL Session 下的 `CURRENT_TIMESTAMP(3)` 作为统一扫描时钟。任务列表和查询结果由业务 RPC 固定长度（100 条）返回。
 
 ## Misfire 策略与限制
 
@@ -50,7 +50,7 @@ sequenceDiagram
 ## 恢复与风险
 
 - Scanner 在事务内崩溃：游标、Trigger、Outbox 要么全部回滚，要么全部提交。副本下一次领取时可以继续处理。
-- 事务已经提交但 Engine 未启动：Outbox 永久保留 `PENDING`，#6 的 Engine/Outbox Relay 将以事件 ID 幂等交付，保证后续可恢复。
+- 事务已经提交但 Engine 未启动：Outbox 在 `PENDING/IN_FLIGHT` 中保持可重投，Issue #6 Engine/Relay 使用相同 eventId 幂等恢复，保证后续可恢复。
 - Metadata 不可用：新的 Schedule 创建失败（REST 503），不能绕过项目归属权限检查；已经持久化的 Schedule 可以继续调度。
 - MySQL 不可用：本轮扫描失败并记录英文日志；后续恢复后按有限 Misfire 窗口处理。
 - 生产安全：当前开发 Compose 的匿名明文 Etcd/OTRYX RPC **不是** `NETWORK_MTLS`；生产要独立部署受保护 Etcd、RPC 双向 TLS、授权器和密钥。

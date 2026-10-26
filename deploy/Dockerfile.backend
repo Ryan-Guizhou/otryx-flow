@@ -12,6 +12,7 @@ COPY pom.xml ./
 COPY flow-contracts ./flow-contracts
 COPY flow-scheduler-core ./flow-scheduler-core
 COPY flow-scheduler ./flow-scheduler
+COPY flow-engine ./flow-engine
 COPY flow-api ./flow-api
 COPY flow-metadata ./flow-metadata
 RUN mvn -B -ntp -DskipTests package
@@ -22,6 +23,7 @@ RUN useradd --system --uid 10001 --home /apps flow
 COPY --from=builder --chown=flow:flow /workspace/flow-api/target/flow-api-0.1.0-SNAPSHOT.jar /apps/flow-api.jar
 COPY --from=builder --chown=flow:flow /workspace/flow-metadata/target/flow-metadata-0.1.0-SNAPSHOT.jar /apps/flow-metadata.jar
 COPY --from=builder --chown=flow:flow /workspace/flow-scheduler/target/flow-scheduler-0.1.0-SNAPSHOT.jar /apps/flow-scheduler.jar
+COPY --from=builder --chown=flow:flow /workspace/flow-engine/target/flow-engine-0.1.0-SNAPSHOT.jar /apps/flow-engine.jar
 USER flow
 ENTRYPOINT ["java", "-jar"]
 CMD ["/apps/flow-api.jar"]

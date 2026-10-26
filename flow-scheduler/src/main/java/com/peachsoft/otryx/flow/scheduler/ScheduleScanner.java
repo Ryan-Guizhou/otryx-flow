@@ -7,7 +7,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
-import java.util.Map;
+import com.peachsoft.otryx.flow.contracts.v1.ScheduleFireCommand;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,7 +20,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * 多实例行锁扫描器：READ_COMMITTED / SKIP_LOCKED / 唯一 Fire / 同事务 Outbox。
- * <p>整个数据库事务内禁止 RPC；后续 Engine 交付独立使用已提交的 Outbox。
+ * <p>整个数据库事务内禁止 RPC；ScheduleOutboxRelay 在事务外转发已提交火点。
  */
 @Component
 public class ScheduleScanner {
@@ -61,7 +61,7 @@ public class ScheduleScanner {
             Timestamp now = jdbc.queryForObject("SELECT CURRENT_TIMESTAMP(3)", Timestamp.class);
             if (now == null) throw new IllegalStateException("Database clock unavailable");
             Instant databaseNow = now.toInstant();
-            var due = jdbc.query("SELECT id, job_id, job_revision, schedule_revision, cron_expr, time_zone, "
+            var due = jdbc.query("SELECT id, owner_username, project_id, job_id, job_revision, schedule_revision, cron_expr, time_zone, "
                     + "misfire_policy, next_fire_at_utc, version FROM flow_schedule_definition "
                     + "WHERE enabled = 1 AND next_fire_at_utc <= ? "
                     + "ORDER BY next_fire_at_utc, id LIMIT ? FOR UPDATE SKIP LOCKED",
@@ -99,9 +99,9 @@ public class ScheduleScanner {
 
     private String encodePayload(ScheduleRow schedule, Instant fire, String id) {
         try {
-            return mapper.writeValueAsString(Map.of("eventId", id, "scheduleId", schedule.id(),
-                    "jobId", schedule.jobId(), "jobRevision", schedule.jobRevision(),
-                    "scheduleRevision", schedule.scheduleRevision(), "plannedFireUtc", fire.toString()));
+            return mapper.writeValueAsString(new ScheduleFireCommand(id, schedule.ownerUsername(),
+                    schedule.projectId(), schedule.id(), schedule.scheduleRevision(),
+                    schedule.jobId(), schedule.jobRevision(), fire.toString(), "CRON"));
         } catch (JsonProcessingException impossible) {
             throw new IllegalStateException("Cannot serialize scheduler outbox", impossible);
         }
@@ -114,13 +114,15 @@ public class ScheduleScanner {
     }
 
     private static ScheduleRow readRow(ResultSet rs) throws SQLException {
-        return new ScheduleRow(rs.getString("id"), rs.getString("job_id"), rs.getInt("job_revision"),
+        return new ScheduleRow(rs.getString("id"), rs.getString("owner_username"),
+                rs.getString("project_id"), rs.getString("job_id"), rs.getInt("job_revision"),
                 rs.getInt("schedule_revision"), rs.getString("cron_expr"), rs.getString("time_zone"),
                 rs.getString("misfire_policy"), rs.getTimestamp("next_fire_at_utc").toInstant(),
                 rs.getLong("version"));
     }
 
-    private record ScheduleRow(String id, String jobId, int jobRevision, int scheduleRevision,
+    private record ScheduleRow(String id, String ownerUsername, String projectId, String jobId,
+            int jobRevision, int scheduleRevision,
             String expression, String timeZone, String misfirePolicy, Instant nextFireUtc,
             long version) { }
 }

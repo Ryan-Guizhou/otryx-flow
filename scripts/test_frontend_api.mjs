@@ -161,3 +161,21 @@ test('M2 Scheduler API client sends immutable revision and version CAS', async (
     assert.ok(calls.every(c => c.credentials === 'same-origin'))
   } finally { globalThis.fetch = originalFetch }
 })
+
+test('Engine Runs API is a read-only, scoped durable-state query', async () => {
+  const { listRuns } = await import('../flow-web/src/api.ts')
+  const project = '00000000-0000-4000-8000-000000000001'
+  const calls = []
+  globalThis.fetch = async (path, init = {}) => {
+    calls.push({ path: String(path), method: init.method || 'GET', credentials: init.credentials })
+    return json([{ id: 'run-1', eventId: 'event-1', scheduleId: 'schedule-1',
+      jobRevision: 2, status: 'WAITING_DISPATCH' }])
+  }
+  try {
+    const runs = await listRuns(project)
+    assert.equal(runs[0].status, 'WAITING_DISPATCH')
+    assert.equal(calls[0].path, `/api/v1/projects/${project}/runs`)
+    assert.equal(calls[0].method, 'GET')
+    assert.equal(calls[0].credentials, 'same-origin')
+  } finally { globalThis.fetch = originalFetch }
+})

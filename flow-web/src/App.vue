@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import RunPanel from './RunPanel.vue'
 import SchedulePanel from './SchedulePanel.vue'
 import type { Project, Job, SessionUser, ApiError, CronPreview } from './api'
 import { createProject, currentUser, listProjects, login, logout, refreshCsrf, listJobs, createJobDraft, publishJob, previewCron } from './api'
@@ -11,7 +12,7 @@ const navigation: { id: ViewKey; label: string; icon: string; ready: boolean }[]
   { id: 'projects', label: 'Projects', icon: '▤', ready: true },
   { id: 'jobs', label: 'Jobs', icon: 'J', ready: true },
   { id: 'workflows', label: 'Workflows', icon: '◇', ready: false },
-  { id: 'runs', label: 'Executions', icon: '◷', ready: false },
+  { id: 'runs', label: 'Executions', icon: '◷', ready: true },
   { id: 'workers', label: 'Worker cluster', icon: '⬡', ready: false },
 ]
 const user = ref<SessionUser | null>(null)
@@ -223,6 +224,7 @@ function selectView(id: ViewKey) { activeView.value = id; error.value = ''; if (
             <p v-if="cronResult && !cronResult.occurrences.length" class="muted">No future occurrence was found.</p>
           </div>
         </template>
+        <template v-else-if="activeView === 'runs'"><RunPanel :projects="projects" /></template>
         <template v-else><div class="page-title-row"><div><div class="eyebrow">UPCOMING CAPABILITY</div><h1>{{ activeTitle }}</h1><p class="muted">This module is part of the approved project roadmap.</p></div><span class="label-outline">NOT YET IMPLEMENTED</span></div><div class="panel coming-panel"><div class="coming-glyph">◇</div><h2>Coming in {{ activeView === 'workflows' ? 'M3' : 'M2' }}</h2><p>We don't display simulated task runs or invented cluster health data. This page will be activated after the real service and tests are shipped.</p><button class="btn btn-outline" @click="activeView = 'overview'">Back to overview</button></div></template>
       </div>
     </main>
