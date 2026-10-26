@@ -36,7 +36,7 @@ watch(projectId, () => { void reload() }, { immediate: true })
   </div>
   <div class="panel table-panel">
     <div class="panel-heading"><div><h3>Logical runs <span class="count-tag">{{ runs.length }}</span></h3>
-      <p>WAITING_DISPATCH means durable acceptance, not actual Worker execution.</p></div>
+      <p>WAITING_DISPATCH means the Run is persisted; DISPATCHED means Dispatcher durably accepted a task. Neither implies real Worker execution.</p></div>
       <select v-model="projectId" aria-label="Project for Engine runs">
         <option v-for="project in props.projects" :key="project.id" :value="project.id">{{ project.name }}</option>
       </select>

@@ -1,4 +1,4 @@
-# M2 development: isolated network, two Schedulers and one Engine. NOT a public deployment.
+# M2 developer-only: Scheduler/Dispatcher dual replicas, Engine. Never a public deployment.
 name: otryx-flow
 x-backend-build: &backend-build
   context: .
@@ -94,6 +94,7 @@ services:
 
   flow-engine:
     image: otryx-flow-backend:m1
+    restart: on-failure:5
     command: ["/apps/flow-engine.jar"]
     environment:
       FLOW_DB_JDBC_URL: jdbc:mysql://mysql:3306/flow_engine?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
@@ -106,8 +107,39 @@ services:
       etcd: {condition: service_healthy}
     networks: [internal]
 
+
+  flow-dispatcher:
+    image: otryx-flow-backend:m1
+    command: ["/apps/flow-dispatcher.jar"]
+    environment:
+      FLOW_DB_JDBC_URL: jdbc:mysql://mysql:3306/flow_dispatcher?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
+      FLOW_DB_USER: flow_app
+      FLOW_DB_PASSWORD: ${FLOW_DB_PASSWORD:?Set an app password in .env}
+      OTRYX_REGISTRY_ENDPOINTS: http://etcd:2379
+      FLOW_RPC_ADVERTISED_HOST: flow-dispatcher
+      SPRING_PROFILES_ACTIVE: ${FLOW_DISPATCH_E2E_PROFILE:-default}
+    depends_on:
+      mysql: {condition: service_healthy}
+      etcd: {condition: service_healthy}
+    networks: [internal]
+
+  flow-dispatcher-replica:
+    image: otryx-flow-backend:m1
+    command: ["/apps/flow-dispatcher.jar"]
+    environment:
+      FLOW_DB_JDBC_URL: jdbc:mysql://mysql:3306/flow_dispatcher?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
+      FLOW_DB_USER: flow_app
+      FLOW_DB_PASSWORD: ${FLOW_DB_PASSWORD:?Set an app password in .env}
+      OTRYX_REGISTRY_ENDPOINTS: http://etcd:2379
+      FLOW_RPC_ADVERTISED_HOST: flow-dispatcher-replica
+    depends_on:
+      mysql: {condition: service_healthy}
+      etcd: {condition: service_healthy}
+    networks: [internal]
+
   flow-api:
     build: *backend-build
+    restart: on-failure:5
     image: otryx-flow-backend:m1
     command: ["/apps/flow-api.jar"]
     environment:
@@ -124,6 +156,8 @@ services:
       flow-scheduler: {condition: service_started}
       flow-scheduler-replica: {condition: service_started}
       flow-engine: {condition: service_started}
+      flow-dispatcher: {condition: service_started}
+      flow-dispatcher-replica: {condition: service_started}
     networks: [internal]
 
   flow-web:

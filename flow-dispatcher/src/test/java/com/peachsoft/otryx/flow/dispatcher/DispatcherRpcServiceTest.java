@@ -1,0 +1,155 @@
+package com.peachsoft.otryx.flow.dispatcher;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchCompleteCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchEnqueueCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchHeartbeatCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchLeaseCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchLeaseView;
+import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import org.h2.jdbcx.JdbcDataSource;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+
+/** Dispatcher 队列幂等、并发抢占、代际隔离、租约续期、失败重试及耗尽回收测试。 */
+class DispatcherRpcServiceTest {
+    private static final String PROJECT = "00000000-0000-4000-8000-000000000001";
+    private static final String SCHEDULE = "00000000-0000-4000-8000-000000000002";
+    private static final String JOB = "00000000-0000-4000-8000-000000000003";
+    private DispatcherRpcService service;
+    private JdbcTemplate jdbc;
+    private DataSourceTransactionManager manager;
+
+    @BeforeEach
+    void prepare() {
+        JdbcDataSource source = new JdbcDataSource();
+        source.setURL("jdbc:h2:mem:dispatch-" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1");
+        jdbc = new JdbcTemplate(source);
+        jdbc.execute("CREATE TABLE flow_dispatch_task (id VARCHAR(36) PRIMARY KEY, "
+                + "engine_run_id VARCHAR(36) UNIQUE, event_id VARCHAR(36) UNIQUE, owner_username VARCHAR(64), "
+                + "project_id VARCHAR(36), schedule_id VARCHAR(36), job_id VARCHAR(36), job_revision INT, "
+                + "handler_key VARCHAR(128), parameters_json TEXT, timeout_seconds INT, max_attempts INT, "
+                + "attempts INT, status VARCHAR(24), lease_epoch BIGINT, lease_token VARCHAR(36), "
+                + "worker_id VARCHAR(64), lease_until TIMESTAMP(3), next_attempt_at TIMESTAMP(3), "
+                + "payload_fingerprint CHAR(64), created_at TIMESTAMP(3), updated_at TIMESTAMP(3))");
+        jdbc.execute("CREATE TABLE flow_dispatch_attempt (task_id VARCHAR(36), lease_epoch BIGINT, "
+                + "worker_id VARCHAR(64), lease_token VARCHAR(36), status VARCHAR(24), "
+                + "started_at TIMESTAMP(3), finished_at TIMESTAMP(3), PRIMARY KEY(task_id,lease_epoch))");
+        manager = new DataSourceTransactionManager(source);
+        service = new DispatcherRpcService(jdbc, manager, new ObjectMapper());
+    }
+
+    @Test
+    void duplicateDeliveryHasOneTaskAndConflictCannotOverwrite() {
+        DispatchEnqueueCommand payload = event(2);
+        var first = service.enqueue(payload);
+        var second = service.enqueue(payload);
+        assertEquals("CREATED", first.code());
+        assertEquals("DUPLICATE", second.code());
+        assertEquals(first.taskId(), second.taskId());
+        DispatchEnqueueCommand conflict = new DispatchEnqueueCommand(payload.runId(), payload.eventId(),
+                "admin", PROJECT, SCHEDULE, JOB, 1, "safe.other", "{}", 30, 2);
+        assertEquals("CONFLICT", service.enqueue(conflict).code());
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM flow_dispatch_task", Integer.class));
+        assertEquals(1, service.list("admin", PROJECT).tasks().length);
+        assertEquals(0, service.list("intruder", PROJECT).tasks().length);
+        assertEquals(0, service.list("admin", UUID.randomUUID().toString()).tasks().length);
+    }
+
+    @Test
+    void expiredLeaseIsReclaimedAndStaleWorkerCanNeverComplete() {
+        var enqueued = service.enqueue(event(2));
+        DispatchLeaseView first = service.claim(new DispatchLeaseCommand("worker-alpha", "safe.echo", 1)).leases()[0];
+        assertEquals(1, first.attempt());
+        assertEquals(1L, first.leaseEpoch());
+        assertEquals("OK", service.heartbeat(new DispatchHeartbeatCommand("worker-alpha", first.taskId(),
+                first.leaseEpoch(), first.leaseToken())).code());
+        assertEquals(0, service.claim(new DispatchLeaseCommand("worker-bravo", "safe.echo", 1)).leases().length);
+        jdbc.update("UPDATE flow_dispatch_task SET lease_until = TIMESTAMP '2000-01-01 00:00:00' WHERE id = ?", first.taskId());
+        DispatchLeaseView second = service.claim(new DispatchLeaseCommand("worker-bravo", "safe.echo", 1)).leases()[0];
+        assertEquals(2L, second.leaseEpoch());
+        assertEquals(2, second.attempt());
+        assertNotEquals(first.leaseToken(), second.leaseToken());
+        assertEquals("STALE", service.complete(new DispatchCompleteCommand("worker-alpha", first.taskId(),
+                first.leaseEpoch(), first.leaseToken(), "SUCCEEDED")).code());
+        assertEquals("STALE", service.heartbeat(new DispatchHeartbeatCommand("worker-alpha", first.taskId(),
+                first.leaseEpoch(), first.leaseToken())).code());
+        assertEquals("OK", service.complete(new DispatchCompleteCommand("worker-bravo", second.taskId(),
+                second.leaseEpoch(), second.leaseToken(), "SUCCEEDED")).code());
+        assertEquals("SUCCEEDED", service.list("admin", PROJECT).tasks()[0].status());
+        assertEquals("STALE", service.complete(new DispatchCompleteCommand("worker-bravo", second.taskId(),
+                second.leaseEpoch(), second.leaseToken(), "SUCCEEDED")).code());
+        assertEquals("EXPIRED", jdbc.queryForObject("SELECT status FROM flow_dispatch_attempt "
+                + "WHERE task_id = ? AND lease_epoch = 1", String.class, enqueued.taskId()));
+        assertEquals("SUCCEEDED", jdbc.queryForObject("SELECT status FROM flow_dispatch_attempt "
+                + "WHERE task_id = ? AND lease_epoch = 2", String.class, enqueued.taskId()));
+    }
+
+    @Test
+    void failedAttemptRetriesWithinBoundAndThenStops() {
+        service.enqueue(event(2));
+        var a = service.claim(new DispatchLeaseCommand("worker-alpha", "safe.echo", 1)).leases()[0];
+        assertEquals("READY", service.complete(new DispatchCompleteCommand("worker-alpha", a.taskId(),
+                a.leaseEpoch(), a.leaseToken(), "FAILED")).taskStatus());
+        assertEquals(0, service.claim(new DispatchLeaseCommand("worker-bravo", "safe.echo", 1)).leases().length);
+        jdbc.update("UPDATE flow_dispatch_task SET next_attempt_at = TIMESTAMP '2000-01-01 00:00:00'");
+        var b = service.claim(new DispatchLeaseCommand("worker-bravo", "safe.echo", 1)).leases()[0];
+        assertEquals(2, b.attempt());
+        assertEquals("FAILED", service.complete(new DispatchCompleteCommand("worker-bravo", b.taskId(),
+                b.leaseEpoch(), b.leaseToken(), "FAILED")).taskStatus());
+        assertEquals(0, service.claim(new DispatchLeaseCommand("worker-alpha", "safe.echo", 1)).leases().length);
+        assertEquals("FAILED", service.list("admin", PROJECT).tasks()[0].status());
+    }
+
+    @Test
+    void exhaustedExpiredLeaseIsTerminalAndCannotBeResurrected() {
+        service.enqueue(event(1));
+        var claim = service.claim(new DispatchLeaseCommand("worker-one", "safe.echo", 1)).leases()[0];
+        jdbc.update("UPDATE flow_dispatch_task SET lease_until = TIMESTAMP '2000-01-01 00:00:00'");
+        assertEquals(1, service.expireExhaustedOnce());
+        assertEquals("FAILED", service.list("admin", PROJECT).tasks()[0].status());
+        assertEquals(0, service.claim(new DispatchLeaseCommand("worker-next", "safe.echo", 1)).leases().length);
+        assertEquals("STALE", service.complete(new DispatchCompleteCommand("worker-one", claim.taskId(),
+                claim.leaseEpoch(), claim.leaseToken(), "SUCCEEDED")).code());
+    }
+
+    @Test
+    void concurrentWorkersAcrossDispatcherInstancesCannotClaimSameTask() throws Exception {
+        service.enqueue(event(2));
+        var replica = new DispatcherRpcService(jdbc, manager, new ObjectMapper());
+        CountDownLatch start = new CountDownLatch(1);
+        try (var threads = Executors.newFixedThreadPool(2)) {
+            var a = threads.submit(() -> { start.await(); return service.claim(
+                    new DispatchLeaseCommand("worker-alpha", "safe.echo", 1)).leases().length; });
+            var b = threads.submit(() -> { start.await(); return replica.claim(
+                    new DispatchLeaseCommand("worker-bravo", "safe.echo", 1)).leases().length; });
+            start.countDown();
+            assertEquals(1, a.get(10, TimeUnit.SECONDS) + b.get(10, TimeUnit.SECONDS));
+        }
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM flow_dispatch_attempt", Integer.class));
+    }
+
+    @Test
+    void rejectsOversizedParametersInvalidIdsAndUnboundedBatch() {
+        DispatchEnqueueCommand c = event(2);
+        assertThrows(IllegalArgumentException.class, () -> service.enqueue(new DispatchEnqueueCommand(
+                c.runId(), c.eventId(), "admin", PROJECT, SCHEDULE, JOB, 1, "safe.echo", "x".repeat(16385), 30, 2)));
+        assertThrows(IllegalArgumentException.class,
+                () -> service.claim(new DispatchLeaseCommand("worker-a", "safe.echo", 9)));
+        assertThrows(IllegalArgumentException.class, () -> service.heartbeat(
+                new DispatchHeartbeatCommand("bad", "invalid-id", 0, "invalid-id")));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM flow_dispatch_task", Integer.class));
+    }
+
+    private static DispatchEnqueueCommand event(int max) {
+        return new DispatchEnqueueCommand(UUID.randomUUID().toString(), UUID.randomUUID().toString(),
+                "admin", PROJECT, SCHEDULE, JOB, 1, "safe.echo", "{}", 30, max);
+    }
+}

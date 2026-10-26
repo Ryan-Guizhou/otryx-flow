@@ -23,4 +23,6 @@ M2 FLOW-008 verified in PR #10 (main@97d29bb3): [Job REST/RPC contract](04-api/m
 
 FLOW-010 / merged PR #12: [Implementation](03-design/m2-scheduler-implementation.md) | [API contracts](04-api/m2-scheduler-contracts.md) | [Acceptance](06-testing/m2-scheduler-acceptance.md). Durable fires / Outbox do **not** mean a Handler has run; FLOW-011 Engine acceptance is the next step, while Dispatcher/Worker remain future milestones.
 
-FLOW-011 / Issue #6 (Engine PR candidate): [Inbox + Relay implementation](03-design/m2-engine-outbox.md) | [RPC/REST contracts](04-api/m2-engine-contracts.md) | [Acceptance](06-testing/m2-engine-acceptance.md). `WAITING_DISPATCH` proves Run persistence, not physical task execution.
+FLOW-011 / merged PR #13: [Inbox + Relay implementation](03-design/m2-engine-outbox.md) | [RPC/REST contracts](04-api/m2-engine-contracts.md) | [Acceptance](06-testing/m2-engine-acceptance.md). `WAITING_DISPATCH` proves Run persistence, not physical task execution.
+
+FLOW-012 / Issue #7 (Dispatcher development candidate): [Lease + Fencing design](03-design/m2-dispatcher-leases.md) | [RPC / REST contract](04-api/m2-dispatcher-contracts.md) | [Acceptance gates](06-testing/m2-dispatcher-acceptance.md). Task queue acceptance is **not** proof of physical Worker execution.

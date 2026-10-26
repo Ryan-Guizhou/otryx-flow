@@ -179,3 +179,22 @@ test('Engine Runs API is a read-only, scoped durable-state query', async () => {
     assert.equal(calls[0].credentials, 'same-origin')
   } finally { globalThis.fetch = originalFetch }
 })
+
+test('Dispatch queue GET exposes only scoped, read-only task metadata', async () => {
+  const { listDispatchTasks } = await import('../flow-web/src/api.ts')
+  const project = '00000000-0000-4000-8000-000000000001'
+  const calls = []
+  globalThis.fetch = async (path, init = {}) => {
+    calls.push({ path: String(path), method: init.method || 'GET', credentials: init.credentials })
+    return json([{ id: 'task-1', runId: 'run-1', projectId: project, handlerKey: 'safe.echo',
+      status: 'READY', attempts: 0, maxAttempts: 2, leaseEpoch: 0 }])
+  }
+  try {
+    const tasks = await listDispatchTasks(project)
+    assert.equal(tasks[0].status, 'READY')
+    assert.equal(calls[0].path, `/api/v1/projects/${project}/dispatch-tasks`)
+    assert.equal(calls[0].method, 'GET')
+    assert.equal(calls[0].credentials, 'same-origin')
+    assert.equal(Object.hasOwn(tasks[0], 'leaseToken'), false)
+  } finally { globalThis.fetch = originalFetch }
+})
