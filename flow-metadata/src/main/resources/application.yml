@@ -19,7 +19,7 @@ otryx:
     security-profile: TRUSTED_DEVELOPMENT # Developer-only isolated Compose network.
     registry:
       type: etcd
-      endpoints: ${OTRYX_REGISTRY_ENDPOINTS:127.0.0.1:2379}
+      endpoints: ${OTRYX_REGISTRY_ENDPOINTS:http://127.0.0.1:2379}
       namespace: flow-dev
     server:
       host: 0.0.0.0

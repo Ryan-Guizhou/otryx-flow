@@ -60,3 +60,7 @@ FLOW_E2E_RESTART_METADATA=1 bash scripts/test_m1_e2e.sh
 ```
 
 This test **restarts `flow-metadata`**; it must not run on production or on a shared environment unless interruption is explicitly approved. Developer Compose binds the web port to `127.0.0.1` and uses an internal-only container network; it is not a public demo deployment.
+
+## Etcd endpoint URI requirement
+
+The OTRYX Etcd Registry adapter validates complete URLs. Set `OTRYX_REGISTRY_ENDPOINTS=http://etcd:2379` inside the isolated Compose network, or `http://127.0.0.1:2379` for a matching local Etcd endpoint. A bare `etcd:2379` URI is invalid and is rejected with `Registry security rejected: UNSUPPORTED_PROTECTION`. This is strictly a TRUSTED_DEVELOPMENT configuration; production requires protected Etcd and NETWORK_MTLS.

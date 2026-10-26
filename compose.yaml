@@ -51,7 +51,7 @@ services:
       FLOW_DB_JDBC_URL: jdbc:mysql://mysql:3306/flow_metadata?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       FLOW_DB_USER: flow_app
       FLOW_DB_PASSWORD: ${FLOW_DB_PASSWORD:?Set an app password in .env}
-      OTRYX_REGISTRY_ENDPOINTS: etcd:2379
+      OTRYX_REGISTRY_ENDPOINTS: http://etcd:2379
       FLOW_RPC_ADVERTISED_HOST: flow-metadata
     depends_on:
       mysql: {condition: service_healthy}
@@ -68,7 +68,7 @@ services:
       FLOW_DB_PASSWORD: ${FLOW_DB_PASSWORD:?Set an app password in .env}
       FLOW_ADMIN_USERNAME: ${FLOW_ADMIN_USERNAME:?Set an admin username in .env}
       FLOW_ADMIN_PASSWORD: ${FLOW_ADMIN_PASSWORD:?Set an admin password in .env}
-      OTRYX_REGISTRY_ENDPOINTS: etcd:2379
+      OTRYX_REGISTRY_ENDPOINTS: http://etcd:2379
     depends_on:
       mysql: {condition: service_healthy}
       etcd: {condition: service_healthy}
