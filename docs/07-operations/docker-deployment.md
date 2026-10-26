@@ -1,20 +1,11 @@
-# Docker Compose 部署蓝图（Proposed）
+# Docker Compose 部署拓扑（M2 开发配置）
 
-本文件是 Docker Compose 的**设计要求**，当前不包含 `compose.yaml`，不得声称 `docker compose up -d` 可以启动。
+项目根目录的 `compose.yaml` 是当前可执行候选；新 Nacos 方案需通过 Issue #15 的真实 CI 后才可声明验收。见 [Nacos 注册初始化](nacos-registry.md) 与 [启动步骤](m1-developer-compose.md)。
 
-## Compose 应有的部署单元
-- `reverse-proxy`：Caddy 或 Nginx，唯一公网入口，TLS 安全配置。
-- `flow-web`：Vue 3 编译后静态内容；前端 API 地址通过可验证运行时参数或同域 `/api` 代理。
-- `flow-api`, `flow-metadata`, `flow-scheduler`, `flow-engine`, `flow-dispatcher`, `flow-worker`：最小权限容器，资源预算、健康与就绪探针、不可变镜像 digest。
-- `mysql`：有数据卷、备份、按服务 Schema/账户授权；迁移由部署任务控制而非每副本抢迁移。
-- `etcd`：仅私有容器网络、TLS/RBAC、受控证书与数据持久化；服务启动前就绪。
-- `otel-collector`, `prometheus`（可选集成部署）：只开私有端口或受鉴权运维入口。
+- **MySQL 8.4**：不同业务服务独立 Schema，开发账号共享；生产必须最小授权。
+- **Nacos 3.2.4**：仅开发隔离网络 `nacos:8848`，Nacos gRPC 9848 不映射宿主机，数据卷持久化。
+- **nacos-bootstrap**：一次性初始化 8 个 V2 Config Mapping 分片，任何 Provider/Consumer 启动前完成。
+- **RPC 应用**：Metadata、Scheduler 两副本、Dispatcher 两副本、Engine、API；只有 `otryx-registry-nacos` 依赖，无 Etcd 双后端。
+- **Web**：Vue/Nginx 仅宿主机回环 `127.0.0.1:8088`。
 
-## 最小环境变量和 Secret（命名提案）
-`FLOW_PUBLIC_BASE_URL`, `FLOW_DB_HOST`, `FLOW_DB_USER`, `FLOW_DB_PASSWORD`, `FLOW_RPC_REGISTRY_ENDPOINTS`, `FLOW_TLS_CERT_PATH`, `FLOW_TLS_KEY_PATH`, `FLOW_TLS_CA_PATH`。名称尚未出现在程序里；不得把此表当成可运行 application.yml。密码和私钥不提交版本库，Compose secrets/外置环境注入。
-
-## 启动依赖
-数据库/Etcd 就绪与迁移通过 → 业务 Provider 安全配置加载 → 业务服务就绪 → API 可请求 → 前端可登录；Worker 未注册不能让静态站点/基础 API 假报调度服务完全健康。
-
-## 单机演示局限
-单机 Compose 只保证可重复演示和有限容灾演练，并非多节点高可用。数据库/Etcd 单点、宿主机宕机和网络断联均可影响服务；Production 的 HA 必须通过独立拓扑部署和实际故障验证。
+生产/公网部署当前受阻：Nacos Adapter 不支持 `NETWORK_MTLS` 的完整 Naming+Config+login 网络加密；开发配置关闭 Nacos 客户端鉴权且启用 `TRUSTED_DEVELOPMENT`，严禁暴露到外网。Worker SDK 实际执行属于 Issue #8，队列状态不能伪装为真实 Handler 执行。

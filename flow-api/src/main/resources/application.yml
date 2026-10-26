@@ -28,9 +28,12 @@ otryx:
   rpc:
     security-profile: TRUSTED_DEVELOPMENT # Developer-only isolated Compose network.
     registry:
-      type: etcd
-      endpoints: ${OTRYX_REGISTRY_ENDPOINTS:http://127.0.0.1:2379}
-      namespace: flow-dev
+      type: nacos
+      endpoints: ${OTRYX_REGISTRY_ENDPOINTS:127.0.0.1:8848}
+      namespace: public
+      nacos:
+        group: OTRYX_RPC
+        cluster: DEFAULT
     server:
       enabled: false
     client:

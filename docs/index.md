@@ -25,4 +25,6 @@ FLOW-010 / merged PR #12: [Implementation](03-design/m2-scheduler-implementation
 
 FLOW-011 / merged PR #13: [Inbox + Relay implementation](03-design/m2-engine-outbox.md) | [RPC/REST contracts](04-api/m2-engine-contracts.md) | [Acceptance](06-testing/m2-engine-acceptance.md). `WAITING_DISPATCH` proves Run persistence, not physical task execution.
 
-FLOW-012 / Issue #7 (Dispatcher development candidate): [Lease + Fencing design](03-design/m2-dispatcher-leases.md) | [RPC / REST contract](04-api/m2-dispatcher-contracts.md) | [Acceptance gates](06-testing/m2-dispatcher-acceptance.md). Task queue acceptance is **not** proof of physical Worker execution.
+FLOW-012 / merged PR #14: [Lease + Fencing design](03-design/m2-dispatcher-leases.md) | [RPC / REST contract](04-api/m2-dispatcher-contracts.md) | [Acceptance gates](06-testing/m2-dispatcher-acceptance.md). Task queue acceptance is **not** proof of physical Worker execution.
+
+Current registry migration (Issue #15): [Nacos 3.2.4-only setup and exclusive V2 mapping bootstrap](07-operations/nacos-registry.md) | [Developer Compose](07-operations/m1-developer-compose.md). Etcd is only historical CI evidence, not an active runtime option.

@@ -18,7 +18,7 @@ flowchart LR
       WRK[flow-worker group N] --> DSP
       DSP --> ENG
     end
-    Services -. App membership metadata .-> ETCD[(Etcd)]
+    Services -. App membership metadata .-> NACOS[(Nacos V2 Naming + Config)]
     META --> MYSQL[(MySQL: owner schemas)]
     SCH --> MYSQL
     ENG --> MYSQL
@@ -78,3 +78,7 @@ sequenceDiagram
 | Broker 原生任务队列 | 高吞吐、消峰 | 增加基础设施复杂度与消息投递/租约语义；V1 预留适配，暂不强制 |
 | DB 持久化领取 + Worker Pull | 故障恢复和审计容易、基础设施少 | 表热点与吞吐上限需要压测；V1 采用 |
 | 共享单库跨服务事务 | 初期省事 | 数据耦合、阻碍独立部署；拒绝，采用每服务 Schema + Outbox |
+
+## Nacos V2 应用级注册（Issue #15 改造候选）
+
+本版本采用唯一 Nacos 3.2.4 Naming + Config 注册中心，以应用为粒度注册；Config 中八个 ServiceMapping 分片需在 Provider/Consumer 启动前通过独立 Bootstrap 完成。禁止运行期隐式初始化映射，也不实施 Etcd/Nacos 双写。当前 Adapter 的完整 TLS/mTLS 尚不支持，生产环境被阻断。详见 [Nacos 操作与迁移](../07-operations/nacos-registry.md)。

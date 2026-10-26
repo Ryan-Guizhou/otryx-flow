@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en-US.md)
 
-> **已验证合并：M1、FLOW-008 (#10)、FLOW-009 (#11)、FLOW-010 (#12)、FLOW-011 (#13)**；`main@7a40a48f762704a09e8418fd31287e9fd232939f`。**FLOW-012 (#7) 的 Dispatcher/Lease/Fencing 为当前开发候选，需本 PR 真实 CI 验收后才能合并。** Worker SDK 和公网 HTTPS 站点尚未实现。
+> **已验证合并 M1 与 M2 Issues #3–#7**（main `9351a5e8`）。当前按 Issue #15 **将唯一注册中心切换到 Nacos 3.2.4**，需在真实 CI 通过后合并；Worker SDK（#8）和公网 HTTPS 尚未完成。
 
 <!-- doc-section:overview -->
 ## 简介
@@ -13,7 +13,7 @@ OTRYX Flow 是拟议中的、以 **OTRYX RPC** 作为内部同步远程调用框
 <!-- doc-section:architecture -->
 ## 技术基线与架构
 - **OTRYX RPC 当前依据**：`1.0.0-SNAPSHOT` / JDK 21 / Spring Boot 3.5.4，唯一 Starter `com.peachsoft.otryx:otryx-spring-boot-starter`，**尚未发布到 Maven Central**。具体集成必须锁定并验证仓库提交；参考 [依赖事实与外部证据](docs/09-references/source-evidence.md)。
-- **拟议业务栈**：Java 21 / Vue 3 + TypeScript / MySQL 8.4 LTS / Flyway / Etcd / Docker Compose；Redis、RocketMQ、Kubernetes 不作为 M1 的强制前置条件。
+- **拟议业务栈**：Java 21 / Vue 3 + TypeScript / MySQL 8.4 LTS / Flyway / Nacos 3.2.4 / Docker Compose；Redis、RocketMQ、Kubernetes 不作为 M1 的强制前置条件。
 - **拟议应用**：`flow-api`、`flow-metadata`、`flow-scheduler`、`flow-engine`、`flow-dispatcher`、`flow-worker`、`flow-web`。应用通过 OTRYX RPC 接口契约交互；任务交付依赖业务状态与 Outbox。
 
 ```mermaid
@@ -30,7 +30,7 @@ flowchart TB
       Worker[flow-worker N] --> Dispatcher
       Dispatcher --> Engine
     end
-    Runtime -. Application Discovery .-> Registry[(Etcd Protected Registry)]
+    Runtime -. Application Discovery .-> Registry[(Nacos V2 Naming + Config)]
     Runtime --> Database[(MySQL, schema per owner)]
 ```
 
@@ -51,9 +51,9 @@ flowchart TB
 ## M1 已验收，M2 开发中
 M1 在 [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2) 通过 Maven、Vue、源码、文档以及真实 Docker Compose 跨 JVM RPC 集成验收，已合并 main。
 
-M2 FLOW-008 已在 [PR #10](https://github.com/Ryan-Guizhou/otryx-flow/pull/10) 完成：任务草稿、幂等创建、乐观版本 CAS、不可变发布 Revision 及 Vue 任务页面。参见 [M2 RPC/REST 契约](docs/04-api/m2-job-contracts.md) 和 [M2 验收计划](docs/06-testing/m2-job-acceptance.md)。FLOW-009 已于 [PR #11](https://github.com/Ryan-Guizhou/otryx-flow/pull/11) 合并无副作用的 Cron/IANA 时区预览（[设计](docs/03-design/cron-timezone.md) · [API](docs/04-api/cron-preview.md)）。FLOW-010 已在 [PR #12](https://github.com/Ryan-Guizhou/otryx-flow/pull/12) 完成双副本持久化 Scheduler、唯一 Trigger 与事务 Outbox；参见 [实现](docs/03-design/m2-scheduler-implementation.md)、[API](docs/04-api/m2-scheduler-contracts.md) 与 [验收](docs/06-testing/m2-scheduler-acceptance.md)。FLOW-011 已于 [PR #13](https://github.com/Ryan-Guizhou/otryx-flow/pull/13) 引入独立 Engine、Inbox 幂等和 Outbox 可靠重投（[设计](docs/03-design/m2-engine-outbox.md) · [RPC/REST](docs/04-api/m2-engine-contracts.md) · [验收](docs/06-testing/m2-engine-acceptance.md)）。FLOW-012 开发候选 [Issue #7](https://github.com/Ryan-Guizhou/otryx-flow/issues/7)：[Dispatcher/Lease 设计](docs/03-design/m2-dispatcher-leases.md) · [RPC/REST 契约](docs/04-api/m2-dispatcher-contracts.md) · [验收](docs/06-testing/m2-dispatcher-acceptance.md)。**尚未提供 Worker SDK 自动执行和最终结果回传 Engine**，公网部署也未完成。
+M2 FLOW-008 已在 [PR #10](https://github.com/Ryan-Guizhou/otryx-flow/pull/10) 完成：任务草稿、幂等创建、乐观版本 CAS、不可变发布 Revision 及 Vue 任务页面。参见 [M2 RPC/REST 契约](docs/04-api/m2-job-contracts.md) 和 [M2 验收计划](docs/06-testing/m2-job-acceptance.md)。FLOW-009 已于 [PR #11](https://github.com/Ryan-Guizhou/otryx-flow/pull/11) 合并无副作用的 Cron/IANA 时区预览（[设计](docs/03-design/cron-timezone.md) · [API](docs/04-api/cron-preview.md)）。FLOW-010 已在 [PR #12](https://github.com/Ryan-Guizhou/otryx-flow/pull/12) 完成双副本持久化 Scheduler、唯一 Trigger 与事务 Outbox；参见 [实现](docs/03-design/m2-scheduler-implementation.md)、[API](docs/04-api/m2-scheduler-contracts.md) 与 [验收](docs/06-testing/m2-scheduler-acceptance.md)。FLOW-011 已于 [PR #13](https://github.com/Ryan-Guizhou/otryx-flow/pull/13) 引入独立 Engine、Inbox 幂等和 Outbox 可靠重投（[设计](docs/03-design/m2-engine-outbox.md) · [RPC/REST](docs/04-api/m2-engine-contracts.md) · [验收](docs/06-testing/m2-engine-acceptance.md)）。FLOW-012 已合并 [PR #14](https://github.com/Ryan-Guizhou/otryx-flow/pull/14)：[Dispatcher/Lease 设计](docs/03-design/m2-dispatcher-leases.md) · [RPC/REST 契约](docs/04-api/m2-dispatcher-contracts.md) · [验收](docs/06-testing/m2-dispatcher-acceptance.md)。**尚未提供 Worker SDK 自动执行和最终结果回传 Engine**，公网部署也未完成。
 
-隔离开发配置 `TRUSTED_DEVELOPMENT` 不能用于不可信网络。
+注册中心仅支持 **Nacos 3.2.4**，不再部署 Etcd。首次部署前必须完成 [Nacos V2 Config 分片初始化](docs/07-operations/nacos-registry.md)。当前适配器仍限制为 `TRUSTED_DEVELOPMENT`，不可公网或生产使用。
 
 <!-- doc-section:contribute -->
 ## 工程协作

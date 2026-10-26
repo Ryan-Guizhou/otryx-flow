@@ -1,76 +1,49 @@
-# M1 developer Compose (implementation candidate)
+# OTRYX Flow M2 开发部署（唯一 Nacos 3.2.4）
 
-M1 ships a developer-only HTTP site at `http://127.0.0.1:8088`. It is NOT an HTTPS production website; the RPC network is `TRUSTED_DEVELOPMENT` and the Etcd channel has no mTLS. Do not publish ports to the Internet.
+> **迁移候选，需 Issue #15 最新 PR CI 通过。** 仅供本地与隔离 CI 使用，当前还没有生产可用的 HTTPS/Nacos mTLS 方案。
 
-## Prerequisites
-- Docker Engine with Compose V2, Internet access for initial image, Maven and npm downloads.
-- Enough RAM and free disk for building the entire pinned OTRYX RPC source tree.
-- Java build targets JDK 21; runtime image uses JDK 21.
-- `OTRYX_RPC_SHA` is the exact commit `706b6506e49e1ade70de9c6c64c844fdd4631e17` verified from `main` on 2026-10-26. The SHA is an implementation dependency, **not a test pass claim**.
+## 前置条件
 
-## Commands
-Run from repository root:
+- Docker Engine + Compose V2、可以拉取 `nacos/nacos-server:v3.2.4` 和 Maven/npm 依赖。
+- Docker 宿主机为后端编译和 Nacos 3.2.4 准备足够的内存/磁盘。Java 构建和运行使用 JDK 21。
+- `OTRYX_RPC_SHA=706b6506e49e1ade70de9c6c64c844fdd4631e17` 通过完整源码固定，不发布到 Maven Central。
+
+## 从仓库根目录启动
 
 ```bash
 cp .env.example .env
-# Edit FLOW_DB_ROOT_PASSWORD, FLOW_DB_PASSWORD and FLOW_ADMIN_PASSWORD to strong secrets.
+# 替换所有 REPLACE_WITH 占位：数据库、管理员、Nacos signing token/identity
 docker compose build
 bash scripts/start_dev_compose.sh
 docker compose ps
-# Browser: http://127.0.0.1:8088
-set -a; . ./.env; set +a
-bash scripts/test_m1_e2e.sh
+# 浏览器访问 http://127.0.0.1:8088
 ```
 
-Backend Dockerfile is built once by `flow-api` and reused as the `flow-metadata` image. It builds OTRYX RPC from the exact pinned upstream source SHA into the Maven build stage, then builds both `flow-api` and `flow-metadata`. `flow-api` calls the metadata provider **via real OTRYX RPC**, discovered through Etcd. No HTTP fallback exists between the services.
+**不要直接绕过独立 Bootstrap。** 启动顺序为 Nacos healthy → 独立 `nacos-bootstrap` 完成 8 个 Mapping 分片 → Metadata → Scheduler×2 → Dispatcher×2 → Engine → API → Web。`start_dev_compose.sh` 有有界超时和日志检查，失败时退出非零。Compose Java 服务也声明 Bootstrap 的 `service_completed_successfully` 依赖。
 
-## Current scope
-- API login: server session, BCrypt bootstrap admin, CSRF for state-changing operations.
-- Identity owner: `flow_identity` schema, `flow_user` table. Metadata owner: `flow_metadata` schema, `flow_project` table.
-- `POST /api/v1/projects` requires a stable `Idempotency-Key`, and returning 200 on same-key retry is expected.
-- M1 contains no live scheduler, Worker, DAG engine, alerting or HTTPS certificate manager. The UI marks these modules as planned rather than showing fake metrics.
-- The Compose MySQL account has grants on two schemas for local convenience; **production must use one least-privileged DB user per service**.
-- Session storage is local to one flow-api process. Horizontal API replicas require clustered session storage in a later milestone.
-- First use of network dependencies, JDK/Maven build and runtime E2E were not executed in the offline authoring environment. Execute commands above and attach raw logs before marking FLOW-003 through FLOW-007 done.
+## 当前服务和安全
 
-## Troubleshooting
-1. If the initial project query returns 503, check `docker compose logs flow-metadata`, then check Etcd readiness and local application-directory convergence; retry after startup.
-2. If login fails, verify `.env`, Flyway's `flow_identity` migration and `flow_user` initialization. Initial admin password is not automatically rotated when a user already exists.
-3. If Docker build fails to resolve `otryx-codegen` or `otryx-spring-boot-starter`, verify that pinned RPC `mvn install` succeeded and the Maven repository path was retained within the builder stage.
-4. If CSRF returns 403, first GET `/api/v1/auth/csrf` with the same cookies, and supply the returned token as `X-XSRF-TOKEN`.
-5. Never remove MySQL volumes to "fix" migrations without explicit backup and data-loss approval.
+`flow-api`、`flow-metadata`、`flow-scheduler`、`flow-dispatcher`、`flow-engine` 使用 OTRYX RPC **应用级 Nacos** 发现。MySQL 每服务独立 Schema，开发共享账号；生产需要每服务独立最小权限。后台 Session 目前是单节点；Worker SDK、受控 DAG 执行和公开 HTTPS 尚未实现。
 
-## M1 offline checks and manual CI integration
+仅静态站点 `flow-web` 绑定宿主机回环 `127.0.0.1:8088`。MySQL、Nacos（HTTP 8848、gRPC 9848）以及业务 RPC 仅存在于 `internal` Docker Network；不要暴露到公网。`NACOS_AUTH_ENABLE=false` 和 `TRUSTED_DEVELOPMENT` 是不安全的生产配置，当前 Adapter 还不支持完整 `NETWORK_MTLS`。
 
-Before pulling dependencies or starting containers, run from repository root:
+## 验证
 
 ```bash
 bash scripts/verify_m1_offline.sh
-```
-
-This validates documentation, static contracts, a Node HTTP-client test suite, E2E shell script behavior against a **fake local HTTP server**, and Java DTO syntax. It does **not** launch Spring, Vue, Etcd, MySQL or real OTRYX RPC. A separately configured networked machine must run the full Maven/Vue builds and real Compose E2E.
-
-The GitHub Actions file `.github/workflows/m1-integration.yml` is **manual-only** (`workflow_dispatch`) and builds pinned OTRYX modules, starts Compose and executes the full E2E with a metadata-service restart. It is separate from fast PR source/compile checks to limit unnecessary CI load.
-
-On a local Docker machine, run the additional fault-injection path explicitly:
-
-```bash
+# 真实 Compose E2E 的故障注入会重启 Metadata、Engine 等，仅在隔离测试环境执行：
 set -a; source .env; set +a
 FLOW_E2E_RESTART_METADATA=1 bash scripts/test_m1_e2e.sh
 ```
 
-This test **restarts `flow-metadata`**; it must not run on production or on a shared environment unless interruption is explicitly approved. Developer Compose binds the web port to `127.0.0.1` and uses an internal-only container network; it is not a public demo deployment.
+GitHub `.github/workflows/m1-quality.yml` 执行 Java、Vue、源码门禁；`.github/workflows/m1-integration.yml` 在 PR Ready 时通过真实 Nacos 服务执行全链路测试，并可手动运行。旧 Etcd CI 证据不是本次 Nacos 验收证据。
 
-## Etcd endpoint URI requirement
+## 排错
 
-The OTRYX Etcd Registry adapter validates complete URLs. Set `OTRYX_REGISTRY_ENDPOINTS=http://etcd:2379` inside the isolated Compose network, or `http://127.0.0.1:2379` for a matching local Etcd endpoint. A bare `etcd:2379` URI is invalid and is rejected with `Registry security rejected: UNSUPPORTED_PROTECTION`. This is strictly a TRUSTED_DEVELOPMENT configuration; production requires protected Etcd and NETWORK_MTLS.
+1. Nacos 启动失败：检查 `docker compose logs nacos`；健康端点是 `/nacos/v3/admin/core/state/readiness`。
+2. Bootstrap 失败：检查 `docker compose logs nacos-bootstrap`，核实 namespace/group/Config MD5。无法通过时停止启动；不要运行期修复元数据。
+3. HTTP 502 / RPC Consumer registration timeout：用 `bash scripts/start_dev_compose.sh` 先启动 Provider；确认 Nacos 和 Config Mapping 已就绪。
+4. API 401/CSRF 403：登录后带 Session Cookie，先 GET `/api/v1/auth/csrf`，随后使用 `X-XSRF-TOKEN`。
+5. MySQL migration 失败：先备份数据并核对 Flyway 状态，不要直接删持久卷。
 
-## Docker internal networks and loopback ingress
-
-The `internal` network is exclusively for the Java RPC, MySQL and Etcd containers. A second `ingress` bridge is attached **only** to Nginx (`flow-web`) so Docker can publish `127.0.0.1:8088:80` to the host. Do not attach the RPC/DB services to the ingress bridge or bind any port to `0.0.0.0` for this development profile. The initial all-internal network prevented host loopback connections during GitHub Actions E2E.
-
-## M2 OTRYX RPC application membership startup
-
-多个 Java Consumer/Provider 与 Etcd 同时启动时，应用成员确认有可能超出 `otryx.rpc.registry.control-plane-timeout`，导致启动时 `Failed to initialize @OtryxRpcReference`，并令 Nginx 暂时返回 502。这不是业务 RPC 可以静默忽略的错误。请使用根目录 `bash scripts/start_dev_compose.sh` 按 MySQL/Etcd → Metadata → Scheduler×2 → Dispatcher×2 → Engine → API → Web 的依赖顺序启动，并等待各 Java 应用输出 `Started Flow*Application` 后再推进。脚本对每个 JVM 有明确超时和退出检测。开发 Compose 为 Engine/API 配置有限次 `on-failure` 重启作为兜底，不能替代对真实门禁的验收。
-
-`flow-dispatcher` 内的 `/_e2e/dispatch/*` 只有在 `FLOW_DISPATCH_E2E_PROFILE=e2e` 时注册；默认不可用且端口未映射到宿主机。GitHub Actions 会在隔离网络中临时启用，用于租约 Fencing 故障注入。严禁在生产启用此 Profile。
+详细原理与升级/回滚请看 [Nacos 唯一注册中心](nacos-registry.md)。
