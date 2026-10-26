@@ -42,6 +42,8 @@ for f in ['scripts/test_frontend_api.mjs', 'scripts/test_e2e_harness_offline.mjs
           '.github/workflows/m1-integration.yml']:
     assert (root/f).is_file(), f'Missing verification or manual workflow: {f}'
 assert 'workflow_dispatch' in (root/'.github/workflows/m1-integration.yml').read_text(encoding='utf-8')
+assert (root/'scripts/start_dev_compose.sh').is_file(), 'Use bounded sequential OTRYX RPC startup in developer CI'
+assert 'bash scripts/start_dev_compose.sh' in (root/'.github/workflows/m1-integration.yml').read_text(encoding='utf-8')
 assert 'flow-scheduler-core' in files['pom.xml'], 'Cron algorithm must be reusable by future scheduler'
 cron=files['flow-scheduler-core/src/main/java/com/peachsoft/otryx/flow/scheduler/core/CronScheduleCalculator.java']
 assert 'CronExpression.parse' in cron and 'getValidOffsets' in cron and 'MAX_COUNT = 20' in cron

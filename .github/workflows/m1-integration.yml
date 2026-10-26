@@ -31,8 +31,8 @@ jobs:
         run: docker compose config --quiet
       - name: Build pinned backends and Vue image (8m max)
         run: timeout 8m docker compose build
-      - name: Start MySQL, Etcd, RPC services and web
-        run: docker compose up -d
+      - name: Start MySQL/Etcd and JVM applications in registered dependency order
+        run: bash scripts/start_dev_compose.sh
       - name: Run real RPC business path, restart recovery, and optional M2 jobs
         shell: bash
         env:

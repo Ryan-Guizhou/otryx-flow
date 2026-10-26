@@ -15,7 +15,7 @@ Run from repository root:
 cp .env.example .env
 # Edit FLOW_DB_ROOT_PASSWORD, FLOW_DB_PASSWORD and FLOW_ADMIN_PASSWORD to strong secrets.
 docker compose build
-docker compose up -d
+bash scripts/start_dev_compose.sh
 docker compose ps
 # Browser: http://127.0.0.1:8088
 set -a; . ./.env; set +a
@@ -68,3 +68,9 @@ The OTRYX Etcd Registry adapter validates complete URLs. Set `OTRYX_REGISTRY_END
 ## Docker internal networks and loopback ingress
 
 The `internal` network is exclusively for the Java RPC, MySQL and Etcd containers. A second `ingress` bridge is attached **only** to Nginx (`flow-web`) so Docker can publish `127.0.0.1:8088:80` to the host. Do not attach the RPC/DB services to the ingress bridge or bind any port to `0.0.0.0` for this development profile. The initial all-internal network prevented host loopback connections during GitHub Actions E2E.
+
+## M2 OTRYX RPC application membership startup
+
+多个 Java Consumer/Provider 与 Etcd 同时启动时，应用成员确认有可能超出 `otryx.rpc.registry.control-plane-timeout`，导致启动时 `Failed to initialize @OtryxRpcReference`，并令 Nginx 暂时返回 502。这不是业务 RPC 可以静默忽略的错误。请使用根目录 `bash scripts/start_dev_compose.sh` 按 MySQL/Etcd → Metadata → Scheduler×2 → Dispatcher×2 → Engine → API → Web 的依赖顺序启动，并等待各 Java 应用输出 `Started Flow*Application` 后再推进。脚本对每个 JVM 有明确超时和退出检测。开发 Compose 为 Engine/API 配置有限次 `on-failure` 重启作为兜底，不能替代对真实门禁的验收。
+
+`flow-dispatcher` 内的 `/_e2e/dispatch/*` 只有在 `FLOW_DISPATCH_E2E_PROFILE=e2e` 时注册；默认不可用且端口未映射到宿主机。GitHub Actions 会在隔离网络中临时启用，用于租约 Fencing 故障注入。严禁在生产启用此 Profile。

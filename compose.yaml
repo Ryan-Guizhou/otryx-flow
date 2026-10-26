@@ -94,6 +94,7 @@ services:
 
   flow-engine:
     image: otryx-flow-backend:m1
+    restart: on-failure:5
     command: ["/apps/flow-engine.jar"]
     environment:
       FLOW_DB_JDBC_URL: jdbc:mysql://mysql:3306/flow_engine?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
@@ -138,6 +139,7 @@ services:
 
   flow-api:
     build: *backend-build
+    restart: on-failure:5
     image: otryx-flow-backend:m1
     command: ["/apps/flow-api.jar"]
     environment:

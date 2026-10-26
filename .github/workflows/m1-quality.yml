@@ -19,6 +19,7 @@ on:
       - 'scripts/test_m2_scheduler_e2e.sh'
       - 'scripts/test_m2_engine_e2e.sh'
       - 'scripts/test_m2_dispatcher_e2e.sh'
+      - 'scripts/start_dev_compose.sh'
       - 'scripts/test_frontend_api.mjs'
       - 'scripts/test_e2e_harness_offline.mjs'
       - '.github/workflows/m1-quality.yml'
