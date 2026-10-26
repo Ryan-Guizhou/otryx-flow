@@ -5,7 +5,7 @@ import re
 import xml.etree.ElementTree as ET
 root=Path(__file__).resolve().parent.parent
 files={p.relative_to(root).as_posix():p.read_text(encoding='utf-8') for p in root.rglob('*') if p.is_file() and p.suffix in {'.java','.xml','.ts','.vue','.sql','.yml','.yaml'}}
-needed=['pom.xml','flow-api/pom.xml','flow-metadata/pom.xml','flow-contracts/pom.xml',
+needed=['pom.xml','flow-api/pom.xml','flow-metadata/pom.xml','flow-contracts/pom.xml','flow-scheduler-core/pom.xml',
         'flow-web/src/App.vue','flow-web/src/api.ts','compose.yaml']
 for f in needed:
     assert f in files, f'Missing {f}'
@@ -27,19 +27,25 @@ assert "@OtryxRpcIdempotent" in files['flow-contracts/src/main/java/com/peachsof
 assert 'UNIQUE (owner_username, request_key)' in src, 'Idempotent writes must be backed by a unique index'
 compose=files['compose.yaml']
 assert '127.0.0.1:8088:80' in compose and 'internal: true' in compose, 'Developer environment should not expose untrusted RPC network'
-assert 'networks: [internal, ingress]' in compose and 'ingress: {}' in compose, 'Web ingress must allow loopback port while backends stay internal'
-# Native Etcd adapter verifies absolute HTTP(S) URI scheme and authority.
-assert compose.count('OTRYX_REGISTRY_ENDPOINTS: http://etcd:2379') == 2, 'Etcd endpoints must include HTTP scheme in both JVMs'
+# Retain the M1 vetted protected local network and explicit Etcd URI controls.
+assert compose.count('OTRYX_REGISTRY_ENDPOINTS: http://etcd:2379') == 2, 'Use full HTTP Etcd URLs for both services'
 for app_file in ('flow-api/src/main/resources/application.yml', 'flow-metadata/src/main/resources/application.yml'):
     assert 'OTRYX_REGISTRY_ENDPOINTS:http://127.0.0.1:2379' in files[app_file], app_file
+assert 'networks: [internal, ingress]' in compose and 'ingress: {}' in compose, 'Host web ingress must be separate from internal RPC network'
 assert 'NETWORK_MTLS' not in files['flow-api/src/main/resources/application.yml'], 'M1 is development only'
 assert 'NETWORK_MTLS' not in files['flow-metadata/src/main/resources/application.yml'], 'M1 is development only'
 assert 'startSession' not in src, 'Do not substitute application authentication with implicit sessions'
-for f in ['pom.xml','flow-api/pom.xml','flow-metadata/pom.xml','flow-contracts/pom.xml']:
+for f in ['pom.xml','flow-api/pom.xml','flow-metadata/pom.xml','flow-contracts/pom.xml','flow-scheduler-core/pom.xml']:
     ET.fromstring(files[f])
 for f in ['scripts/test_frontend_api.mjs', 'scripts/test_e2e_harness_offline.mjs',
           '.github/workflows/m1-integration.yml']:
     assert (root/f).is_file(), f'Missing verification or manual workflow: {f}'
 assert 'workflow_dispatch' in (root/'.github/workflows/m1-integration.yml').read_text(encoding='utf-8')
+assert 'flow-scheduler-core' in files['pom.xml'], 'Cron algorithm must be reusable by future scheduler'
+cron=files['flow-scheduler-core/src/main/java/com/peachsoft/otryx/flow/scheduler/core/CronScheduleCalculator.java']
+assert 'CronExpression.parse' in cron and 'getValidOffsets' in cron and 'MAX_COUNT = 20' in cron
+assert 'JdbcTemplate' not in cron and 'OtryxRpcClient' not in cron, 'Cron preview is a pure calculation'
+assert 'flow-scheduler-core/**' in (root/'.github/workflows/m1-quality.yml').read_text(encoding='utf-8')
+assert 'COPY flow-scheduler-core ./flow-scheduler-core' in (root/'deploy/Dockerfile.backend').read_text(encoding='utf-8'), 'Include new Maven modules in Docker build'
 print(f'PASS: M1 static contracts ({len(files)} source/config files)')
 print('NOTE: This does not run Maven, MySQL, network Etcd, OTRYX RPC, npm or a browser.')

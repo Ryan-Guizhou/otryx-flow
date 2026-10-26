@@ -108,3 +108,25 @@ test('M2 job draft and publication client send stable request keys and CAS versi
     assert.ok(calls.every(x => x.credentials === 'same-origin'))
   } finally { globalThis.fetch = originalFetch }
 })
+
+test('Cron preview sends an explicit UTC instant and receives bounded occurrence list', async () => {
+  const { previewCron } = await import('../flow-web/src/api.ts')
+  const calls = []
+  globalThis.fetch = async (path, init = {}) => {
+    const request = { path: String(path), headers: new Headers(init.headers),
+      method: init.method, body: JSON.parse(init.body), credentials: init.credentials }
+    calls.push(request)
+    return json({ expression: request.body.expression, timeZone: request.body.timeZone,
+      fromUtc: request.body.fromUtc, occurrences: [{ utc: '2026-10-26T12:00:00Z',
+        local: '2026-10-26T20:00:00', offset: '+08:00' }], overlapOccurrencesSkipped: 0 })
+  }
+  try {
+    const result = await previewCron('0 0 20 * * *', 'Asia/Shanghai', '2026-10-26T00:00:00Z', 1)
+    assert.equal(result.occurrences[0].offset, '+08:00')
+    assert.equal(calls[0].method, 'POST')
+    assert.equal(calls[0].path, '/api/v1/schedules/preview')
+    assert.equal(calls[0].body.limit, 1)
+    assert.equal(calls[0].credentials, 'same-origin')
+    assert.ok(calls[0].headers.get('X-XSRF-TOKEN'))
+  } finally { globalThis.fetch = originalFetch }
+})
