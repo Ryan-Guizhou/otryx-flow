@@ -81,3 +81,17 @@ export async function publishJob(projectId: string, job: Job, requestKey: string
     body: JSON.stringify({ expectedDraftVersion: job.draftVersion })
   })
 }
+
+export interface CronOccurrence { utc: string; local: string; offset: string }
+export interface CronPreview {
+  expression: string
+  timeZone: string
+  fromUtc: string
+  occurrences: CronOccurrence[]
+  overlapOccurrencesSkipped: number
+}
+export async function previewCron(expression: string, timeZone: string, fromUtc: string, limit = 8): Promise<CronPreview> {
+  return call('/api/v1/schedules/preview', {
+    method: 'POST', body: JSON.stringify({ expression, timeZone, fromUtc, limit })
+  })
+}

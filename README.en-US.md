@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en-US.md)
 
-> **M1 validated and merged:** `main@3291adcbd43102b9a46772480d80ee5055ebea63` (PR #2; five green checks including real Docker Compose RPC + MySQL + restart E2E). **M2 FLOW-008 remains a source candidate** until its own PR-head CI passes. Public HTTPS deployment is not complete.
+> **M1 and M2 FLOW-008 verified and merged:** the versioned job PR [#10](https://github.com/Ryan-Guizhou/otryx-flow/pull/10), `main@97d29bb3e340071b8d144bdb267ce4b9316555b8`, passed five checks including real Etcd/RPC/MySQL/Jobs E2E. **FLOW-009 Cron preview is an unverified development candidate.** Public HTTPS deployment is not complete.
 
 <!-- doc-section:overview -->
 ## Overview
@@ -51,7 +51,7 @@ Read the [docs index](docs/index.md), then [requirements](docs/01-product/requir
 ## M1 verified; M2 in progress
 M1 passed Maven, Vue, source, docs and real cross-JVM Docker Compose / Etcd / MySQL E2E and was squash-merged in [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2).
 
-The M2 FLOW-008 implementation candidate adds job drafts, durable idempotent creation, optimistic draft CAS, immutable published revisions, and a Vue Jobs page. See [M2 RPC/REST contracts](docs/04-api/m2-job-contracts.md) and [M2 acceptance](docs/06-testing/m2-job-acceptance.md). This is **not yet** job scheduling, execution or public deployment.
+The implemented M2 FLOW-008 [PR #10](https://github.com/Ryan-Guizhou/otryx-flow/pull/10) adds job drafts, durable idempotent creation, optimistic draft CAS, immutable published revisions, and a Vue Jobs page. See [M2 RPC/REST contracts](docs/04-api/m2-job-contracts.md) and [M2 acceptance](docs/06-testing/m2-job-acceptance.md). FLOW-009 adds a pure Cron/IANA time-zone preview candidate ([design](docs/03-design/cron-timezone.md) · [API](docs/04-api/cron-preview.md)). This is **not yet** job scheduling, execution or public deployment.
 
 Do not deploy `TRUSTED_DEVELOPMENT` on untrusted networks.
 

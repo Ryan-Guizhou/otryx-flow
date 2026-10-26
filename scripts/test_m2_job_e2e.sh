@@ -46,4 +46,20 @@ if [ "${FLOW_E2E_RESTART_METADATA:-0}" = 1 ]; then
   [ "$available" = 1 ] || { echo 'Job revision did not recover after restart'; exit 1; }
 fi
 
+# Cron preview remains pure and does not create a scheduler entry.
+cat > "$TEMP/cron-request.json" <<'EOF_CRON'
+{"expression":"0 30 2 * * *","timeZone":"Europe/Berlin","fromUtc":"2026-03-28T00:00:00Z","limit":3}
+EOF_CRON
+code="$(curl --max-time 12 -sS -o "$TEMP/cron-preview.json" -w '%{http_code}' -c "$FLOW_M2_COOKIE" -b "$FLOW_M2_COOKIE" \
+  -H 'Content-Type: application/json' -H "X-XSRF-TOKEN: $FLOW_M2_TOKEN" \
+  -d @"$TEMP/cron-request.json" "$BASE/api/v1/schedules/preview")"
+[ "$code" = 200 ] || { echo "Cron preview expected 200, got $code"; cat "$TEMP/cron-preview.json"; exit 1; }
+python3 -c 'import json,sys;p=json.load(open(sys.argv[1]));v=[r["utc"] for r in p["occurrences"]];assert v[0]=="2026-03-28T01:30:00Z" and v[1]=="2026-03-30T00:30:00Z"' "$TEMP/cron-preview.json"
+code="$(curl --max-time 12 -sS -o /dev/null -w '%{http_code}' -c "$FLOW_M2_COOKIE" -b "$FLOW_M2_COOKIE" \
+  -H 'Content-Type: application/json' -H "X-XSRF-TOKEN: $FLOW_M2_TOKEN" \
+  -d '{"expression":"* * *","timeZone":"Etc/UTC","fromUtc":"2026-03-28T00:00:00Z","limit":3}' \
+  "$BASE/api/v1/schedules/preview")"
+[ "$code" = 400 ] || { echo "Malformed Cron expected 400, got $code"; exit 1; }
+echo 'PASS: pure Cron + IANA zone + DST gap preview (not a scheduled trigger)'
+
 echo 'PASS: M2 persisted draft + stable idempotency + CAS + immutable revisions + RPC (and optional restart)'

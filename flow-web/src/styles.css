@@ -6,3 +6,11 @@
 .panel select{font-size:12px;max-width:270px;min-width:140px}
 .modal textarea:focus,.panel select:focus{outline:2px solid #dae7ff;outline-offset:1px}
 @media(max-width:720px){.panel-heading{flex-wrap:wrap}.panel select{width:100%;max-width:none}.projects-table td{white-space:normal}}
+
+/* Pure preview UI: inputs do not persist schedules until M2 Scheduler work. */
+.cron-panel { margin-top: 20px; padding: 24px; }
+.cron-panel h3 { margin: 0 0 8px; }
+.cron-form { display: flex; align-items: end; gap: 14px; flex-wrap: wrap; margin: 20px 0; }
+.cron-form label { flex: 1 1 210px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.cron-form input { width: 100%; padding: 11px 12px; border: 1px solid #dbe1e9; border-radius: 8px; background: white; }
+.cron-form button { white-space: nowrap; }

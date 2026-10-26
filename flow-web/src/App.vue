@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import type { Project, Job, SessionUser, ApiError } from './api'
-import { createProject, currentUser, listProjects, login, logout, refreshCsrf, listJobs, createJobDraft, publishJob } from './api'
+import type { Project, Job, SessionUser, ApiError, CronPreview } from './api'
+import { createProject, currentUser, listProjects, login, logout, refreshCsrf, listJobs, createJobDraft, publishJob, previewCron } from './api'
 
 type ViewKey = 'overview' | 'projects' | 'jobs' | 'workflows' | 'runs' | 'workers'
 const activeView = ref<ViewKey>('overview')
@@ -31,6 +31,10 @@ const jobParameters = ref('{}')
 const jobTimeout = ref(30)
 const jobMaxAttempts = ref(2)
 const jobPendingKey = ref<string | null>(null)
+const cronExpression = ref('0 0 9 * * *')
+const cronTimezone = ref('Asia/Shanghai')
+const cronResult = ref<CronPreview | null>(null)
+const cronError = ref('')
 
 const pendingKey = ref<string | null>(null)
 const backendHealthy = ref(false)
@@ -121,6 +125,15 @@ async function releaseJob(job: Job) {
   catch (err) { error.value = friendly(err) }
   finally { busy.value = false }
 }
+async function runCronPreview() {
+  if (busy.value) return
+  busy.value = true
+  cronError.value = ''
+  cronResult.value = null
+  try { cronResult.value = await previewCron(cronExpression.value, cronTimezone.value, new Date().toISOString(), 8) }
+  catch (err) { cronError.value = friendly(err) }
+  finally { busy.value = false }
+}
 function onChangeName() { pendingKey.value = null }
 function selectView(id: ViewKey) { activeView.value = id; error.value = ''; if (id === 'jobs') void reloadJobs() }
 </script>
@@ -193,6 +206,19 @@ function selectView(id: ViewKey) { activeView.value = id; error.value = ''; if (
             <table v-if="jobs.length" class="projects-table"><thead><tr><th>Job</th><th>Handler key</th><th>Draft</th><th>Published</th><th>Action</th></tr></thead>
               <tbody><tr v-for="job in jobs" :key="job.id"><td><strong>{{ job.name }}</strong><small class="muted"> {{ job.id }}</small></td><td class="mono">{{ job.handlerKey }}</td><td>v{{ job.draftVersion }}</td><td>r{{ job.publishedRevision || 'none' }}</td><td><button class="btn btn-outline" @click="releaseJob(job)" :disabled="busy || job.draftVersion <= job.lastPublishedDraftVersion">Publish revision</button></td></tr></tbody></table>
             <div v-else class="empty-state"><div class="empty-icon">J</div><h3>No jobs in this project</h3><p>Create a safe Handler draft; execution becomes available in the Dispatcher milestone.</p></div>
+          </div>
+          <div class="panel cron-panel">
+            <h3>Cron &amp; time-zone preview</h3>
+            <p class="muted">Preview only: these times are not yet saved or scheduled. Six fields (seconds minutes hours day month weekday). DST gaps are skipped and ambiguous clock times run at the earlier offset.</p>
+            <div class="cron-form">
+              <label for="cron-expression">Cron expression<input id="cron-expression" v-model="cronExpression" placeholder="0 0 9 * * *" autocomplete="off" /></label>
+              <label for="cron-zone">IANA time zone<input id="cron-zone" v-model="cronTimezone" placeholder="Asia/Shanghai" autocomplete="off" /></label>
+              <button class="btn btn-primary" :disabled="busy" @click="runCronPreview">Preview next 8</button>
+            </div>
+            <p v-if="cronError" class="notice error" role="alert">{{ cronError }}</p>
+            <table v-if="cronResult?.occurrences.length" class="projects-table"><thead><tr><th>UTC instant</th><th>Local clock</th><th>UTC offset</th></tr></thead>
+              <tbody><tr v-for="fire in cronResult.occurrences" :key="fire.utc"><td class="mono">{{ fire.utc }}</td><td class="mono">{{ fire.local }}</td><td>{{ fire.offset }}</td></tr></tbody></table>
+            <p v-if="cronResult && !cronResult.occurrences.length" class="muted">No future occurrence was found.</p>
           </div>
         </template>
         <template v-else><div class="page-title-row"><div><div class="eyebrow">UPCOMING CAPABILITY</div><h1>{{ activeTitle }}</h1><p class="muted">This module is part of the approved project roadmap.</p></div><span class="label-outline">NOT YET IMPLEMENTED</span></div><div class="panel coming-panel"><div class="coming-glyph">◇</div><h2>Coming in {{ activeView === 'workflows' ? 'M3' : 'M2' }}</h2><p>We don't display simulated task runs or invented cluster health data. This page will be activated after the real service and tests are shipped.</p><button class="btn btn-outline" @click="activeView = 'overview'">Back to overview</button></div></template>
