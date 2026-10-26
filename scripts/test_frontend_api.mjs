@@ -130,3 +130,34 @@ test('Cron preview sends an explicit UTC instant and receives bounded occurrence
     assert.ok(calls[0].headers.get('X-XSRF-TOKEN'))
   } finally { globalThis.fetch = originalFetch }
 })
+
+test('M2 Scheduler API client sends immutable revision and version CAS', async () => {
+  const { createSchedule, listSchedules, listScheduleTriggers, toggleSchedule } =
+    await import('../flow-web/src/api.ts')
+  const project = '00000000-0000-4000-8000-000000000001'
+  const job = '00000000-0000-4000-8000-000000000002'
+  const schedule = '00000000-0000-4000-8000-000000000003'
+  const calls = []
+  globalThis.fetch = async (path, init = {}) => {
+    const request = { path: String(path), method: init.method || 'GET',
+      body: init.body && JSON.parse(init.body), headers: new Headers(init.headers), credentials: init.credentials }
+    calls.push(request)
+    if (request.method === 'GET') return json([])
+    return json({ id: schedule, jobId: job, jobRevision: 2, version: 1, enabled: true },
+      request.path.endsWith('/schedules') ? 201 : 200)
+  }
+  try {
+    const input = { jobId: job, jobRevision: 2, expression: '*/5 * * * * *',
+      timeZone: 'Etc/UTC', misfirePolicy: 'FIRE_ONCE' }
+    assert.equal((await createSchedule(project, input, 'valid-schedule-key-12345678')).id, schedule)
+    await listSchedules(project)
+    await listScheduleTriggers(project, schedule)
+    await toggleSchedule(project, schedule, 1, false)
+    assert.equal(calls[0].method, 'POST')
+    assert.equal(calls[0].headers.get('Idempotency-Key'), 'valid-schedule-key-12345678')
+    assert.equal(calls[0].body.jobRevision, 2)
+    assert.equal(calls[3].body.expectedVersion, 1)
+    assert.equal(calls[3].body.enabled, false)
+    assert.ok(calls.every(c => c.credentials === 'same-origin'))
+  } finally { globalThis.fetch = originalFetch }
+})

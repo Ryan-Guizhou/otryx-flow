@@ -20,3 +20,5 @@
 M1 verified main@3291adcb: [Developer Compose](07-operations/m1-developer-compose.md) | [Implemented REST/RPC contract](04-api/m1-implemented-contracts.md) | [M1 evidence status](06-testing/m1-validation-report.md). M1 PR #2 completed Maven/Vue/real Compose RPC/MySQL E2E. Public HTTPS deployment remains unverified.
 
 M2 FLOW-008 verified in PR #10 (main@97d29bb3): [Job REST/RPC contract](04-api/m2-job-contracts.md) | [Job acceptance plan](06-testing/m2-job-acceptance.md). FLOW-009 Cron preview is [design candidate](03-design/cron-timezone.md) + [REST API](04-api/cron-preview.md). Preview is not execution or persisted scheduling.
+
+FLOW-010 / Issue #5 (Scheduler PR candidate): [Implementation](03-design/m2-scheduler-implementation.md) | [API contracts](04-api/m2-scheduler-contracts.md) | [Acceptance](06-testing/m2-scheduler-acceptance.md). Durable fires / Outbox do **not** mean a Handler has run; Engine/Worker are future milestones.

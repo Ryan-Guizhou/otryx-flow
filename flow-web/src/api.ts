@@ -95,3 +95,49 @@ export async function previewCron(expression: string, timeZone: string, fromUtc:
     method: 'POST', body: JSON.stringify({ expression, timeZone, fromUtc, limit })
   })
 }
+
+/** Persisted Scheduler definition bound to one published JobRevision. */
+export interface Schedule {
+  id: string
+  projectId: string
+  jobId: string
+  jobRevision: number
+  expression: string
+  timeZone: string
+  misfirePolicy: 'SKIP' | 'FIRE_ONCE' | 'CATCH_UP'
+  enabled: boolean
+  version: number
+  nextFireUtc: string
+}
+export interface ScheduleTrigger {
+  id: string
+  scheduleId: string
+  scheduleRevision: number
+  plannedFireUtc: string
+  status: 'PENDING_ENGINE'
+  createdAt: string
+}
+export interface ScheduleInput {
+  jobId: string
+  jobRevision: number
+  expression: string
+  timeZone: string
+  misfirePolicy: 'SKIP' | 'FIRE_ONCE' | 'CATCH_UP'
+}
+export async function listSchedules(projectId: string): Promise<Schedule[]> {
+  return call(`/api/v1/projects/${encodeURIComponent(projectId)}/schedules`)
+}
+export async function createSchedule(projectId: string, input: ScheduleInput, requestKey: string): Promise<Schedule> {
+  return call(`/api/v1/projects/${encodeURIComponent(projectId)}/schedules`, {
+    method: 'POST', headers: { 'Idempotency-Key': requestKey }, body: JSON.stringify(input)
+  })
+}
+export async function listScheduleTriggers(projectId: string, scheduleId: string): Promise<ScheduleTrigger[]> {
+  return call(`/api/v1/projects/${encodeURIComponent(projectId)}/schedules/${encodeURIComponent(scheduleId)}/triggers`)
+}
+export async function toggleSchedule(projectId: string, scheduleId: string,
+  expectedVersion: number, enabled: boolean): Promise<Schedule> {
+  return call(`/api/v1/projects/${encodeURIComponent(projectId)}/schedules/${encodeURIComponent(scheduleId)}/enabled`, {
+    method: 'POST', body: JSON.stringify({ expectedVersion, enabled })
+  })
+}
