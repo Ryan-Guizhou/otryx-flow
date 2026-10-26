@@ -23,7 +23,7 @@ SCHEDULE_ID="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["i
 docker compose --profile worker-demo up -d flow-worker-demo
 ready=0
 for i in $(seq 1 90); do
-  if docker compose --profile worker-demo logs --no-color --tail=100 flow-worker-demo | grep -q 'Started FlowWorkerQuickstartApplication in'; then ready=1; break; fi
+  if docker compose --profile worker-demo logs --no-color flow-worker-demo | grep -F 'Started FlowWorkerQuickstartApplication in' >/dev/null; then ready=1; break; fi
   sleep 2
 done
 [ "$ready" = 1 ] || { docker compose --profile worker-demo logs --tail=100 flow-worker-demo; echo 'Worker did not register in Nacos'; exit 1; }

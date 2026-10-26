@@ -70,8 +70,9 @@ public final class WorkerRuntime implements AutoCloseable {
         this.capacity = new Semaphore(settings.maxConcurrent());
         this.execution = Executors.newFixedThreadPool(settings.maxConcurrent(),
                 runnable -> Thread.ofPlatform().name("flow-worker-handler-", 0).unstarted(runnable));
+        // Keep the standalone non-web Worker JVM alive until explicit close().
         this.control = Executors.newScheduledThreadPool(2,
-                runnable -> Thread.ofPlatform().name("flow-worker-control-", 0).daemon(true).unstarted(runnable));
+                runnable -> Thread.ofPlatform().name("flow-worker-control-", 0).daemon(false).unstarted(runnable));
     }
 
     /** 启动轮询与定期续租。多次调用 start 不会产生多套线程。 */

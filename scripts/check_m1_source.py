@@ -31,7 +31,7 @@ assert '127.0.0.1:8088:80' in compose and 'internal: true' in compose, 'Develope
 # Nacos 3.2.4 is the only active registry. Endpoints are host:port (no URI scheme).
 assert 'image: nacos/nacos-server:v3.2.4' in compose
 assert 'nacos-bootstrap:' in compose and 'service_completed_successfully' in compose
-assert compose.count('OTRYX_REGISTRY_ENDPOINTS: nacos:8848') == 7
+assert compose.count('OTRYX_REGISTRY_ENDPOINTS: nacos:8848') == 8
 assert 'etcd:' not in compose and 'quay.io/coreos/etcd' not in compose and 'etcd_data:' not in compose
 assert 'NACOS_AUTH_ENABLE: "false"' in compose and 'internal: true' in compose
 assert 'NacosV2MetadataBootstrap' in compose
@@ -63,6 +63,8 @@ assert 'CronExpression.parse' in cron and 'getValidOffsets' in cron and 'MAX_COU
 assert 'JdbcTemplate' not in cron and 'OtryxRpcClient' not in cron, 'Cron preview is a pure calculation'
 assert 'flow-dispatcher/**' in (root/'.github/workflows/m1-quality.yml').read_text(encoding='utf-8')
 assert 'flow-scheduler-core/**' in (root/'.github/workflows/m1-quality.yml').read_text(encoding='utf-8')
+worker_src = files['flow-worker-sdk/src/main/java/com/peachsoft/otryx/flow/worker/sdk/WorkerRuntime.java']
+assert '.daemon(false).unstarted(runnable)' in worker_src, 'Non-web Worker must keep non-daemon control threads alive'
 assert 'flow-worker-demo:' in compose and 'profiles: [worker-demo]' in compose
 assert 'COPY flow-worker-quickstart ./flow-worker-quickstart' in (root/'deploy/Dockerfile.backend').read_text(encoding='utf-8')
 assert 'COPY flow-worker-sdk ./flow-worker-sdk' in (root/'deploy/Dockerfile.backend').read_text(encoding='utf-8')
