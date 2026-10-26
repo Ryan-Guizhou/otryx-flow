@@ -34,6 +34,9 @@ class ScheduleRpcServiceTest {
                 + "time_zone VARCHAR(64), misfire_policy VARCHAR(16), enabled BOOLEAN, "
                 + "next_fire_at_utc TIMESTAMP(3), version BIGINT, created_at TIMESTAMP(3), "
                 + "updated_at TIMESTAMP(3), UNIQUE(owner_username, create_request_key))");
+        jdbc.execute("CREATE TABLE flow_schedule_trigger (id VARCHAR(36) PRIMARY KEY, schedule_id VARCHAR(36), "
+                + "schedule_revision INT, planned_fire_at_utc TIMESTAMP(3), origin VARCHAR(16), "
+                + "status VARCHAR(24), created_at TIMESTAMP(3))");
         service = new ScheduleRpcService(jdbc, new DataSourceTransactionManager(source));
         jobs = mock(JobRpc.class);
         when(jobs.revision("admin", PROJECT, JOB, 1)).thenReturn(

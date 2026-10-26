@@ -58,7 +58,7 @@ public class ScheduleScanner {
      */
     public int scanOnce() {
         Integer committed = tx.execute(status -> {
-            Timestamp now = jdbc.queryForObject("SELECT UTC_TIMESTAMP(3)", Timestamp.class);
+            Timestamp now = jdbc.queryForObject("SELECT CURRENT_TIMESTAMP(3)", Timestamp.class);
             if (now == null) throw new IllegalStateException("Database clock unavailable");
             Instant databaseNow = now.toInstant();
             var due = jdbc.query("SELECT id, job_id, job_revision, schedule_revision, cron_expr, time_zone, "

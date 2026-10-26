@@ -130,7 +130,7 @@ public class ScheduleRpcService implements ScheduleRpc {
                     : Instant.parse(current.nextFireUtc());
             int updated = jdbc.update("UPDATE flow_schedule_definition "
                             + "SET enabled = ?, next_fire_at_utc = ?, version = version + 1, "
-                            + "updated_at = UTC_TIMESTAMP(3) "
+                            + "updated_at = CURRENT_TIMESTAMP(3) "
                             + "WHERE id = ? AND owner_username = ? AND project_id = ? AND version = ?",
                     command.enabled() ? 1 : 0, Timestamp.from(next), id, owner, project,
                     command.expectedVersion());
