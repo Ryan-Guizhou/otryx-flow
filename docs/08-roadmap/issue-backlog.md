@@ -1,3 +1,5 @@
+> **GitHub execution status (2026-10-26):** M1 PR #2 merged, Issue #1 closed. M2 implementation issues [#3](https://github.com/Ryan-Guizhou/otryx-flow/issues/3) (draft/revision), [#4](https://github.com/Ryan-Guizhou/otryx-flow/issues/4) (Cron), [#5](https://github.com/Ryan-Guizhou/otryx-flow/issues/5) (Scheduler), [#6](https://github.com/Ryan-Guizhou/otryx-flow/issues/6) (Engine), [#7](https://github.com/Ryan-Guizhou/otryx-flow/issues/7) (Dispatcher), [#8](https://github.com/Ryan-Guizhou/otryx-flow/issues/8) (Worker), [#9](https://github.com/Ryan-Guizhou/otryx-flow/issues/9) (M2 E2E) are tracked separately. Original backlog numbering is the planning index and must not be mistaken for GitHub issue numbers.
+
 # GitHub Issue 导入清单（Proposed，尚未创建）
 
 **原则**：一 Issue 一 PR，按依赖拓扑提交；一个 Issue 可包含对应服务的全部源码/测试/迁移/文档，不人为拆成几个只改一个文件的 PR。下表的 `FLOW-xxx` 是计划编号，**不是 GitHub Issue #number**。

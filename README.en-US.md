@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en-US.md)
 
-> **M1 source candidate (2026-10-26), not a verified release.** The API, metadata provider, shared RPC contract, Vue frontend and developer Compose sources now exist. Network Maven/npm builds, actual cross-JVM E2E, GitHub CI and public deployment are NOT RUN.
+> **M1 validated and merged:** `main@3291adcbd43102b9a46772480d80ee5055ebea63` (PR #2; five green checks including real Docker Compose RPC + MySQL + restart E2E). **M2 FLOW-008 remains a source candidate** until its own PR-head CI passes. Public HTTPS deployment is not complete.
 
 <!-- doc-section:overview -->
 ## Overview
@@ -48,16 +48,12 @@ flowchart TB
 Read the [docs index](docs/index.md), then [requirements](docs/01-product/requirements-prd.md), [architecture](docs/02-architecture/architecture-overview.md), [core design](docs/03-design/consistency-and-recovery.md), [frontend spec](docs/05-frontend/ui-ux-spec.md), [acceptance](docs/06-testing/acceptance-plan.md), and [roadmap](docs/08-roadmap/milestones.md).
 
 <!-- doc-section:status -->
-## M1 delivery status and limitations
-Java modules `flow-contracts`, `flow-api`, `flow-metadata`, a Vue 3 administration UI, Flyway migrations, local Compose build and CI source have been authored. `flow-api` calls `flow-metadata` via actual OTRYX RPC annotations and the Etcd application directory; business data belongs to metadata. No HTTP business fallback is used.
+## M1 verified; M2 in progress
+M1 passed Maven, Vue, source, docs and real cross-JVM Docker Compose / Etcd / MySQL E2E and was squash-merged in [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2).
 
-**Verified**: M0 documentation, M1 static source contracts, three executable Node HTTP client tests, the REST E2E script against a fake local HTTP server, and standalone Java 21 DTO compilation. Repeat offline checks with `bash scripts/verify_m1_offline.sh`. Fake HTTP results **do not** verify OTRYX RPC. Maven/Vue builds, Docker, genuine two-JVM RPC E2E, GitHub push and public-site deployment have **not been executed** because network/dependencies and Docker are unavailable.
+The M2 FLOW-008 implementation candidate adds job drafts, durable idempotent creation, optimistic draft CAS, immutable published revisions, and a Vue Jobs page. See [M2 RPC/REST contracts](docs/04-api/m2-job-contracts.md) and [M2 acceptance](docs/06-testing/m2-job-acceptance.md). This is **not yet** job scheduling, execution or public deployment.
 
-- [M1 developer Compose setup](docs/07-operations/m1-developer-compose.md)
-- [M1 validation and evidence status](docs/06-testing/m1-validation-report.md)
-- [M1 implemented REST/RPC contracts](docs/04-api/m1-implemented-contracts.md)
-
-This M1 setup uses `TRUSTED_DEVELOPMENT` in an isolated developer environment. It must not be exposed on the public internet.
+Do not deploy `TRUSTED_DEVELOPMENT` on untrusted networks.
 
 <!-- doc-section:contribute -->
 ## Engineering

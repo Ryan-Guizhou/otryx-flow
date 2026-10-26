@@ -1,3 +1,5 @@
+> **Current verified M1 gate:** GitHub PR [#2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2) merged to `main@3291adcbd43102b9a46772480d80ee5055ebea63`. Exact PR Head `6377e77dd908264c946fbe440d4cc4e86cb78014` passed `docs`, `source`, `backend`, `frontend`, and real Compose integration (run [40279550912](https://github.com/Ryan-Guizhou/otryx-flow/actions/runs/40279550912), MySQL + Etcd + JVM-to-JVM RPC, session/CSRF, idempotence and restart). Historical offline observations below are retained as historical evidence, not current incomplete state.
+
 # M1 source and integration validation report
 
 **Date:** 2026-10-26. **Status:** local source candidate; release and site deployment blocked.

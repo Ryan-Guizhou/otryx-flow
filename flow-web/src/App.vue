@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import type { Project, SessionUser, ApiError } from './api'
-import { createProject, currentUser, listProjects, login, logout, refreshCsrf } from './api'
+import type { Project, Job, SessionUser, ApiError } from './api'
+import { createProject, currentUser, listProjects, login, logout, refreshCsrf, listJobs, createJobDraft, publishJob } from './api'
 
-type ViewKey = 'overview' | 'projects' | 'workflows' | 'runs' | 'workers'
+type ViewKey = 'overview' | 'projects' | 'jobs' | 'workflows' | 'runs' | 'workers'
 const activeView = ref<ViewKey>('overview')
 const navigation: { id: ViewKey; label: string; icon: string; ready: boolean }[] = [
   { id: 'overview', label: 'Overview', icon: '▦', ready: true },
   { id: 'projects', label: 'Projects', icon: '▤', ready: true },
+  { id: 'jobs', label: 'Jobs', icon: 'J', ready: true },
   { id: 'workflows', label: 'Workflows', icon: '◇', ready: false },
   { id: 'runs', label: 'Executions', icon: '◷', ready: false },
   { id: 'workers', label: 'Worker cluster', icon: '⬡', ready: false },
@@ -21,6 +22,16 @@ const busy = ref(false)
 const projects = ref<Project[]>([])
 const projectName = ref('')
 const showCreate = ref(false)
+const jobs = ref<Job[]>([])
+const activeJobProject = ref('')
+const showJobCreate = ref(false)
+const jobName = ref('')
+const jobHandler = ref('safe.echo')
+const jobParameters = ref('{}')
+const jobTimeout = ref(30)
+const jobMaxAttempts = ref(2)
+const jobPendingKey = ref<string | null>(null)
+
 const pendingKey = ref<string | null>(null)
 const backendHealthy = ref(false)
 const activeTitle = computed(() => navigation.find(x => x.id === activeView.value)?.label ?? 'Overview')
@@ -81,8 +92,37 @@ async function saveProject() {
     if ((err as ApiError).status === 409) pendingKey.value = null
   } finally { busy.value = false }
 }
+async function reloadJobs() {
+  if (!activeJobProject.value && projects.value.length) activeJobProject.value = projects.value[0]!.id
+  if (!activeJobProject.value) { jobs.value = []; return }
+  try { jobs.value = await listJobs(activeJobProject.value) }
+  catch (err) { error.value = friendly(err) }
+}
+async function saveJob() {
+  if (busy.value || !activeJobProject.value || !jobName.value.trim()) return
+  busy.value = true; error.value = ''
+  if (!jobPendingKey.value) jobPendingKey.value = crypto.randomUUID()
+  try {
+    JSON.parse(jobParameters.value)
+    await createJobDraft(activeJobProject.value, {
+      name: jobName.value.trim(), handlerKey: jobHandler.value.trim(),
+      parametersJson: jobParameters.value, timeoutSeconds: jobTimeout.value,
+      maxAttempts: jobMaxAttempts.value
+    }, jobPendingKey.value)
+    jobPendingKey.value = null; showJobCreate.value = false; jobName.value = ''
+    await reloadJobs()
+  } catch (err) { error.value = friendly(err) }
+  finally { busy.value = false }
+}
+async function releaseJob(job: Job) {
+  if (busy.value) return
+  busy.value = true; error.value = ''
+  try { await publishJob(activeJobProject.value, job, crypto.randomUUID()); await reloadJobs() }
+  catch (err) { error.value = friendly(err) }
+  finally { busy.value = false }
+}
 function onChangeName() { pendingKey.value = null }
-function selectView(id: ViewKey) { activeView.value = id; error.value = '' }
+function selectView(id: ViewKey) { activeView.value = id; error.value = ''; if (id === 'jobs') void reloadJobs() }
 </script>
 
 <template>
@@ -143,9 +183,31 @@ function selectView(id: ViewKey) { activeView.value = id; error.value = '' }
           <div class="page-title-row"><div><div class="eyebrow">ORGANIZATION</div><h1>Projects</h1><p class="muted">Projects live in the independent metadata service, accessed via RPC.</p></div><button class="btn btn-primary" @click="showCreate = true">+ Create project</button></div>
           <div class="panel table-panel"><div class="panel-heading"><div><h3>All projects <span class="count-tag">{{ projects.length }}</span></h3><p>Visible to your signed-in account</p></div><button class="btn btn-outline" @click="reloadProjects">↻ Refresh</button></div><table v-if="projects.length" class="projects-table"><thead><tr><th>Project</th><th>Project ID</th><th>Created</th><th>State</th></tr></thead><tbody><tr v-for="project in projects" :key="project.id"><td><span class="project-icon">▤</span><strong>{{ project.name }}</strong></td><td class="mono muted">{{ project.id }}</td><td>{{ new Date(project.createdAt).toLocaleDateString() }}</td><td><span class="pill-green">Active</span></td></tr></tbody></table><div v-else class="empty-state"><div class="empty-icon">▤</div><h3>No projects yet</h3><p>Start a project to organize scheduled tasks and workflows.</p><button class="btn btn-primary" @click="showCreate = true">Create first project</button></div></div>
         </template>
+        <template v-else-if="activeView === 'jobs'">
+          <div class="page-title-row"><div><div class="eyebrow">SCHEDULING</div><h1>Job definitions</h1><p class="muted">Save drafts and publish immutable handler revisions.</p></div><button class="btn btn-primary" @click="showJobCreate = true" :disabled="!projects.length">+ New job</button></div>
+          <div class="panel table-panel">
+            <div class="panel-heading"><div><h3>Jobs <span class="count-tag">{{ jobs.length }}</span></h3><p>All definitions belong to an owned project</p></div>
+              <select v-model="activeJobProject" aria-label="Select project" @change="reloadJobs"><option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option></select>
+              <button class="btn btn-outline" @click="reloadJobs">Refresh</button>
+            </div>
+            <table v-if="jobs.length" class="projects-table"><thead><tr><th>Job</th><th>Handler key</th><th>Draft</th><th>Published</th><th>Action</th></tr></thead>
+              <tbody><tr v-for="job in jobs" :key="job.id"><td><strong>{{ job.name }}</strong><small class="muted"> {{ job.id }}</small></td><td class="mono">{{ job.handlerKey }}</td><td>v{{ job.draftVersion }}</td><td>r{{ job.publishedRevision || 'none' }}</td><td><button class="btn btn-outline" @click="releaseJob(job)" :disabled="busy || job.draftVersion <= job.lastPublishedDraftVersion">Publish revision</button></td></tr></tbody></table>
+            <div v-else class="empty-state"><div class="empty-icon">J</div><h3>No jobs in this project</h3><p>Create a safe Handler draft; execution becomes available in the Dispatcher milestone.</p></div>
+          </div>
+        </template>
         <template v-else><div class="page-title-row"><div><div class="eyebrow">UPCOMING CAPABILITY</div><h1>{{ activeTitle }}</h1><p class="muted">This module is part of the approved project roadmap.</p></div><span class="label-outline">NOT YET IMPLEMENTED</span></div><div class="panel coming-panel"><div class="coming-glyph">◇</div><h2>Coming in {{ activeView === 'workflows' ? 'M3' : 'M2' }}</h2><p>We don't display simulated task runs or invented cluster health data. This page will be activated after the real service and tests are shipped.</p><button class="btn btn-outline" @click="activeView = 'overview'">Back to overview</button></div></template>
       </div>
     </main>
+    <div v-if="showJobCreate" class="modal-backdrop" @click.self="showJobCreate = false"><form class="modal" @submit.prevent="saveJob">
+      <div class="modal-top"><div class="eyebrow">NEW JOB DRAFT</div><button type="button" class="icon-btn" aria-label="Close" @click="showJobCreate = false">×</button></div>
+      <h2>Create a job</h2><p class="muted">Definitions are stored via the OTRYX RPC metadata provider. This does not execute the Handler yet.</p>
+      <label for="job-name">Name</label><input id="job-name" v-model="jobName" required maxlength="100" @input="jobPendingKey = null" />
+      <label for="job-handler">Handler key</label><input id="job-handler" v-model="jobHandler" required pattern="[a-z][a-z0-9_.-]{2,127}" @input="jobPendingKey = null" />
+      <label for="job-input">JSON object parameters</label><textarea id="job-input" v-model="jobParameters" rows="3" maxlength="16384" @input="jobPendingKey = null" />
+      <label for="job-timeout">Timeout (seconds)</label><input id="job-timeout" v-model.number="jobTimeout" type="number" min="1" max="86400" />
+      <label for="job-attempts">Maximum attempts</label><input id="job-attempts" v-model.number="jobMaxAttempts" type="number" min="1" max="10" />
+      <div class="modal-actions"><button class="btn btn-outline" type="button" @click="showJobCreate = false">Cancel</button><button class="btn btn-primary" type="submit" :disabled="busy || !activeJobProject">Save draft</button></div>
+    </form></div>
     <div v-if="showCreate" class="modal-backdrop" @click.self="showCreate = false"><form class="modal" @submit.prevent="saveProject"><div class="modal-top"><div class="eyebrow">NEW WORKSPACE</div><button type="button" class="icon-btn" aria-label="Close" @click="showCreate = false">×</button></div><h2>Create a project</h2><p class="muted">Stored in flow-metadata through a real RPC command.</p><label for="project-name">Project name</label><input id="project-name" v-model="projectName" maxlength="100" required placeholder="e.g. Daily data pipelines" autofocus @input="onChangeName" /><div class="modal-actions"><button type="button" class="btn btn-outline" @click="showCreate = false">Cancel</button><button type="submit" class="btn btn-primary" :disabled="busy || !projectName.trim()">{{ busy ? 'Creating...' : 'Create project' }}</button></div></form></div>
   </div>
 </template>

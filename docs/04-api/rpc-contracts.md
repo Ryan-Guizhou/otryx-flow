@@ -1,4 +1,4 @@
-> M1 source implements `ProjectRpc` for project list/create. This was not yet network-build or E2E validated. [M1 actual contract](m1-implemented-contracts.md). All scheduler/engine/worker RPC contracts below remain **Proposed**.
+> M1 source implements `ProjectRpc` for project list/create. This was not yet network-build or E2E validated. [M1 actual contract](m1-implemented-contracts.md). FLOW-008 adds a concrete `JobRpc` contract for draft and immutable revisions (see [M2 Job contracts](m2-job-contracts.md)). All scheduler/engine/worker RPC contracts below remain **Proposed**.
 
 # OTRYX RPC 业务契约设计（Proposed）
 

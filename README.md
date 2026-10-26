@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en-US.md)
 
-> **M1 source candidate (2026-10-26), not a verified release.** The API, metadata provider, shared RPC contract, Vue frontend and developer Compose sources now exist. Network Maven/npm builds, actual cross-JVM E2E, GitHub CI and public deployment are NOT RUN.
+> **M1 validated and merged:** `main@3291adcbd43102b9a46772480d80ee5055ebea63` (PR #2; five green gates including real Docker Compose RPC + MySQL + restart E2E). **M2 FLOW-008 is a source candidate** until its own PR-head CI passes. Public HTTPS deployment remains outstanding.
 
 <!-- doc-section:overview -->
 ## 简介
@@ -48,16 +48,12 @@ flowchart TB
 从 [文档入口](docs/index.md) 开始，按 [需求 PRD](docs/01-product/requirements-prd.md) → [总体架构](docs/02-architecture/architecture-overview.md) → [核心设计](docs/03-design/consistency-and-recovery.md) → [前端规范](docs/05-frontend/ui-ux-spec.md) → [验收计划](docs/06-testing/acceptance-plan.md) → [实施路线图](docs/08-roadmap/milestones.md) 阅读。
 
 <!-- doc-section:status -->
-## M1 当前交付与限制
-已生成三个 Maven 模块：`flow-contracts` / `flow-api` / `flow-metadata`，以及 Vue 3 管理站点、Flyway SQL、Docker Compose 和 CI 脚本。`flow-api` 计划使用真实 OTRYX RPC 查询、创建项目，项目数据由 `flow-metadata` 独立持有。
+## M1 已验收，M2 开发中
+M1 在 [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2) 通过 Maven、Vue、源码、文档以及真实 Docker Compose 跨 JVM RPC 集成验收，已合并 main。
 
-**当前验证：** M0 文档校验、M1 静态源码校验、Node 前端 API 合约测试（3 项）、HTTP 模拟服务上的 E2E 脚本校验及 Java 21 DTO 编译通过。运行 `bash scripts/verify_m1_offline.sh` 可复核这些不依赖外部服务的检查；模拟服务结果**不代表**真实 RPC 验收。由于当前环境无法访问 Maven Central，且没有 Docker Engine，Maven 全量编译、Vue 构建、真实 RPC 双 JVM 和线上部署仍未验证。
+M2 当前实现候选：任务草稿、幂等创建、乐观版本 CAS、不可变发布 Revision 及 Vue 任务页面。参见 [M2 RPC/REST 契约](docs/04-api/m2-job-contracts.md) 和 [M2 验收计划](docs/06-testing/m2-job-acceptance.md)。此功能尚未完成调度、执行或公网部署。
 
-- [M1 本地部署说明](docs/07-operations/m1-developer-compose.md)
-- [M1 真实接口与验证状态](docs/06-testing/m1-validation-report.md)
-- [M1 REST/RPC 契约](docs/04-api/m1-implemented-contracts.md)
-
-本阶段为**隔离开发环境**，不能将 `TRUSTED_DEVELOPMENT` 配置直接暴露于公网。
+隔离开发配置 `TRUSTED_DEVELOPMENT` 不能用于不可信网络。
 
 <!-- doc-section:contribute -->
 ## 工程协作
