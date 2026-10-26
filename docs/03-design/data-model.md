@@ -62,3 +62,7 @@ CREATE TABLE flow_dispatch.dispatch_task (
 
 ## 5. 数据生命周期和机密性
 原始用户输入采用 Schema 白名单校验，JSON 大字段和日志分块有明确上限。数据库加密备份，日志与运行产物设置存储保留期；创建时记录任务身份、版本与用户操作审计。清理任务只删除已超过保留期的终态数据，禁止在未判定状态时丢弃租约和未交付 Outbox。
+
+## M2 FLOW-008 implementation detail
+
+`flow_job_definition` owns the mutable draft and publication pointer. `flow_job_revision` stores immutable numbered snapshots under `(job_id,revision)`. The durable idempotency keys are unique by `(owner_username,create_request_key)` and `(job_id,publish_request_key)`. A transaction locks the owned definition before advancing revision. Foreign project access never returns job details; refer to [implemented job contract](../04-api/m2-job-contracts.md).

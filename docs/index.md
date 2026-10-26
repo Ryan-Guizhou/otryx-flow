@@ -18,3 +18,5 @@
 **文档版本规定：** 所有新设计在具体文档中标注 Proposed；上线后将“已实现”证据链接到 Commit、CI、实际请求与截图，不逆向宣称计划就是事实。
 
 M1 implementation note: [Developer Compose](07-operations/m1-developer-compose.md) | [Implemented REST/RPC contract](04-api/m1-implemented-contracts.md) | [M1 evidence status](06-testing/m1-validation-report.md). Source candidate only; local Node/Java DTO offline checks passed, while Maven, Vue bundle, real RPC E2E and public deployment are not yet verified.
+
+M2 FLOW-008 source candidate: [Job REST/RPC contract](04-api/m2-job-contracts.md) | [Job acceptance plan](06-testing/m2-job-acceptance.md). This is not execution or scheduling.

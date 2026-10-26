@@ -41,3 +41,43 @@ export async function createProject(name: string, requestKey: string): Promise<P
   return call('/api/v1/projects', { method: 'POST', headers: { 'Idempotency-Key': requestKey },
     body: JSON.stringify({ name }) })
 }
+
+export interface Job {
+  id: string
+  projectId: string
+  name: string
+  handlerKey: string
+  parametersJson: string
+  timeoutSeconds: number
+  maxAttempts: number
+  draftVersion: number
+  publishedRevision: number
+  lastPublishedDraftVersion: number
+  updatedAt: string
+}
+export interface JobDraftInput {
+  name: string
+  handlerKey: string
+  parametersJson: string
+  timeoutSeconds: number
+  maxAttempts: number
+}
+export async function listJobs(projectId: string): Promise<Job[]> {
+  return call(`/api/v1/projects/${encodeURIComponent(projectId)}/jobs`)
+}
+export async function createJobDraft(projectId: string, input: JobDraftInput, requestKey: string): Promise<Job> {
+  return call(`/api/v1/projects/${encodeURIComponent(projectId)}/jobs`, {
+    method: 'POST', headers: { 'Idempotency-Key': requestKey }, body: JSON.stringify(input)
+  })
+}
+export async function saveJobDraft(projectId: string, job: Job, input: JobDraftInput): Promise<Job> {
+  return call(`/api/v1/projects/${encodeURIComponent(projectId)}/jobs/${encodeURIComponent(job.id)}/draft`, {
+    method: 'PUT', body: JSON.stringify({ ...input, expectedDraftVersion: job.draftVersion })
+  })
+}
+export async function publishJob(projectId: string, job: Job, requestKey: string): Promise<Job> {
+  return call(`/api/v1/projects/${encodeURIComponent(projectId)}/jobs/${encodeURIComponent(job.id)}/publish`, {
+    method: 'POST', headers: { 'Idempotency-Key': requestKey },
+    body: JSON.stringify({ expectedDraftVersion: job.draftVersion })
+  })
+}

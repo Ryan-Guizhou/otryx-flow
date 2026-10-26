@@ -77,3 +77,34 @@ test('HTTP adapter uses HTTP status when response is not a JSON error', async ()
     })
   } finally { globalThis.fetch = originalFetch }
 })
+
+test('M2 job draft and publication client send stable request keys and CAS versions', async () => {
+  const { listJobs, createJobDraft, publishJob, saveJobDraft } = await import('../flow-web/src/api.ts')
+  const project = '00000000-0000-4000-8000-000000000001'
+  const job = { id: '00000000-0000-4000-8000-000000000002', projectId: project,
+    name: 'Demo', handlerKey: 'safe.echo', parametersJson: '{}', timeoutSeconds: 30,
+    maxAttempts: 2, draftVersion: 1, publishedRevision: 0, lastPublishedDraftVersion: 0,
+    updatedAt: '2026-10-26T00:00:00Z' }
+  const input = { name: job.name, handlerKey: job.handlerKey, parametersJson: '{}',
+    timeoutSeconds: 30, maxAttempts: 2 }
+  const key = 'valid-job-request-key-100001'
+  const calls = []
+  globalThis.fetch = async (path, init = {}) => {
+    const record = { path: String(path), method: init.method || 'GET',
+      body: init.body, headers: new Headers(init.headers), credentials: init.credentials }
+    calls.push(record)
+    if (record.method === 'GET') return json([job])
+    return json(job, record.method === 'POST' ? 201 : 200)
+  }
+  try {
+    assert.deepEqual(await listJobs(project), [job])
+    assert.deepEqual(await createJobDraft(project, input, key), job)
+    assert.deepEqual(await saveJobDraft(project, job, input), job)
+    assert.deepEqual(await publishJob(project, job, key), job)
+    assert.equal(calls[1].headers.get('Idempotency-Key'), key)
+    assert.equal(calls[3].headers.get('Idempotency-Key'), key)
+    assert.equal(JSON.parse(calls[2].body).expectedDraftVersion, 1)
+    assert.equal(JSON.parse(calls[3].body).expectedDraftVersion, 1)
+    assert.ok(calls.every(x => x.credentials === 'same-origin'))
+  } finally { globalThis.fetch = originalFetch }
+})

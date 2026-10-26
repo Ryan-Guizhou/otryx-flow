@@ -68,6 +68,12 @@ if [ "${FLOW_E2E_RESTART_METADATA:-0}" = "1" ]; then
   [ "$restored" = "1" ] || { echo 'Persisted project not visible after metadata restart'; exit 1; }
 fi
 
+if [ "${FLOW_E2E_M2_JOBS:-0}" = "1" ]; then
+  FLOW_M2_COOKIE="$COOKIE" FLOW_M2_TOKEN="$TOKEN" \
+    FLOW_M2_PROJECT_ID="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["id"])' "$TEMP/create-result.json")" \
+    bash scripts/test_m2_job_e2e.sh
+fi
+
 # Logout destroys the HTTP session; the same cookie must no longer authorize reads.
 code="$(curl --connect-timeout 3 --max-time 10 -sS -o /dev/null -w '%{http_code}' -c "$COOKIE" -b "$COOKIE" \
   -H "X-XSRF-TOKEN: $TOKEN" -X POST "$BASE/api/v1/auth/logout")"
