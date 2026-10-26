@@ -60,4 +60,7 @@ final="$(mysql_query flow_dispatcher "SELECT status FROM flow_dispatch_task WHER
 audit="$(mysql_query flow_dispatcher "SELECT GROUP_CONCAT(status ORDER BY lease_epoch) FROM flow_dispatch_attempt WHERE task_id='$task'")"
 [ "$audit" = EXPIRED,SUCCEEDED ] || { echo "Attempt audit mismatch: $audit"; exit 1; }
 echo 'PASS: Engine to Dispatcher RPC/outbox + unique queue + two replicas + fenced expired Worker + new epoch completion'
-echo 'NOTE: test-only e2e probe; Worker SDK and Engine outcome aggregation are not implemented.'
+if [ "${FLOW_E2E_M2_WORKER:-0}" = 1 ]; then
+  bash scripts/test_m2_worker_e2e.sh
+fi
+echo 'NOTE: only test probe produces the first fenced attempt; the Worker Demo uses a separate run. Engine outcome reconciliation is reserved for Issue #9.'

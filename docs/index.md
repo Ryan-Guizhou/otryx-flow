@@ -28,3 +28,5 @@ FLOW-011 / merged PR #13: [Inbox + Relay implementation](03-design/m2-engine-out
 FLOW-012 / merged PR #14: [Lease + Fencing design](03-design/m2-dispatcher-leases.md) | [RPC / REST contract](04-api/m2-dispatcher-contracts.md) | [Acceptance gates](06-testing/m2-dispatcher-acceptance.md). Task queue acceptance is **not** proof of physical Worker execution.
 
 Current registry migration (Issue #15): [Nacos 3.2.4-only setup and exclusive V2 mapping bootstrap](07-operations/nacos-registry.md) | [Developer Compose](07-operations/m1-developer-compose.md). Etcd is only historical CI evidence, not an active runtime option.
+
+FLOW-013 / Issue #8 candidate: [bounded Worker SDK design](03-design/m2-worker-sdk.md) | [Quickstart](../flow-worker-quickstart/README.md) | [real-Worker acceptance](06-testing/m2-worker-acceptance.md). Worker `SUCCEEDED` proves Dispatcher attempt completion; Engine outcome reconciliation is Issue #9.

@@ -170,6 +170,21 @@ services:
       flow-dispatcher-replica: {condition: service_started}
     networks: [internal]
 
+  # Explicit, CI-only demo profile; keeps Worker out of the earlier lease fencing test.
+  flow-worker-demo:
+    profiles: [worker-demo]
+    image: otryx-flow-backend:m1
+    command: ["/apps/flow-worker-quickstart.jar"]
+    environment:
+      OTRYX_REGISTRY_ENDPOINTS: nacos:8848
+      FLOW_WORKER_ID: flow-worker-demo
+      FLOW_RPC_ADVERTISED_HOST: flow-worker-demo
+    depends_on:
+      nacos-bootstrap: {condition: service_completed_successfully}
+      flow-dispatcher: {condition: service_started}
+      flow-dispatcher-replica: {condition: service_started}
+    networks: [internal]
+
   flow-web:
     build:
       context: .

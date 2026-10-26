@@ -12,3 +12,14 @@ docker compose ps
 ```
 
 Startup waits for a successful **exclusive Nacos V2 Mapping bootstrap** before starting any Java RPC application. It launches Metadata, Scheduler×2, Dispatcher×2, Engine, API and the Web UI in dependency order. The Nacos adapter supports only isolated TRUSTED_DEVELOPMENT. Worker SDK and public HTTPS remain future work.
+
+## Run a trusted Java Worker in the isolated Nacos development profile
+
+The Worker Quickstart is optional and is not auto-started with the main stack:
+
+```bash
+docker compose --profile worker-demo up -d flow-worker-demo
+docker compose --profile worker-demo logs --tail=100 flow-worker-demo
+```
+
+Only `safe.echo` is allowlisted; no shell, user-supplied Java class, or arbitrary code is executed. See [Quickstart](../../flow-worker-quickstart/README.md). The `worker-demo` profile is not production-ready, because the pinned Nacos Adapter has no full mTLS identity binding.

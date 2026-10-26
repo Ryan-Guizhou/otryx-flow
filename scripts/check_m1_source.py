@@ -7,7 +7,7 @@ root=Path(__file__).resolve().parent.parent
 files={p.relative_to(root).as_posix():p.read_text(encoding='utf-8') for p in root.rglob('*') if p.is_file() and p.suffix in {'.java','.xml','.ts','.vue','.sql','.yml','.yaml'}}
 needed=['pom.xml','flow-api/pom.xml','flow-metadata/pom.xml','flow-contracts/pom.xml','flow-scheduler-core/pom.xml',
         'flow-web/src/App.vue','flow-web/src/api.ts','compose.yaml',
-        'flow-scheduler/pom.xml','flow-engine/pom.xml','flow-dispatcher/pom.xml', 'flow-scheduler/src/main/resources/db/migration/V1__create_schedule_outbox.sql']
+        'flow-scheduler/pom.xml','flow-engine/pom.xml','flow-dispatcher/pom.xml','flow-worker-sdk/pom.xml','flow-worker-quickstart/pom.xml', 'flow-scheduler/src/main/resources/db/migration/V1__create_schedule_outbox.sql']
 for f in needed:
     assert f in files, f'Missing {f}'
 for f in files:
@@ -48,7 +48,7 @@ assert 'networks: [internal, ingress]' in compose and 'ingress: {}' in compose, 
 assert 'NETWORK_MTLS' not in files['flow-api/src/main/resources/application.yml'], 'M1 is development only'
 assert 'NETWORK_MTLS' not in files['flow-metadata/src/main/resources/application.yml'], 'M1 is development only'
 assert 'startSession' not in src, 'Do not substitute application authentication with implicit sessions'
-for f in ['pom.xml','flow-api/pom.xml','flow-metadata/pom.xml','flow-contracts/pom.xml','flow-scheduler-core/pom.xml','flow-scheduler/pom.xml','flow-engine/pom.xml','flow-dispatcher/pom.xml']:
+for f in ['pom.xml','flow-api/pom.xml','flow-metadata/pom.xml','flow-contracts/pom.xml','flow-scheduler-core/pom.xml','flow-scheduler/pom.xml','flow-engine/pom.xml','flow-dispatcher/pom.xml','flow-worker-sdk/pom.xml','flow-worker-quickstart/pom.xml']:
     ET.fromstring(files[f])
 for f in ['scripts/test_frontend_api.mjs', 'scripts/test_e2e_harness_offline.mjs',
           '.github/workflows/m1-integration.yml']:
@@ -63,6 +63,10 @@ assert 'CronExpression.parse' in cron and 'getValidOffsets' in cron and 'MAX_COU
 assert 'JdbcTemplate' not in cron and 'OtryxRpcClient' not in cron, 'Cron preview is a pure calculation'
 assert 'flow-dispatcher/**' in (root/'.github/workflows/m1-quality.yml').read_text(encoding='utf-8')
 assert 'flow-scheduler-core/**' in (root/'.github/workflows/m1-quality.yml').read_text(encoding='utf-8')
+assert 'flow-worker-demo:' in compose and 'profiles: [worker-demo]' in compose
+assert 'COPY flow-worker-quickstart ./flow-worker-quickstart' in (root/'deploy/Dockerfile.backend').read_text(encoding='utf-8')
+assert 'COPY flow-worker-sdk ./flow-worker-sdk' in (root/'deploy/Dockerfile.backend').read_text(encoding='utf-8')
+assert (root/'scripts/test_m2_worker_e2e.sh').is_file()
 assert 'flow-dispatcher:' in compose and 'flow-dispatcher-replica:' in compose
 assert 'flow-engine:' in compose and 'flow-scheduler-replica:' in compose and 'flow-scheduler:' in compose
 assert 'UNIQUE (schedule_id, schedule_revision, planned_fire_at_utc, origin)' in src
