@@ -20,6 +20,7 @@ on:
       - 'scripts/test_m2_engine_e2e.sh'
       - 'scripts/test_m2_dispatcher_e2e.sh'
       - 'scripts/start_dev_compose.sh'
+      - '.env.example'
       - 'scripts/test_frontend_api.mjs'
       - 'scripts/test_e2e_harness_offline.mjs'
       - '.github/workflows/m1-quality.yml'
@@ -46,7 +47,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository/com/peachsoft/otryx
-          key: otryx-rpc-706b6506e49e1ade70de9c6c64c844fdd4631e17-jdk21-m1-modules
+          key: otryx-rpc-706b6506e49e1ade70de9c6c64c844fdd4631e17-jdk21-nacos-v2
       - name: Build pinned OTRYX RPC locally
         if: steps.rpc-artifacts.outputs.cache-hit != 'true'
         shell: bash
@@ -55,7 +56,7 @@ jobs:
           cd /tmp/otryx-rpc
           git checkout 706b6506e49e1ade70de9c6c64c844fdd4631e17
           test "$(git rev-parse HEAD)" = 706b6506e49e1ade70de9c6c64c844fdd4631e17
-          ./mvnw -B -ntp -pl :otryx-codegen,:otryx-spring-boot-starter,:otryx-registry-etcd -am -DskipTests install
+          ./mvnw -B -ntp -pl :otryx-codegen,:otryx-spring-boot-starter,:otryx-registry-nacos -am -DskipTests install
       - run: mvn -B -ntp clean verify
   frontend:
     runs-on: ubuntu-latest

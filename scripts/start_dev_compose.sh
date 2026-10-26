@@ -1,8 +1,37 @@
 #!/usr/bin/env bash
-# Start Etcd providers before OTRYX RPC consumers: avoid app-membership startup races.
+# Start Nacos with offline V2 Config shards bootstrapped before RPC Provider/Consumer membership.
 set -euo pipefail
 
-docker compose up -d mysql etcd
+docker compose up -d mysql nacos-bootstrap
+
+# Initialization must finish successfully before any RPC application is started.
+bootstrap_id="$(docker compose ps -aq nacos-bootstrap)"
+if [ -z "$bootstrap_id" ]; then
+  echo "ERROR: Nacos V2 bootstrap container missing" >&2
+  exit 1
+fi
+bootstrap_ready=0
+for attempt in $(seq 1 120); do
+  status="$(docker inspect --format '{{.State.Status}}:{{.State.ExitCode}}' "$bootstrap_id" 2>/dev/null || true)"
+  if [ "$status" = "exited:0" ]; then
+    bootstrap_ready=1
+    break
+  fi
+  case "$status" in
+    exited:*|dead:*)
+      echo "ERROR: Nacos V2 bootstrap failed: $status" >&2
+      docker compose logs --no-color --tail=120 nacos-bootstrap >&2 || true
+      exit 1
+      ;;
+  esac
+  sleep 2
+done
+if [ "$bootstrap_ready" -ne 1 ]; then
+  echo "ERROR: Nacos V2 bootstrap exceeded its 240-second startup deadline" >&2
+  docker compose logs --no-color --tail=120 nacos nacos-bootstrap >&2 || true
+  exit 1
+fi
+echo 'PASS: Nacos V2 8-shard mapping bootstrap completed before RPC start'
 
 start_wait() {
   local service="$1" application="$2"

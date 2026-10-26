@@ -28,10 +28,22 @@ assert "@OtryxRpcIdempotent" in files['flow-contracts/src/main/java/com/peachsof
 assert 'UNIQUE (owner_username, request_key)' in src, 'Idempotent writes must be backed by a unique index'
 compose=files['compose.yaml']
 assert '127.0.0.1:8088:80' in compose and 'internal: true' in compose, 'Developer environment should not expose untrusted RPC network'
-# Retain the M1 vetted protected local network and explicit Etcd URI controls.
-assert compose.count('OTRYX_REGISTRY_ENDPOINTS: http://etcd:2379') == 7, 'Use full HTTP Etcd URLs for 7 backend containers'
+# Nacos 3.2.4 is the only active registry. Endpoints are host:port (no URI scheme).
+assert 'image: nacos/nacos-server:v3.2.4' in compose
+assert 'nacos-bootstrap:' in compose and 'service_completed_successfully' in compose
+assert compose.count('OTRYX_REGISTRY_ENDPOINTS: nacos:8848') == 7
+assert 'etcd:' not in compose and 'quay.io/coreos/etcd' not in compose and 'etcd_data:' not in compose
+assert 'NACOS_AUTH_ENABLE: "false"' in compose and 'internal: true' in compose
+assert 'NacosV2MetadataBootstrap' in compose
+for module in ('flow-api','flow-metadata','flow-scheduler','flow-engine','flow-dispatcher'):
+    assert 'otryx-registry-nacos' in files[module + '/pom.xml']
+    assert 'otryx-registry-etcd' not in files[module + '/pom.xml']
+    cfg=files[module + '/src/main/resources/application.yml']
+    assert 'type: nacos' in cfg and 'namespace: public' in cfg
+    assert 'OTRYX_REGISTRY_ENDPOINTS:127.0.0.1:8848' in cfg
+
 for app_file in ('flow-api/src/main/resources/application.yml', 'flow-metadata/src/main/resources/application.yml'):
-    assert 'OTRYX_REGISTRY_ENDPOINTS:http://127.0.0.1:2379' in files[app_file], app_file
+    assert 'OTRYX_REGISTRY_ENDPOINTS:127.0.0.1:8848' in files[app_file], app_file
 assert 'networks: [internal, ingress]' in compose and 'ingress: {}' in compose, 'Host web ingress must be separate from internal RPC network'
 assert 'NETWORK_MTLS' not in files['flow-api/src/main/resources/application.yml'], 'M1 is development only'
 assert 'NETWORK_MTLS' not in files['flow-metadata/src/main/resources/application.yml'], 'M1 is development only'
@@ -43,6 +55,7 @@ for f in ['scripts/test_frontend_api.mjs', 'scripts/test_e2e_harness_offline.mjs
     assert (root/f).is_file(), f'Missing verification or manual workflow: {f}'
 assert 'workflow_dispatch' in (root/'.github/workflows/m1-integration.yml').read_text(encoding='utf-8')
 assert (root/'scripts/start_dev_compose.sh').is_file(), 'Use bounded sequential OTRYX RPC startup in developer CI'
+assert 'nacos-bootstrap' in (root/'scripts/start_dev_compose.sh').read_text(encoding='utf-8')
 assert 'bash scripts/start_dev_compose.sh' in (root/'.github/workflows/m1-integration.yml').read_text(encoding='utf-8')
 assert 'flow-scheduler-core' in files['pom.xml'], 'Cron algorithm must be reusable by future scheduler'
 cron=files['flow-scheduler-core/src/main/java/com/peachsoft/otryx/flow/scheduler/core/CronScheduleCalculator.java']
@@ -65,4 +78,4 @@ assert 'flow_schedule_outbox' in src and 'claim_token' in src
 assert 'COPY flow-scheduler ./flow-scheduler' in (root/'deploy/Dockerfile.backend').read_text(encoding='utf-8')
 assert 'COPY flow-scheduler-core ./flow-scheduler-core' in (root/'deploy/Dockerfile.backend').read_text(encoding='utf-8'), 'Include new Maven modules in Docker build'
 print(f'PASS: M1 static contracts ({len(files)} source/config files)')
-print('NOTE: This does not run Maven, MySQL, network Etcd, OTRYX RPC, npm or a browser.')
+print('NOTE: This does not run Maven, MySQL, network Nacos, OTRYX RPC, npm or a browser.')
