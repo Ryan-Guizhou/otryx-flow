@@ -38,6 +38,9 @@ public class EngineRpcService implements EngineRpc {
     private static final String CONFLICT = "CONFLICT";
     private final JdbcTemplate jdbc;
     private final TransactionTemplate tx;
+    // 可选注入以保持旧 M2 单元测试直接构造 EngineRpcService 的方式。
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.peachsoft.otryx.flow.engine.dag.DagNodeOutcomeService dagNodeOutcomes;
 
     /** 数据事务管理器必须属于 Engine 私有 DataSource。 */
     public EngineRpcService(JdbcTemplate jdbc, PlatformTransactionManager transactionManager) {
@@ -101,6 +104,10 @@ public class EngineRpcService implements EngineRpc {
         if (command == null || command.leaseEpoch() < 1
                 || !("SUCCEEDED".equals(command.outcome()) || "FAILED".equals(command.outcome()))) {
             throw new IllegalArgumentException("Invalid Engine task outcome");
+        }
+        if (dagNodeOutcomes != null) {
+            EngineOutcomeReply routed = dagNodeOutcomes.tryAcknowledge(command);
+            if (routed != null) return routed;
         }
         String event = validateUuid(command.eventId());
         String run = validateUuid(command.runId());

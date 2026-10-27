@@ -1,4 +1,4 @@
-> **GitHub execution status (2026-10-27):** M1 PR #2 merged. M2 Issues #3–#9 completed; final PR #18 merged after 5/5 checks on its Head SHA. M3 FLOW-015 has real [Issue #19](https://github.com/Ryan-Guizhou/otryx-flow/issues/19) and [Draft PR #20](https://github.com/Ryan-Guizhou/otryx-flow/pull/20); do not treat it as accepted before all CI gates. Other FLOW-016–030 rows remain planning items unless linked to created GitHub Issues.
+> **GitHub execution status (2026-10-27):** M1 PR #2 and M2 Issues #3–#9 have merged. FLOW-015 PR #20 passed 5/5 checks and merged into main. FLOW-016 is [Issue #21](https://github.com/Ryan-Guizhou/otryx-flow/issues/21) / [Draft PR #22](https://github.com/Ryan-Guizhou/otryx-flow/pull/22), pending full DAG acceptance. FLOW-017 and later are planned work, not proof of implementation.
 
 # GitHub Issue 计划索引（部分已创建）
 

@@ -102,5 +102,14 @@ assert "hasRole('ADMIN')" in files['flow-api/src/main/java/com/peachsoft/otryx/f
 assert (root/'scripts/test_m3_workflow_e2e.sh').is_file()
 assert 'FLOW_E2E_M3_WORKFLOWS' in (root/'.github/workflows/m1-integration.yml').read_text(encoding='utf-8')
 assert 'bash scripts/test_m3_workflow_e2e.sh' in (root/'scripts/test_m1_e2e.sh').read_text(encoding='utf-8')
+# FLOW-016 node-scoped durable DAG execution is a separate path from legacy M2 runs.
+assert 'flow-engine/src/main/resources/db/migration/V4__dag_node_execution.sql' in files
+assert 'flow_dag_outcome_inbox' in src and 'flow_dag_dispatch_outbox' in src
+assert 'node_run_id VARCHAR(36) NOT NULL PRIMARY KEY' in src
+assert 'DagDependencyPlanner.advance' in files['flow-engine/src/main/java/com/peachsoft/otryx/flow/engine/dag/DagRunCoordinator.java']
+assert '@OtryxRpcReference' in files['flow-engine/src/main/java/com/peachsoft/otryx/flow/engine/dag/DagRunRpcService.java']
+assert 'FLOW_E2E_M3_DAG' in (root/'.github/workflows/m1-integration.yml').read_text(encoding='utf-8')
+assert 'bash scripts/test_m3_dag_e2e.sh' in (root/'scripts/test_m1_e2e.sh').read_text(encoding='utf-8')
+assert (root/'scripts/test_m3_dag_e2e.sh').is_file()
 print(f'PASS: M1 static contracts ({len(files)} source/config files)')
 print('NOTE: This does not run Maven, MySQL, network Nacos, OTRYX RPC, npm or a browser.')

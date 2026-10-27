@@ -235,3 +235,38 @@ test('M3 workflow API sends scoped paths, stable keys and draft-version CAS', as
     assert.ok(requests.slice(1,4).every(request => request.headers.get('X-XSRF-TOKEN')))
   } finally { globalThis.fetch = originalFetch }
 })
+
+test('M3 DAG run API pins published revision with stable idempotency and owner-scoped reads', async () => {
+  const { startDagRun, listDagRuns, getDagRun } = await import('../flow-web/src/api.ts')
+  const project = '00000000-0000-4000-8000-000000000001'
+  const workflow = '00000000-0000-4000-8000-000000000002'
+  const runId = '00000000-0000-4000-8000-000000000003'
+  const run = { id: runId, projectId: project, workflowId: workflow, workflowRevision: 2,
+    graphSha256: 'a'.repeat(64), status: 'RUNNING', createdAt: '2026-10-27T00:00:00Z',
+    updatedAt: '2026-10-27T00:00:00Z' }
+  const calls = []
+  globalThis.fetch = async (path, init = {}) => {
+    const current = { path: String(path), method: init.method || 'GET',
+      body: init.body && JSON.parse(init.body), credentials: init.credentials,
+      headers: new Headers(init.headers) }
+    calls.push(current)
+    if (current.method === 'POST') return json(run, 201)
+    if (current.path.endsWith('/' + runId)) return json({ run, nodes: [
+      { id: 'node-id', nodeId: 'A', type: 'TASK', status: 'READY',
+        conditionDecision: null, updatedAt: run.createdAt }] })
+    return json([run])
+  }
+  try {
+    const key = 'valid-dag-run-key-1234567890'
+    assert.equal((await startDagRun(project, { workflowId: workflow,
+      workflowRevision: 2, inputJson: '{}' }, key)).id, runId)
+    assert.equal((await listDagRuns(project)).length, 1)
+    assert.equal((await getDagRun(project, runId)).nodes[0].status, 'READY')
+    assert.equal(calls[0].method, 'POST')
+    assert.equal(calls[0].headers.get('Idempotency-Key'), key)
+    assert.ok(calls[0].headers.get('X-XSRF-TOKEN'))
+    assert.equal(calls[0].body.workflowRevision, 2)
+    assert.equal(calls[0].path, '/api/v1/projects/' + project + '/workflow-runs')
+    assert.ok(calls.every(c => c.credentials === 'same-origin'))
+  } finally { globalThis.fetch = originalFetch }
+})

@@ -48,13 +48,13 @@ flowchart TB
 从 [文档入口](docs/index.md) 开始，按 [需求 PRD](docs/01-product/requirements-prd.md) → [总体架构](docs/02-architecture/architecture-overview.md) → [核心设计](docs/03-design/consistency-and-recovery.md) → [前端规范](docs/05-frontend/ui-ux-spec.md) → [验收计划](docs/06-testing/acceptance-plan.md) → [实施路线图](docs/08-roadmap/milestones.md) 阅读。
 
 <!-- doc-section:status -->
-## M2 已验收，M3 FLOW-015 开发中
+## M1/M2 以及 M3 FLOW-015 已验收；FLOW-016 开发中
 
-M1 已在 [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2) 验收合并。M2 #3–#9 已逐项合并；最终的 [PR #18](https://github.com/Ryan-Guizhou/otryx-flow/pull/18) 在同一个 Head 上通过 Maven、前端、源码、文档和真实 Nacos/MySQL/RPC/Worker Compose 五项门禁，完成短任务终态收敛。
+M1 在 [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2) 合并。M2 的分布式短任务闭环最终在 [PR #18](https://github.com/Ryan-Guizhou/otryx-flow/pull/18) 通过完整五项门禁并合并。M3 FLOW-015 / [PR #20](https://github.com/Ryan-Guizhou/otryx-flow/pull/20) 已通过最新 Head 的 Backend、Frontend、Source、Docs、真实 Nacos/MySQL/OTRYX RPC Compose 集成五项验收并合并 main，支持 DAG 定义校验、草稿 CAS、不可变 Revision。
 
-M3 目前正在实施 [Issue #19 / FLOW-015](https://github.com/Ryan-Guizhou/otryx-flow/issues/19)，通过 [Draft PR #20](https://github.com/Ryan-Guizhou/otryx-flow/pull/20) 增加工作流定义、后端 DAG 校验、CAS 草稿和不可变发布。对应[设计](docs/03-design/m3-workflow-definition.md)、[API/RPC](docs/04-api/m3-workflow-contracts.md)和[验收](docs/06-testing/m3-workflow-acceptance.md)。PR #20 尚未通过最终门禁前不得宣称完成。
+M3 的实际 DAG 运行由 [Issue #21](https://github.com/Ryan-Guizhou/otryx-flow/issues/21) / [PR #22](https://github.com/Ryan-Guizhou/otryx-flow/pull/22) 实现，涵盖节点级独立派发、条件 SKIPPED、Outbox/Inbox 和故障恢复；该 PR 的真实多 Worker CI **尚未完成验收**。参见[运行时设计](docs/03-design/m3-dag-runtime.md)、[API](docs/04-api/m3-dag-runtime-contracts.md)、[验收门禁](docs/06-testing/m3-dag-acceptance.md)。
 
-**边界：** M3 FLOW-015 不执行 DAG；并行节点执行、条件分支、取消重试及 Vue Flow 画布属于后续 Issue。Nacos 3.2.4 是唯一活跃注册中心；当前 RPC 为隔离开发网络 TRUSTED_DEVELOPMENT，尚未实现可供公网生产使用的 mTLS 与 HTTPS 部署。
+**边界：** 当前仅使用隔离开发网络 TRUSTED_DEVELOPMENT 和 Nacos 3.2.4。生产 mTLS、HTTPS 站点、完整取消重试与 Vue Flow 画布仍待后续阶段。
 
 <!-- doc-section:contribute -->
 ## 工程协作
