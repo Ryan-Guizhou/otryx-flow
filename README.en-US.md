@@ -61,7 +61,7 @@ FLOW-018 / [PR #26](https://github.com/Ryan-Guizhou/otryx-flow/pull/26) passed a
 
 <!-- doc-section:contribute -->
 ## Engineering
-[AGENTS.md](AGENTS.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Issue backlog](docs/08-roadmap/issue-backlog.md). Repository documentation is the canonical design source.
+[AGENTS.md](AGENTS.md) · [Contributing](CONTRIBUTING.md) · [Java engineering standard](docs/engineering/java-coding-standard.md) · [Security](SECURITY.md) · [Issue backlog](docs/08-roadmap/issue-backlog.md). Repository documentation is the canonical design source.
 
 <!-- doc-section:license -->
 ## License
