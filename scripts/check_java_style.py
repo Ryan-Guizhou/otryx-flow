@@ -22,6 +22,8 @@ TYPE_DECLARATION = re.compile(
     r"^\s*(?:(?:public|protected|private)\s+)?@interface\s+[A-Za-z_$][\w$]*\b"
 )
 REQUIRED_TYPE_TAGS = ("Author", "Version", "CreateTime")
+CREATE_TIME_FORMAT = re.compile(r"^\\d{4}/\\d{1,2}/\\d{1,2} \\d{2}:\\d{2}$")
+PLACEHOLDER_VALUE = re.compile(r"(?i)(todo|unknown|placeholder|replace.?me|真实作者|真实时间|填写作者|填写时间|<[^>]+>)")
 
 
 def is_java_source(path: Path) -> bool:
@@ -122,16 +124,37 @@ def inspect_source(path: Path, require_type_metadata: bool = False) -> list[dict
                 })
             continue
 
-        missing_tags = [
-            tag for tag in REQUIRED_TYPE_TAGS
-            if not re.search(r"^\s*\*\s*@" + re.escape(tag) + r"\b", javadoc, re.MULTILINE)
-        ]
+        missing_tags: list[str] = []
+        metadata_values: dict[str, str] = {}
+        for tag in REQUIRED_TYPE_TAGS:
+            match = re.search(
+                r"^\\s*\\*\\s*@" + re.escape(tag) + r"\\s*(.*?)\\s*$",
+                javadoc,
+                re.MULTILINE,
+            )
+            if match is None or not match.group(1).strip():
+                missing_tags.append(tag)
+            else:
+                metadata_values[tag] = match.group(1).strip()
         if missing_tags:
             findings.append({
                 "path": relative,
                 "line": (javadoc_start or index) + 1,
                 "rule": "missing-type-metadata",
-                "message": "Missing type Javadoc tags: " + ", ".join("@" + tag for tag in missing_tags) + ".",
+                "message": "Missing type Javadoc tags or values: " + ", ".join("@" + tag for tag in missing_tags) + ".",
+            })
+        invalid_metadata: list[str] = []
+        for tag, value in metadata_values.items():
+            if PLACEHOLDER_VALUE.search(value):
+                invalid_metadata.append(tag + " contains a placeholder")
+            elif tag == "CreateTime" and not CREATE_TIME_FORMAT.fullmatch(value):
+                invalid_metadata.append("CreateTime must use yyyy/M/d HH:mm")
+        if invalid_metadata:
+            findings.append({
+                "path": relative,
+                "line": (javadoc_start or index) + 1,
+                "rule": "invalid-type-metadata",
+                "message": "; ".join(invalid_metadata) + ".",
             })
 
     return findings
