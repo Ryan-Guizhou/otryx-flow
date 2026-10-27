@@ -13,4 +13,14 @@ public interface DagRpc {
     /** 当前用户可见的节点状态快照。 */
     @OtryxRpcIdempotent
     DagRunDetailView detail(String ownerUsername, String projectId, String runId);
+    /** 乐观版本与持久请求键：取消操作即使 RPC ACK 丢失也可安全重放。 */
+    @OtryxRpcIdempotent
+    DagControlReply cancel(DagCancelCommand command);
+    /** 失败节点的人工逻辑重试；每次使用新的 NodeRun ID。 */
+    @OtryxRpcIdempotent
+    DagControlReply retry(DagRetryCommand command);
+    /** 跨项目不可见的有限审计事件。 */
+    @OtryxRpcIdempotent
+    DagControlHistoryReply history(String ownerUsername, String projectId, String runId);
 }
+

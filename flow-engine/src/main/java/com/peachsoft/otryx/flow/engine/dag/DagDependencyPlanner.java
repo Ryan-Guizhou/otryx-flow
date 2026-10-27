@@ -29,7 +29,7 @@ public final class DagDependencyPlanner {
     private DagDependencyPlanner() { }
 
     /** BLOCKED 不可交给 Dispatcher；Ready 也尚不等于已执行。 */
-    public enum Phase { BLOCKED, READY, DISPATCHED, SUCCEEDED, FAILED, SKIPPED }
+    public enum Phase { BLOCKED, READY, DISPATCHED, SUCCEEDED, FAILED, SKIPPED, CANCEL_PENDING, CANCELLED }
     /** CONDITION 成功后必须持久化真实 TRUE/FALSE 分支决策。 */
     public record NodeState(Phase phase, Boolean decision) { }
     /** 发布版本的节点定义。 */
@@ -245,4 +245,3 @@ public final class DagDependencyPlanner {
         }
     }
 }
-

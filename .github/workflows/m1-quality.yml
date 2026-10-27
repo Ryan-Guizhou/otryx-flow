@@ -25,6 +25,7 @@ on:
       - 'scripts/test_m2_final_e2e.sh'
       - 'scripts/test_m3_workflow_e2e.sh'
       - 'scripts/test_m3_dag_e2e.sh'
+      - 'scripts/test_m3_control_e2e.sh'
       - 'scripts/start_dev_compose.sh'
       - '.env.example'
       - 'scripts/test_frontend_api.mjs'

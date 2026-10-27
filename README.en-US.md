@@ -48,13 +48,14 @@ flowchart TB
 Read the [docs index](docs/index.md), then [requirements](docs/01-product/requirements-prd.md), [architecture](docs/02-architecture/architecture-overview.md), [core design](docs/03-design/consistency-and-recovery.md), [frontend spec](docs/05-frontend/ui-ux-spec.md), [acceptance](docs/06-testing/acceptance-plan.md), and [roadmap](docs/08-roadmap/milestones.md).
 
 <!-- doc-section:status -->
-## M1/M2 and M3 FLOW-015 verified; FLOW-016 in progress
+## M1/M2 and M3 FLOW-015/016 verified; FLOW-017 in progress
 
-M1 merged in [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2). M2 distributed short-job execution passed five gates and merged in final [PR #18](https://github.com/Ryan-Guizhou/otryx-flow/pull/18). M3 FLOW-015 merged in [PR #20](https://github.com/Ryan-Guizhou/otryx-flow/pull/20) after Backend, Frontend, Source, Docs and real Nacos/MySQL/OTRYX RPC Compose checks; it delivers bounded DAG definition validation, optimistic drafts and immutable revisions.
+M1 merged in [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2), and the M2 distributed short-job lifecycle merged in [PR #18](https://github.com/Ryan-Guizhou/otryx-flow/pull/18). M3 DAG definitions / immutable revisions merged in [PR #20](https://github.com/Ryan-Guizhou/otryx-flow/pull/20); the real two-Worker DAG runtime and node-level outcomes merged in [PR #22](https://github.com/Ryan-Guizhou/otryx-flow/pull/22). Both passed the five required CI gates.
 
-The actual DAG runtime is in [Issue #21](https://github.com/Ryan-Guizhou/otryx-flow/issues/21) / [PR #22](https://github.com/Ryan-Guizhou/otryx-flow/pull/22): node-level dispatch, conditional SKIPPED outcomes, Outbox/Inbox and recovery. **The full real multi-Worker acceptance gate has not yet passed.** See [design](docs/03-design/m3-dag-runtime.md), [API](docs/04-api/m3-dag-runtime-contracts.md), and [acceptance](docs/06-testing/m3-dag-acceptance.md).
+M3 FLOW-017 / [Issue #23](https://github.com/Ryan-Guizhou/otryx-flow/issues/23) is now implementing [durable cancellation and logical retry](docs/03-design/m3-dag-control.md), [REST/RPC control contracts](docs/04-api/m3-dag-control-contracts.md), and [fault-injection acceptance](docs/06-testing/m3-dag-control-acceptance.md). No acceptance claim until real Compose and all other CI gates pass.
 
-**Boundary:** isolated TRUSTED_DEVELOPMENT + Nacos 3.2.4 only. Production mTLS, public HTTPS, full cancellation/retry and Vue Flow canvas are later milestones.
+**Boundary:** only isolated TRUSTED_DEVELOPMENT with Nacos 3.2.4. Production mTLS/HTTPS, Vue Flow editing, and external side-effect compensation are future work.
+
 
 <!-- doc-section:contribute -->
 ## Engineering

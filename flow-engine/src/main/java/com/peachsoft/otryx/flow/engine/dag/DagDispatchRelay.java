@@ -65,6 +65,10 @@ public class DagDispatchRelay {
         int delivered = 0;
         for (Claim claim : claimBatch()) {
             try {
+                if (cancelRequested(claim.nodeRunId())) {
+                    abandon(claim);
+                    continue;
+                }
                 Payload payload = loadPayload(claim.nodeRunId());
                 if (payload == null || !payload.valid()) {
                     dead(claim, "DAG_NODE_SNAPSHOT_MISSING");
@@ -80,6 +84,9 @@ public class DagDispatchRelay {
                 if (result == null) throw new IllegalStateException("Null Dispatcher RPC result");
                 if ("CREATED".equals(result.code()) || "DUPLICATE".equals(result.code())) {
                     if (ack(claim)) delivered++;
+                } else if ("CANCELLED".equals(result.code())) {
+                    // Dispatcher committed a cancellation fence before our late enqueue.
+                    abandon(claim);
                 } else if ("CONFLICT".equals(result.code())) {
                     dead(claim, "NODE_DISPATCHER_CONFLICT");
                 } else {
@@ -96,10 +103,13 @@ public class DagDispatchRelay {
         List<Claim> claimed = tx.execute(ignored -> {
             Timestamp now = now();
             List<Pending> rows = jdbc.query(
-                    "SELECT node_run_id,event_id,attempts FROM flow_dag_dispatch_outbox "
-                            + "WHERE (delivery_state = 'PENDING' AND next_attempt_at <= ?) "
-                            + "OR (delivery_state = 'IN_FLIGHT' AND lease_until <= ?) "
-                            + "ORDER BY created_at,node_run_id LIMIT ? FOR UPDATE SKIP LOCKED",
+                    "SELECT o.node_run_id,o.event_id,o.attempts FROM flow_dag_dispatch_outbox o "
+                            + "JOIN flow_dag_node_run n ON n.id=o.node_run_id "
+                            + "JOIN flow_dag_run r ON r.id=n.dag_run_id "
+                            + "WHERE r.status='RUNNING' AND n.status IN ('READY','DISPATCHED') AND "
+                            + "((o.delivery_state = 'PENDING' AND o.next_attempt_at <= ?) "
+                            + "OR (o.delivery_state = 'IN_FLIGHT' AND o.lease_until <= ?)) "
+                            + "ORDER BY o.created_at,o.node_run_id LIMIT ? FOR UPDATE SKIP LOCKED",
                     (rs, row) -> new Pending(rs.getString(1), rs.getString(2), rs.getInt(3)),
                     now, now, MAX_BATCH);
             List<Claim> selected = new ArrayList<>(rows.size());
@@ -128,6 +138,24 @@ public class DagDispatchRelay {
                         + "JOIN flow_dag_run r ON r.id = n.dag_run_id WHERE n.id = ?",
                 (rs, row) -> read(rs), nodeId);
         return found.isEmpty() ? null : found.getFirst();
+    }
+
+
+    /** 再次在发 RPC 前检查取消意图，竞态由 Dispatcher 持久取消栅栏补偿。 */
+    private boolean cancelRequested(String nodeRunId) {
+        List<String> states = jdbc.query(
+                "SELECT r.status FROM flow_dag_run r "
+                        + "JOIN flow_dag_node_run n ON n.dag_run_id=r.id WHERE n.id=?",
+                (rs, i) -> rs.getString(1), nodeRunId);
+        return states.isEmpty() || !"RUNNING".equals(states.getFirst());
+    }
+
+    /** 对被取消的已领取 Outbox 只作终止，不制造 FAILED 节点。 */
+    private void abandon(Claim claim) {
+        jdbc.update("UPDATE flow_dag_dispatch_outbox SET delivery_state='CANCELLED', "
+                        + "claim_token=NULL,lease_until=NULL,last_error='DAG_CANCELLED' "
+                        + "WHERE node_run_id=? AND claim_token=? AND delivery_state='IN_FLIGHT'",
+                claim.nodeRunId(), claim.token());
     }
 
     private boolean ack(Claim claim) {

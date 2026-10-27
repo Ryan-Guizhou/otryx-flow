@@ -3,6 +3,8 @@ package com.peachsoft.otryx.flow.dispatcher;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchCompleteCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchCancelCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchCancelReply;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchEnqueueCommand;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchEnqueueReply;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchHeartbeatCommand;
@@ -51,6 +53,7 @@ public class DispatcherRpcService implements DispatcherRpc {
     private static final String SUCCEEDED = "SUCCEEDED";
     private static final String FAILED = "FAILED";
     private static final String STALE = "STALE";
+    private static final String CANCELLED = "CANCELLED";
     private final JdbcTemplate jdbc;
     private final TransactionTemplate tx;
     private final ObjectMapper mapper;
@@ -93,6 +96,93 @@ public class DispatcherRpcService implements DispatcherRpc {
         }
     }
 
+
+    /**
+     * 按 NodeRun ID 设置一个持久取消栅栏；无任务时写入不可领取的唯一索引占位行，
+     * 从而与异步 enqueue 以 UNIQUE(engine_run_id) 精确竞争，不存在取消后再入队窗口。
+     */
+    @Override
+    public DispatchCancelReply cancelDagTask(DispatchCancelCommand command) {
+        if (command == null || command.workflowRevision() < 1) {
+            throw new IllegalArgumentException("Invalid DAG cancellation");
+        }
+        validateUuid(command.runId());
+        validateOwner(command.ownerUsername());
+        validateUuid(command.projectId());
+        validateUuid(command.dagRunId());
+        validateUuid(command.workflowId());
+        try {
+            return persistDagCancel(command);
+        } catch (DuplicateKeyException racedEnqueue) {
+            // Enqueue committed before the tombstone insert: lock and cancel the real task instead.
+            return persistDagCancel(command);
+        }
+    }
+
+    private DispatchCancelReply persistDagCancel(DispatchCancelCommand command) {
+        return tx.execute(ignored -> {
+            Timestamp now = dbNow();
+            List<CancelRow> rows = jdbc.query(
+                    "SELECT id,owner_username,project_id,schedule_id,job_id,job_revision,status "
+                            + "FROM flow_dispatch_task WHERE engine_run_id = ? FOR UPDATE",
+                    (rs, index) -> new CancelRow(rs.getString(1), rs.getString(2),
+                            rs.getString(3), rs.getString(4), rs.getString(5),
+                            rs.getInt(6), rs.getString(7)), command.runId());
+            if (rows.isEmpty()) {
+                String tombstoneId = UUID.randomUUID().toString();
+                jdbc.update("INSERT INTO flow_dispatch_task (id,engine_run_id,event_id,"
+                                + "owner_username,project_id,schedule_id,job_id,job_revision,"
+                                + "handler_key,parameters_json,timeout_seconds,max_attempts,"
+                                + "attempts,status,lease_epoch,next_attempt_at,payload_fingerprint,"
+                                + "created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,"
+                                + "'flow.cancelled','{}',1,1,0,'CANCELLED',0,?,?,?,?)",
+                        tombstoneId, command.runId(), UUID.randomUUID().toString(),
+                        command.ownerUsername(), command.projectId(), command.dagRunId(),
+                        command.workflowId(), command.workflowRevision(), Timestamp.from(Instant.EPOCH),
+                        cancelFingerprint(command), now, now);
+                return new DispatchCancelReply(CANCELLED, CANCELLED);
+            }
+            CancelRow old = rows.getFirst();
+            if (!old.owner().equals(command.ownerUsername())
+                    || !old.project().equals(command.projectId())
+                    || !old.dagRun().equals(command.dagRunId())
+                    || !old.workflow().equals(command.workflowId())
+                    || old.revision() != command.workflowRevision()) {
+                return new DispatchCancelReply("CONFLICT", null);
+            }
+            if (SUCCEEDED.equals(old.status()) || FAILED.equals(old.status())) {
+                return new DispatchCancelReply("TERMINAL", old.status());
+            }
+            if (!CANCELLED.equals(old.status())) {
+                int updated = jdbc.update("UPDATE flow_dispatch_task SET status='CANCELLED', "
+                                + "lease_epoch=lease_epoch+1,lease_token=NULL,worker_id=NULL,"
+                                + "lease_until=NULL,updated_at=? WHERE id=? "
+                                + "AND status IN ('READY','LEASED')",
+                        now, old.id());
+                if (updated != 1) throw new IllegalStateException("DAG cancel status CAS failed");
+                jdbc.update("UPDATE flow_dispatch_attempt SET status='CANCELLED',finished_at=? "
+                                + "WHERE task_id=? AND status='LEASED'",
+                        now, old.id());
+            }
+            return new DispatchCancelReply(CANCELLED, CANCELLED);
+        });
+    }
+
+    private static String cancelFingerprint(DispatchCancelCommand command) {
+        String raw = String.join("\u0000", command.runId(), command.ownerUsername(),
+                command.projectId(), command.dagRunId(), command.workflowId(),
+                Integer.toString(command.workflowRevision()));
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(raw.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException unavailable) {
+            throw new IllegalStateException("SHA-256 unavailable", unavailable);
+        }
+    }
+
+    private record CancelRow(String id, String owner, String project, String dagRun,
+                             String workflow, int revision, String status) { }
+
     /** 仅读取租户拥有的任务元数据；对浏览器不暴露 leaseToken。 */
     @Override
     public DispatchTaskListReply list(String ownerUsername, String projectId) {
@@ -108,6 +198,18 @@ public class DispatcherRpcService implements DispatcherRpc {
     /** 单次最多领取八个同 Handler 的任务；领取和更新租约均发生在短事务内。 */
     @Override
     public DispatchLeaseReply claim(DispatchLeaseCommand command) {
+        return claimInternal(command, null);
+    }
+
+    /**
+     * 仅供 e2e Profile 的 HTTP Probe 精确领取指定 NodeRun。
+     * 不属于 DispatcherRpc，不改变生产 Worker 的公平扫描接口。
+     */
+    DispatchLeaseReply claimForE2eTarget(DispatchLeaseCommand command, String engineRunId) {
+        return claimInternal(command, validateUuid(engineRunId));
+    }
+
+    private DispatchLeaseReply claimInternal(DispatchLeaseCommand command, String targetRunId) {
         if (command == null || command.limit() < 1 || command.limit() > CLAIM_LIMIT) {
             throw new IllegalArgumentException("Invalid dispatch claim limit");
         }
@@ -115,12 +217,17 @@ public class DispatcherRpcService implements DispatcherRpc {
         String handler = validateHandler(command.handlerKey());
         DispatchLeaseReply reply = tx.execute(ignored -> {
             Timestamp now = dbNow();
-            List<TaskRow> rows = jdbc.query("SELECT * FROM flow_dispatch_task "
-                            + "WHERE handler_key = ? AND attempts < max_attempts AND "
-                            + "((status = 'READY' AND next_attempt_at <= ?) OR "
-                            + "(status = 'LEASED' AND lease_until <= ?)) "
-                            + "ORDER BY created_at, id LIMIT ? FOR UPDATE SKIP LOCKED",
-                    (rs, index) -> readTask(rs), handler, now, now, command.limit());
+            // Keep production SQL unchanged; append a bound NodeRun criterion only for CI.
+            String query = "SELECT * FROM flow_dispatch_task "
+                    + "WHERE handler_key = ? AND attempts < max_attempts AND "
+                    + "((status = 'READY' AND next_attempt_at <= ?) OR "
+                    + "(status = 'LEASED' AND lease_until <= ?)) "
+                    + (targetRunId == null ? "" : "AND engine_run_id = ? ")
+                    + "ORDER BY created_at, id LIMIT ? FOR UPDATE SKIP LOCKED";
+            Object[] args = targetRunId == null
+                    ? new Object[]{handler, now, now, command.limit()}
+                    : new Object[]{handler, now, now, targetRunId, command.limit()};
+            List<TaskRow> rows = jdbc.query(query, (rs, index) -> readTask(rs), args);
             List<DispatchLeaseView> claims = new ArrayList<>(rows.size());
             for (TaskRow row : rows) {
                 if (LEASED.equals(row.status())) {
@@ -245,7 +352,9 @@ public class DispatcherRpcService implements DispatcherRpc {
     private DispatchEnqueueReply replay(DispatchEnqueueCommand c, String fingerprint) {
         List<DispatchEnqueueReply> results = jdbc.query("SELECT id, status, payload_fingerprint "
                         + "FROM flow_dispatch_task WHERE engine_run_id = ?",
-                (rs, idx) -> fingerprint.equals(rs.getString("payload_fingerprint"))
+                (rs, idx) -> CANCELLED.equals(rs.getString("status"))
+                        ? new DispatchEnqueueReply("CANCELLED", rs.getString("id"), CANCELLED)
+                        : fingerprint.equals(rs.getString("payload_fingerprint"))
                         ? new DispatchEnqueueReply("DUPLICATE", rs.getString("id"), rs.getString("status"))
                         : new DispatchEnqueueReply("CONFLICT", null, null), c.runId());
         return results.isEmpty() ? null : results.getFirst();

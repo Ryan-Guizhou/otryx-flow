@@ -23,3 +23,7 @@
 M1 已在 [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2) 验收。M2 定义/调度/Engine/Dispatcher/Worker 与真实终态闭环均已合并（最终 [PR #18](https://github.com/Ryan-Guizhou/otryx-flow/pull/18) 五项 CI 检查通过）；[M2 终态设计](03-design/m2-outcome-reconciliation.md)和[完整验收](06-testing/m2-final-acceptance.md)。
 
 M3 FLOW-015 / [PR #20](https://github.com/Ryan-Guizhou/otryx-flow/pull/20) 已通过 5/5 CI 合并，提供[DAG 定义及不可变修订](03-design/m3-workflow-definition.md)、[RPC/REST](04-api/m3-workflow-contracts.md)。当前 M3 FLOW-016 / [Issue #21](https://github.com/Ryan-Guizhou/otryx-flow/issues/21) / [Draft PR #22](https://github.com/Ryan-Guizhou/otryx-flow/pull/22) 正在实施[Engine DAG 运行时](03-design/m3-dag-runtime.md)、[RPC/REST](04-api/m3-dag-runtime-contracts.md)、[节点级验收](06-testing/m3-dag-acceptance.md)，需真实多 Worker Compose 验收后方可认定完成。Nacos 3.2.4 仍是唯一活跃注册中心；生产 HTTPS/mTLS 未实现。
+
+### FLOW-017：取消、重试及终态竞态（待验收）
+
+[M3 DAG 控制面设计](03-design/m3-dag-control.md)、[REST/RPC](04-api/m3-dag-control-contracts.md)、[真实 Compose 验收](06-testing/m3-dag-control-acceptance.md)分别记录 CANCEL_REQUESTED 可靠栅栏、Run 版本 CAS 和新 NodeRun logicalAttempt。对应 [Issue #23](https://github.com/Ryan-Guizhou/otryx-flow/issues/23)，与已验收的 FLOW-016 节点派发阶段隔离；通过最新 Head 全量 CI 前保持进行中。

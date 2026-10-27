@@ -24,6 +24,8 @@ public class DagRunCoordinator {
     private static final String RUNNING = "RUNNING";
     private static final String SUCCEEDED = "SUCCEEDED";
     private static final String FAILED = "FAILED";
+    private static final String CANCEL_REQUESTED = "CANCEL_REQUESTED";
+    private static final String CANCELLED = "CANCELLED";
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
 
@@ -52,15 +54,23 @@ public class DagRunCoordinator {
                         rs.getString(3), rs.getString(4)}, runId);
         if (runs.isEmpty()) throw new IllegalArgumentException("Unknown DAG Run");
         String[] snapshot = runs.getFirst();
-        if (SUCCEEDED.equals(snapshot[3])) return;
+        if (CANCEL_REQUESTED.equals(snapshot[3])) {
+            reconcileCancellationLocked(runId);
+            return;
+        }
+        if (SUCCEEDED.equals(snapshot[3]) || FAILED.equals(snapshot[3])
+                || CANCELLED.equals(snapshot[3])) return;
         DagDependencyPlanner.Plan plan = DagDependencyPlanner.load(snapshot[0], snapshot[1], mapper);
         final JsonNode input;
         try { input = mapper.readTree(snapshot[2]); }
         catch (JsonProcessingException invalid) { throw new IllegalStateException("Invalid persisted DAG input", invalid); }
 
         List<NodeRow> rows = jdbc.query(
-                "SELECT id, node_id, status, condition_decision FROM flow_dag_node_run "
-                        + "WHERE dag_run_id = ? ORDER BY node_id",
+                "SELECT n.id,n.node_id,n.status,n.condition_decision FROM flow_dag_node_run n "
+                        + "WHERE n.dag_run_id = ? AND n.logical_attempt = "
+                        + "(SELECT MAX(m.logical_attempt) FROM flow_dag_node_run m "
+                        + "WHERE m.dag_run_id=n.dag_run_id AND m.node_id=n.node_id) "
+                        + "ORDER BY n.node_id",
                 (rs, row) -> new NodeRow(rs.getString(1), rs.getString(2), rs.getString(3),
                         (Boolean) rs.getObject(4)), runId);
         if (rows.size() != plan.nodes().size()) throw new IllegalStateException("Incomplete NodeRun snapshot");
@@ -102,9 +112,32 @@ public class DagRunCoordinator {
                         || s.phase() == DagDependencyPlanner.Phase.SKIPPED
                         || s.phase() == DagDependencyPlanner.Phase.FAILED);
         String status = failed ? FAILED : terminal ? SUCCEEDED : RUNNING;
-        if (!status.equals(snapshot[3])) {
-            jdbc.update("UPDATE flow_dag_run SET status = ?, updated_at = ? WHERE id = ?",
+        if (!status.equals(snapshot[3]) || !changes.isEmpty()) {
+            jdbc.update("UPDATE flow_dag_run SET status = ?, run_version = run_version + 1, "
+                            + "updated_at = ? WHERE id = ?",
                     status, now, runId);
+        }
+    }
+
+
+    /**
+     * 取消时只在所有异步 Dispatcher cancel 已收敛后设置父 DAG Run 为 CANCELLED。
+     * 调用者必须在同一 Engine 本地事务先取得父 Run 的 FOR UPDATE 行锁。
+     */
+    public void reconcileCancellationLocked(String runId) {
+        List<String> current = jdbc.query("SELECT status FROM flow_dag_run WHERE id = ?",
+                (rs, index) -> rs.getString(1), runId);
+        if (current.isEmpty() || !CANCEL_REQUESTED.equals(current.getFirst())) return;
+        Integer pending = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM flow_dag_node_run n WHERE n.dag_run_id = ? "
+                        + "AND n.logical_attempt = (SELECT MAX(m.logical_attempt) FROM flow_dag_node_run m "
+                        + "WHERE m.dag_run_id=n.dag_run_id AND m.node_id=n.node_id) "
+                        + "AND n.status IN ('BLOCKED','READY','DISPATCHED','CANCEL_PENDING')",
+                Integer.class, runId);
+        if (pending != null && pending == 0) {
+            jdbc.update("UPDATE flow_dag_run SET status = ?, cancelled_at = CURRENT_TIMESTAMP(3), "
+                    + "run_version = run_version + 1, updated_at = CURRENT_TIMESTAMP(3) "
+                    + "WHERE id = ? AND status = 'CANCEL_REQUESTED'", CANCELLED, runId);
         }
     }
 

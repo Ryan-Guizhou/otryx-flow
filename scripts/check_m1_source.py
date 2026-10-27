@@ -111,5 +111,14 @@ assert '@OtryxRpcReference' in files['flow-engine/src/main/java/com/peachsoft/ot
 assert 'FLOW_E2E_M3_DAG' in (root/'.github/workflows/m1-integration.yml').read_text(encoding='utf-8')
 assert 'bash scripts/test_m3_dag_e2e.sh' in (root/'scripts/test_m1_e2e.sh').read_text(encoding='utf-8')
 assert (root/'scripts/test_m3_dag_e2e.sh').is_file()
+# FLOW-017: only Engine may mutate DAG Run control state; Dispatcher owns durable cancellation fence.
+assert 'flow-engine/src/main/resources/db/migration/V5__dag_cancel_retry_control.sql' in files
+assert 'flow_dag_cancel_outbox' in src and 'flow_dag_control_audit' in src
+assert 'run_version BIGINT NOT NULL DEFAULT 1' in src
+assert 'cancelDagTask' in files['flow-contracts/src/main/java/com/peachsoft/otryx/flow/contracts/v1/DispatcherRpc.java']
+assert 'FOR UPDATE' in files['flow-engine/src/main/java/com/peachsoft/otryx/flow/engine/dag/DagControlService.java']
+assert 'FLOW_E2E_M3_CONTROL' in (root/'.github/workflows/m1-integration.yml').read_text(encoding='utf-8')
+assert 'bash scripts/test_m3_control_e2e.sh' in (root/'scripts/test_m1_e2e.sh').read_text(encoding='utf-8')
+assert (root/'scripts/test_m3_control_e2e.sh').is_file()
 print(f'PASS: M1 static contracts ({len(files)} source/config files)')
 print('NOTE: This does not run Maven, MySQL, network Nacos, OTRYX RPC, npm or a browser.')
