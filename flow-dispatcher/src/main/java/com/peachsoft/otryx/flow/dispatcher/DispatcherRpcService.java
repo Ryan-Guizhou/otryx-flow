@@ -198,6 +198,18 @@ public class DispatcherRpcService implements DispatcherRpc {
     /** 单次最多领取八个同 Handler 的任务；领取和更新租约均发生在短事务内。 */
     @Override
     public DispatchLeaseReply claim(DispatchLeaseCommand command) {
+        return claimInternal(command, null);
+    }
+
+    /**
+     * 仅供 e2e Profile 的 HTTP Probe 精确领取指定 NodeRun。
+     * 不属于 DispatcherRpc，不改变生产 Worker 的公平扫描接口。
+     */
+    DispatchLeaseReply claimForE2eTarget(DispatchLeaseCommand command, String engineRunId) {
+        return claimInternal(command, validateUuid(engineRunId));
+    }
+
+    private DispatchLeaseReply claimInternal(DispatchLeaseCommand command, String targetRunId) {
         if (command == null || command.limit() < 1 || command.limit() > CLAIM_LIMIT) {
             throw new IllegalArgumentException("Invalid dispatch claim limit");
         }
@@ -205,12 +217,17 @@ public class DispatcherRpcService implements DispatcherRpc {
         String handler = validateHandler(command.handlerKey());
         DispatchLeaseReply reply = tx.execute(ignored -> {
             Timestamp now = dbNow();
-            List<TaskRow> rows = jdbc.query("SELECT * FROM flow_dispatch_task "
-                            + "WHERE handler_key = ? AND attempts < max_attempts AND "
-                            + "((status = 'READY' AND next_attempt_at <= ?) OR "
-                            + "(status = 'LEASED' AND lease_until <= ?)) "
-                            + "ORDER BY created_at, id LIMIT ? FOR UPDATE SKIP LOCKED",
-                    (rs, index) -> readTask(rs), handler, now, now, command.limit());
+            // Keep production SQL unchanged; append a bound NodeRun criterion only for CI.
+            String query = "SELECT * FROM flow_dispatch_task "
+                    + "WHERE handler_key = ? AND attempts < max_attempts AND "
+                    + "((status = 'READY' AND next_attempt_at <= ?) OR "
+                    + "(status = 'LEASED' AND lease_until <= ?)) "
+                    + (targetRunId == null ? "" : "AND engine_run_id = ? ")
+                    + "ORDER BY created_at, id LIMIT ? FOR UPDATE SKIP LOCKED";
+            Object[] args = targetRunId == null
+                    ? new Object[]{handler, now, now, command.limit()}
+                    : new Object[]{handler, now, now, targetRunId, command.limit()};
+            List<TaskRow> rows = jdbc.query(query, (rs, index) -> readTask(rs), args);
             List<DispatchLeaseView> claims = new ArrayList<>(rows.size());
             for (TaskRow row : rows) {
                 if (LEASED.equals(row.status())) {

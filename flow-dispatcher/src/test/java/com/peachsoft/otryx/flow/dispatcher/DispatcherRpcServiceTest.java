@@ -161,6 +161,24 @@ class DispatcherRpcServiceTest {
 
 
     @Test
+    void e2eTargetClaimSelectsOnlyRequestedNodeEvenWithOlderReadyTasks() {
+        var older = event(2);
+        var requested = event(2);
+        service.enqueue(older);
+        service.enqueue(requested);
+        var lease = service.claimForE2eTarget(
+                new DispatchLeaseCommand("probe-dag","safe.echo",1), requested.runId()).leases();
+        assertEquals(1, lease.length);
+        assertEquals(requested.runId(), lease[0].runId());
+        assertEquals("READY", jdbc.queryForObject(
+                "SELECT status FROM flow_dispatch_task WHERE engine_run_id=?",
+                String.class, older.runId()));
+        assertEquals("LEASED", jdbc.queryForObject(
+                "SELECT status FROM flow_dispatch_task WHERE engine_run_id=?",
+                String.class, requested.runId()));
+    }
+
+    @Test
     void cancellationBeforeEnqueueCreatesDurableTombstoneAndNeverLeases() {
         var command = event(2);
         var cancel = new DispatchCancelCommand(command.runId(), command.ownerUsername(),

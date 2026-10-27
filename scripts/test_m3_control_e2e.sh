@@ -171,7 +171,7 @@ get "$RUNS/$RUN2" > "$TMP/success-detail.json"
 NODE2="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["nodes"][0]["id"])' "$TMP/success-detail.json")"
 wait_task "$NODE2"
 # Use safe.fail for the fenced probe to isolate it from recurring M2 safe.echo Cron tasks.
-probe claim 'workerId=flow-control-probe&handlerKey=safe.fail' > "$TMP/lease.json"
+probe claim "workerId=flow-control-probe&handlerKey=safe.fail&engineRunId=$NODE2" > "$TMP/lease.json"
 read -r TASK EPOCH TOKEN CLAIM_RUN < <(python3 - "$TMP/lease.json" <<'PY'
 import json,sys
 r=json.load(open(sys.argv[1]))["leases"]

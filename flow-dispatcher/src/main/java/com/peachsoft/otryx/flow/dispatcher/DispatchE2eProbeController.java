@@ -24,8 +24,10 @@ public class DispatchE2eProbeController {
 
     /** 仅临时 CI profile 提供的领取测试入口，非生产 API。 */
     @PostMapping("/claim")
-    public Object claim(@RequestParam String workerId, @RequestParam String handlerKey) {
-        return service.claim(new DispatchLeaseCommand(workerId, handlerKey, 1));
+    public Object claim(@RequestParam String workerId, @RequestParam String handlerKey,
+            @RequestParam(required = false) String engineRunId) {
+        DispatchLeaseCommand command = new DispatchLeaseCommand(workerId, handlerKey, 1);
+        return engineRunId == null ? service.claim(command) : service.claimForE2eTarget(command, engineRunId);
     }
 
     /** 仅 CI 用于验证过期 token 的续约拒绝。 */
