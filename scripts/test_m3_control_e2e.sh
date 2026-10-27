@@ -26,15 +26,30 @@ sql() {
   docker compose exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --silent --skip-column-names -uroot "$1" -e "$2"' _ "$1" "$2"
 }
 post() {
-  curl --connect-timeout 3 --max-time 18 -sS -o "$4" -w '%{http_code}' \
-    -b "$FLOW_M3_COOKIE" -c "$FLOW_M3_COOKIE" \
-    -H 'Content-Type: application/json' -H "X-XSRF-TOKEN: $FLOW_M3_TOKEN" \
-    -H "Idempotency-Key: $1" --data-binary "@$2" "$3"
+  # After fault-injected Engine restart the Nacos RPC client can briefly return 503.
+  # Reuse the EXACT same idempotency key and body; do not create a second DAG Run.
+  local code="000"
+  for attempt in $(seq 1 16); do
+    code="$(curl --connect-timeout 3 --max-time 18 -sS -o "$4" -w '%{http_code}' \
+      -b "$FLOW_M3_COOKIE" -c "$FLOW_M3_COOKIE" \
+      -H 'Content-Type: application/json' -H "X-XSRF-TOKEN: $FLOW_M3_TOKEN" \
+      -H "Idempotency-Key: $1" --data-binary "@$2" "$3")" || code="000"
+    case "$code" in
+      000|502|503|504)
+        if [ "$attempt" -lt 16 ]; then sleep 2; continue; fi
+        ;;
+    esac
+    printf '%s' "$code"
+    return 0
+  done
+  printf '%s' "$code"
 }
 get() {
   curl --connect-timeout 3 --max-time 18 -fsS -b "$FLOW_M3_COOKIE" "$1"
 }
 expected() {
+  # 200 after a transient 503 is a valid idempotent replay of an already-committed 201.
+  if [ "$2" = 201 ] && [ "$1" = 200 ]; then return 0; fi
   [ "$1" = "$2" ] || { echo "Expected HTTP $2, got $1"; cat "$3"; exit 1; }
 }
 probe() {
