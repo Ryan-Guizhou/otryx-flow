@@ -158,14 +158,15 @@ def changed_java_files(base: str, root: Path = ROOT) -> list[Path]:
 
 
 def audit(files: Iterable[Path], require_type_metadata: bool) -> dict[str, object]:
+    file_list = list(files)
     findings = [
         finding
-        for path in files
+        for path in file_list
         for finding in inspect_source(path, require_type_metadata=require_type_metadata)
     ]
     by_rule = Counter(str(finding["rule"]) for finding in findings)
     return {
-        "file_count": len(list(files)) if not isinstance(files, list) else len(files),
+        "file_count": len(file_list),
         "finding_count": len(findings),
         "findings_by_rule": dict(sorted(by_rule.items())),
         "findings": findings,
