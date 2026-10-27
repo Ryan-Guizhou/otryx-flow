@@ -1,4 +1,4 @@
-> **GitHub execution status (2026-10-27):** M1 PR #2 and M2 Issues #3–#9 merged. FLOW-015 PR #20, FLOW-016 PR #22, and FLOW-017 [Issue #23 / PR #24](https://github.com/Ryan-Guizhou/otryx-flow/pull/24) passed 5/5 CI and real Compose acceptance and are merged. FLOW-018 [Issue #25](https://github.com/Ryan-Guizhou/otryx-flow/issues/25) is the active implementation; acceptance depends on the latest PR Head.
+> **GitHub execution status (2026-10-27):** M1/M2 and FLOW-015/016/017 are merged and accepted. FLOW-018 [Issue #25 / PR #26](https://github.com/Ryan-Guizhou/otryx-flow/pull/26) passed all five gates including real Compose and is merged. FLOW-019 [Issue #27](https://github.com/Ryan-Guizhou/otryx-flow/issues/27) is the active implementation.
 
 # GitHub Issue 计划索引（部分已创建）
 
@@ -23,8 +23,8 @@
 | FLOW-015 | M3 | 实现 WorkflowDefinition/DAG 后端校验与版本 | FR-009/010/011，AT-05；依赖 008/011 |
 | FLOW-016 | M3 | 实现 Engine DAG 依赖推进、并行及条件分支 | FR-012/013，AT-05/09；依赖 015/014 |
 | FLOW-017 | M3 | 实现取消、Retry、最终状态竞态收敛 | FR-013/014，AT-10；依赖 016 |
-| FLOW-018 | M3 | 实现 Vue Flow 工作流画布/编辑/发布 | FR-009/010/011，AT-05；依赖 005/015 |
-| FLOW-019 | M3 | 实现 Run 详情、Attempt 进度、日志视图 | FR-019/020，AT-06/12；依赖 013/016/018 |
+| FLOW-018 | M3 | 实现 Vue Flow 工作流画布/编辑/发布 | FR-009/010/011，AT-05；依赖 005/015；[Issue #25 / PR #26](https://github.com/Ryan-Guizhou/otryx-flow/pull/26) 已合并 |
+| FLOW-019 | M3 | 实现 Run 详情、Attempt 进度、日志视图 | FR-019/020，AT-06/12；依赖 013/016/018；[Issue #27](https://github.com/Ryan-Guizhou/otryx-flow/issues/27) 开发中 |
 | FLOW-020 | M4 | 接入受保护 Etcd、mTLS、证书绑定与方法 AuthZ | NFR-001，AT-11；依赖 003/014 |
 | FLOW-021 | M4 | 接入 OpenTelemetry、业务指标、告警及审计 | FR-021/023/028，AT-12/17；依赖 014/019 |
 | FLOW-022 | M4 | 实现项目配额、Backpressure、Worker Drain | FR-008/015/017，AT-13；依赖 013/020 |

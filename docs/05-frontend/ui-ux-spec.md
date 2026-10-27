@@ -10,7 +10,8 @@ flowchart TD
   Shell --> Dashboard[概览]
   Shell --> Jobs[任务定义与 Cron]
   Shell --> Workflow[工作流设计器]
-  Shell --> Runs[执行记录/日志]
+  Shell --> Runs[定时任务执行记录]
+  Shell --> DagRuns[工作流 Run / NodeRun / 日志]
   Shell --> Workers[Worker 集群]
   Shell --> Audit[审计与告警]
   Shell --> Settings[项目成员与设置]
@@ -26,6 +27,8 @@ flowchart TD
 4. **时区清晰**：列表提供站点偏好时区与 UTC 对照；Cron 预览带夏令时说明，显示绝对 UTC 时间。
 5. **可恢复操作**：列表支持过滤/分页，表单保留未提交内容；乐观锁 409 弹出版本冲突，不静默覆盖别人的修改。
 6. **权限一致**：按钮隐藏只是 UX，服务端必须校验项目 RBAC；Demo 访客仅能运行 `safe-demo-*` 内置任务。
+7. **执行视图分型**：M2 定时 Job Run 与 M3 DAG Run 分开呈现；DAG 详情展示固定 Revision/hash、Run 版本、NodeRun logicalAttempt、条件决策与取消/重试审计。`CANCEL_REQUESTED` 不得显示为已取消。
+8. **日志安全与有界**：工作流日志使用游标分页、显示服务端脱敏后的结构化字段；不显示 lease token、请求指纹或凭据。日志延迟/丢失不得改变任务终态。
 
 ## 设计系统
 - 8px spacing 基础、文字/按钮状态一贯；成功、失败、警告状态不只靠颜色表达，配合图标和文本。

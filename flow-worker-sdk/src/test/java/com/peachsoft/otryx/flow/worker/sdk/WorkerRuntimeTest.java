@@ -153,6 +153,13 @@ class WorkerRuntimeTest {
             throw new UnsupportedOperationException();
         }
         @Override public DispatchTaskListReply list(String owner, String project) { throw new UnsupportedOperationException(); }
+        @Override public DispatchLogBatchReply appendLogs(DispatchLogBatchCommand command) {
+            return new DispatchLogBatchReply("OK", command.entries().length, 0, 0);
+        }
+        @Override public DispatchLogPageView queryLogs(String owner, String project, String[] nodeRunIds,
+                String cursor, int limit) {
+            throw new UnsupportedOperationException();
+        }
         @Override public DispatchLeaseReply claim(DispatchLeaseCommand request) {
             if (claims.getAndIncrement() != 0) return new DispatchLeaseReply(new DispatchLeaseView[0]);
             DispatchLeaseView claim = new DispatchLeaseView(taskId, UUID.randomUUID().toString(),

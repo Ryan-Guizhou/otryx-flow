@@ -34,11 +34,15 @@ public final class QuickstartWorkerLauncher {
                 "safe.echo", (parameters, context) -> {
                     context.checkCancelled();
                     // Intentionally no external I/O; a trusted, side-effect-free example.
+                    context.log("INFO", "safe.echo handler executed", Map.of(
+                            "handlerKey", "safe.echo",
+                            "parameterBytes", Integer.toString(parameters.getBytes(java.nio.charset.StandardCharsets.UTF_8).length)));
                     LOGGER.info("Safe echo handler executed: taskId={}, runId={}, parameterBytes={}",
                             context.taskId(), context.runId(), parameters.getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
                 },
                 "safe.fail", (parameters, context) -> {
                     context.checkCancelled();
+                    context.log("WARN", "safe.fail handler will fail", Map.of("errorType", "IllegalStateException"));
                     throw new IllegalStateException("intentional test failure");
                 }));
         runtime.start();
