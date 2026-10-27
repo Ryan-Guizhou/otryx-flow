@@ -57,6 +57,7 @@ public class DispatcherRpcService implements DispatcherRpc {
     private static final int LIST_LIMIT = 100;
     private static final int REAPER_LIMIT = 16;
     private static final int MAX_LOG_BATCH = 32;
+    private static final int MAX_LOG_QUERY_NODES = 300;
     private static final int MAX_LOGS_PER_ATTEMPT = 1000;
     private static final int MAX_LOG_MESSAGE_BYTES = 2048;
     private static final int MAX_LOG_FIELDS = 16;
@@ -215,6 +216,21 @@ public class DispatcherRpcService implements DispatcherRpc {
         String worker = validateWorker(command.workerId());
         String task = validateUuid(command.taskId());
         String token = validateUuid(command.leaseToken());
+        List<SanitizedLog> sanitized = new ArrayList<>(command.entries().length);
+        try {
+            for (DispatchLogEntry entry : command.entries()) {
+                if (entry == null || entry.sequence() < 1 || entry.level() == null
+                        || !List.of("TRACE", "DEBUG", "INFO", "WARN", "ERROR").contains(entry.level())) {
+                    return new DispatchLogBatchReply("INVALID", 0, 0, command.entries().length);
+                }
+                String message = sanitizeLogMessage(entry.message());
+                String fieldsJson = sanitizeLogFields(entry.fields());
+                sanitized.add(new SanitizedLog(entry.sequence(), entry.level(),
+                        message.isBlank() ? "(empty log message)" : message, fieldsJson));
+            }
+        } catch (IllegalArgumentException invalid) {
+            return new DispatchLogBatchReply("INVALID", 0, 0, command.entries().length);
+        }
         return tx.execute(ignored -> {
             List<LogLeaseRow> leases = jdbc.query(
                     "SELECT t.engine_run_id,t.owner_username,t.project_id,t.lease_epoch,"
@@ -237,11 +253,7 @@ public class DispatcherRpcService implements DispatcherRpc {
             int duplicates = 0;
             int dropped = 0;
             Timestamp now = dbNow();
-            for (DispatchLogEntry entry : command.entries()) {
-                if (entry == null || entry.sequence() < 1 || entry.level() == null
-                        || !List.of("TRACE", "DEBUG", "INFO", "WARN", "ERROR").contains(entry.level())) {
-                    return new DispatchLogBatchReply("INVALID", accepted, duplicates, dropped + 1);
-                }
+            for (SanitizedLog entry : sanitized) {
                 int exists = jdbc.queryForObject(
                         "SELECT COUNT(*) FROM flow_dispatch_log WHERE task_id=? AND lease_epoch=? AND sequence_no=?",
                         Integer.class, task, command.leaseEpoch(), entry.sequence());
@@ -253,16 +265,13 @@ public class DispatcherRpcService implements DispatcherRpc {
                     dropped++;
                     continue;
                 }
-                String message = sanitizeLogMessage(entry.message());
-                String fieldsJson = sanitizeLogFields(entry.fields());
-                if (message.isBlank()) message = "(empty log message)";
                 int inserted = jdbc.update("INSERT IGNORE INTO flow_dispatch_log "
                                 + "(id,task_id,engine_run_id,owner_username,project_id,lease_epoch,"
                                 + "sequence_no,level,message,fields_json,created_at) "
                                 + "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                         UUID.randomUUID().toString(), task, lease.nodeRunId(), lease.owner(),
                         lease.project(), command.leaseEpoch(), entry.sequence(), entry.level(),
-                        message, fieldsJson, now);
+                        entry.message(), entry.fieldsJson(), now);
                 if (inserted == 1) {
                     accepted++;
                     currentCount++;
@@ -281,7 +290,7 @@ public class DispatcherRpcService implements DispatcherRpc {
             String[] nodeRunIds, String cursor, int limit) {
         String owner = validateOwner(ownerUsername);
         String project = validateUuid(projectId);
-        if (limit < 1 || limit > 100 || nodeRunIds == null || nodeRunIds.length > 300) {
+        if (limit < 1 || limit > 100 || nodeRunIds == null || nodeRunIds.length > MAX_LOG_QUERY_NODES) {
             throw new IllegalArgumentException("Invalid log query bounds");
         }
         if (nodeRunIds.length == 0) return new DispatchLogPageView(new DispatchLogView[0], null, limit);
@@ -298,6 +307,7 @@ public class DispatcherRpcService implements DispatcherRpc {
         args.addAll(ids);
         String cursorClause = "";
         if (cursor != null && !cursor.isBlank()) {
+            if (cursor.length() > 512) throw new IllegalArgumentException("Invalid log cursor length");
             LogCursor parsed = decodeLogCursor(cursor);
             cursorClause = " AND (l.created_at < ? OR (l.created_at = ? AND l.id < ?))";
             args.add(parsed.createdAt());
@@ -395,6 +405,7 @@ public class DispatcherRpcService implements DispatcherRpc {
 
     private record LogLeaseRow(String nodeRunId, String owner, String project,
             long epoch, String worker, String token) { }
+    private record SanitizedLog(long sequence, String level, String message, String fieldsJson) { }
     private record LogCursor(Timestamp createdAt, String id) { }
 
     /** 仅读取租户拥有的任务元数据；对浏览器不暴露 leaseToken。 */

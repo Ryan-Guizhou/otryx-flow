@@ -311,6 +311,23 @@ class DispatcherRpcServiceTest {
         assertEquals("STALE", service.appendLogs(batch).code());
     }
 
+    @Test
+    void invalidLogBatchIsRejectedBeforeAnyRecordIsWritten() {
+        DispatchEnqueueCommand command = event(2);
+        service.enqueue(command);
+        DispatchLeaseView lease = service.claim(new DispatchLeaseCommand("worker-invalid-logs", "safe.echo", 1)).leases()[0];
+        java.util.Map<String, String> oversizedFields = new java.util.LinkedHashMap<>();
+        for (int index = 0; index < 17; index++) oversizedFields.put("field" + index, "value");
+        var batch = new DispatchLogBatchCommand("worker-invalid-logs", lease.taskId(),
+                lease.leaseEpoch(), lease.leaseToken(), new DispatchLogEntry[]{
+                    new DispatchLogEntry(1, "INFO", "valid entry before invalid entry", java.util.Map.of()),
+                    new DispatchLogEntry(2, "INFO", "invalid field count", oversizedFields)
+                });
+        var reply = service.appendLogs(batch);
+        assertEquals("INVALID", reply.code());
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM flow_dispatch_log", Integer.class));
+    }
+
     private static DispatchEnqueueCommand event(int max) {
         return new DispatchEnqueueCommand(UUID.randomUUID().toString(), UUID.randomUUID().toString(),
                 "admin", PROJECT, SCHEDULE, JOB, 1, "safe.echo", "{}", 30, max);
