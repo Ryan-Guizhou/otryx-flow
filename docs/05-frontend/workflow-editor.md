@@ -1,19 +1,26 @@
-# DAG 工作流编辑器设计（Proposed）
 
-## 画布实体
-`Node`：id、type（TASK/CONDITION）、label、handlerKey、parameters、timeout/retry、pos；`Edge`：id、source、target、branch（默认/TRUE/FALSE）。仅服务端持久化的规范化 DAG 结构参与发布哈希，视觉坐标可独立存 UI Metadata。
+# DAG 工作流编辑器（FLOW-018）
 
-## 前后端验证边界
-前端快速校验连接是否合法、自环/明显环、缺字段、重复节点 ID；后端必须重新检查**全部** DAG 规则、项目配额、handler 版本和条件表达式白名单，不信任画布校验结果。拓扑排序、重放和重试均使用后端权威 DefinitionRevision。
+**当前实现：Vue 3 + TypeScript + \`@vue-flow/core\`。** 该页面调用已有 Workflow REST API；所有业务持久化与不可变 revision 均由 Metadata 经 OTRYX RPC 管理。当前 PR 的验收状态以 [FLOW-018 验收计划](../06-testing/m3-workflow-canvas-acceptance.md)及最新 CI 为准。
 
-## 交互状态
-草稿：`CLEAN -> DIRTY -> SAVING -> CLEAN`；并发编辑冲突：`SAVING -> CONFLICT`，保留本地草稿供差异比较。发布：`DRAFT -> VALIDATING -> PUBLISHED/REJECTED`，Published Revision 不可编辑，新版从旧版复制草稿生成。
+## 用户界面
 
-## 运行态可视化
-每个 Node 叠加 `READY/LEASED/RUNNING/RETRY_WAIT/SUCCEEDED/FAILED/SKIPPED/CANCEL_REQUESTED` 等标签，点击展示每次 Attempt。双击日志不会导致再次执行。过滤节点和拖拽只是 UI 视图，不修改已发布拓扑。
+- 项目级工作流列表、创建草稿、Task/Condition 节点、Edge 连接/分支、Node 属性 Inspector、结构验证、保存、发布、revision 查看、克隆 revision 为新草稿。
+- Task handler 固定为 \`safe.echo\` / \`safe.fail\`；参数为 JSON object。Condition 使用受限 AST，支持 equals、notEquals、exists、in、and、or，不执行用户脚本。
+- Canvas 提供缩放、平移、拖动、键盘快捷键与本地布局恢复；Node/Edge Inspector 的修改需要应用到画布后才成为待保存领域图。
+- 只读角色可以浏览图和不可变 revision；写入和运行按钮只对 ADMIN 展示，服务端权限检查仍然有效。
 
-## 条件分支确定性
-条件表达式只允许 `equals`, `notEquals`, `exists`, `in`, `and`, `or` 以及有界 JSON Path 字段访问；无 `eval` 或任意脚本。运行时输入/前置输出快照不可变，条件计算结果记录在 Node 事件中。未选中边的节点只在对所有依赖语义完成评估后置为 `SKIPPED`。
+## 持久化契约
 
-## 测试矩阵
-循环检测、重复边、缺失 Handler、保存中的断网、并发 Revision 冲突、浏览器返回后草稿丢失保护、R1 正在运行期间发布 R2、键盘节点选取/删除、100 节点（压测配置，具体限额待冻结）画布流畅度。
+Schema v1 的唯一持久结构为 \`schemaVersion/nodes/edges\`。节点只保存领域字段，边只保存 \`id/source/target/branch\`。Canvas 的 position、selected、VueFlow data、marker 和标签渲染信息仅存在 UI state/localStorage，不进入 graphJson 或 SHA-256。
+
+保存以 \`expectedDraftVersion\` 做 CAS。409 冲突保留本地 JSON 并展示远端 JSON；用户显式选择加载远端或 rebase 本地内容后再次保存。发布后 revision 为只读快照；编辑产生新草稿版本，再发布生成新 revision。运行入口固定 workflowId/revision 并复用 DAG Run Idempotency-Key。
+
+## 快捷键
+
+- \`N\`：添加 Task
+- \`Shift+N\`：添加 Condition
+- 方向键：按节点列表顺序选择节点
+- \`Delete\` / \`Backspace\`：删除当前选中的节点或边
+
+快捷键仅在画布焦点内生效，不会拦截 Inspector 输入框的按键。详细状态机、限制和验收步骤见[设计](../03-design/m3-workflow-canvas.md)与[验收](../06-testing/m3-workflow-canvas-acceptance.md)。

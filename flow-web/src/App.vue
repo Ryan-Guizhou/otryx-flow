@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import RunPanel from './RunPanel.vue'
 import DispatchQueuePanel from './DispatchQueuePanel.vue'
 import SchedulePanel from './SchedulePanel.vue'
+import WorkflowEditor from './WorkflowEditor.vue'
 import type { Project, Job, SessionUser, ApiError, CronPreview } from './api'
 import { createProject, currentUser, listProjects, login, logout, refreshCsrf, listJobs, createJobDraft, publishJob, previewCron } from './api'
 
@@ -12,7 +13,7 @@ const navigation: { id: ViewKey; label: string; icon: string; ready: boolean }[]
   { id: 'overview', label: 'Overview', icon: '▦', ready: true },
   { id: 'projects', label: 'Projects', icon: '▤', ready: true },
   { id: 'jobs', label: 'Jobs', icon: 'J', ready: true },
-  { id: 'workflows', label: 'Workflows', icon: '◇', ready: false },
+  { id: 'workflows', label: 'Workflows', icon: '◇', ready: true },
   { id: 'runs', label: 'Executions', icon: '◷', ready: true },
   { id: 'queue', label: 'Dispatch queue', icon: '▣', ready: true },
   { id: 'workers', label: 'Worker cluster', icon: '⬡', ready: false },
@@ -179,7 +180,7 @@ function selectView(id: ViewKey) { activeView.value = id; error.value = ''; if (
       <nav aria-label="Main navigation"><button v-for="item in navigation" :key="item.id" class="nav-item" :class="{ selected: activeView === item.id }" @click="selectView(item.id)"><span class="nav-icon">{{ item.icon }}</span>{{ item.label }}<span v-if="!item.ready" class="tiny-dot" title="Planned for a future milestone" /></button></nav>
       <div class="sidebar-grow" />
       <div class="sidebar-separator" />
-      <div class="sidebar-bottom"><div class="avatar">{{ user.username[0]?.toUpperCase() }}</div><div><strong>{{ user.username }}</strong><small>Administrator</small></div><button class="signout-icon" title="Sign out" @click="signOut" :disabled="busy">↪</button></div>
+      <div class="sidebar-bottom"><div class="avatar">{{ user.username[0]?.toUpperCase() }}</div><div><strong>{{ user.username }}</strong><small>{{ user.role === 'ADMIN' ? 'Administrator' : 'Read-only' }}</small></div><button class="signout-icon" title="Sign out" @click="signOut" :disabled="busy">↪</button></div>
     </aside>
     <main class="content">
       <header class="topbar"><div class="breadcrumbs">Workspace <span>/</span> <strong>{{ activeTitle }}</strong></div><div class="top-actions"><span class="status-pill"><span :class="['status-dot', backendHealthy ? 'online' : 'offline']" />{{ backendHealthy ? 'RPC connected' : 'RPC unverified' }}</span><button class="icon-btn" title="Reload projects" @click="reloadProjects">↻</button><div class="avatar small">{{ user.username[0]?.toUpperCase() }}</div></div></header>
@@ -226,9 +227,10 @@ function selectView(id: ViewKey) { activeView.value = id; error.value = ''; if (
             <p v-if="cronResult && !cronResult.occurrences.length" class="muted">No future occurrence was found.</p>
           </div>
         </template>
+        <template v-else-if="activeView === 'workflows'"><WorkflowEditor :projects="projects" :user-role="user.role" /></template>
         <template v-else-if="activeView === 'runs'"><RunPanel :projects="projects" /></template>
         <template v-else-if="activeView === 'queue'"><DispatchQueuePanel :projects="projects" /></template>
-        <template v-else><div class="page-title-row"><div><div class="eyebrow">UPCOMING CAPABILITY</div><h1>{{ activeTitle }}</h1><p class="muted">This module is part of the approved project roadmap.</p></div><span class="label-outline">NOT YET IMPLEMENTED</span></div><div class="panel coming-panel"><div class="coming-glyph">◇</div><h2>Coming in {{ activeView === 'workflows' ? 'M3' : 'M2' }}</h2><p>We don't display simulated task runs or invented cluster health data. This page will be activated after the real service and tests are shipped.</p><button class="btn btn-outline" @click="activeView = 'overview'">Back to overview</button></div></template>
+        <template v-else><div class="page-title-row"><div><div class="eyebrow">UPCOMING CAPABILITY</div><h1>{{ activeTitle }}</h1><p class="muted">This module is part of the approved project roadmap.</p></div><span class="label-outline">NOT YET IMPLEMENTED</span></div><div class="panel coming-panel"><div class="coming-glyph">◇</div><h2>Coming soon</h2><p>We don't display simulated task runs or invented cluster health data. This page will be activated after the real service and tests are shipped.</p><button class="btn btn-outline" @click="activeView = 'overview'">Back to overview</button></div></template>
       </div>
     </main>
     <div v-if="showJobCreate" class="modal-backdrop" @click.self="showJobCreate = false"><form class="modal" @submit.prevent="saveJob">

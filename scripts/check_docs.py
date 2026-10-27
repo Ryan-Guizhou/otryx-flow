@@ -14,6 +14,8 @@ REQUIRED = [
     'docs/03-design/consistency-and-recovery.md',
     'docs/04-api/rpc-contracts.md',
     'docs/05-frontend/workflow-editor.md',
+    'docs/03-design/m3-workflow-canvas.md',
+    'docs/06-testing/m3-workflow-canvas-acceptance.md',
     'docs/06-testing/acceptance-plan.md',
     'docs/06-testing/test-cases.md',
     'docs/08-roadmap/issue-backlog.md',

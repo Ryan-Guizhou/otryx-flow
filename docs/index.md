@@ -22,7 +22,7 @@
 
 M1 已在 [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2) 验收。M2 定义/调度/Engine/Dispatcher/Worker 与真实终态闭环均已合并（最终 [PR #18](https://github.com/Ryan-Guizhou/otryx-flow/pull/18) 五项 CI 检查通过）；[M2 终态设计](03-design/m2-outcome-reconciliation.md)和[完整验收](06-testing/m2-final-acceptance.md)。
 
-M3 FLOW-015 / [PR #20](https://github.com/Ryan-Guizhou/otryx-flow/pull/20) 已通过 5/5 CI 合并，提供[DAG 定义及不可变修订](03-design/m3-workflow-definition.md)、[RPC/REST](04-api/m3-workflow-contracts.md)。当前 M3 FLOW-016 / [Issue #21](https://github.com/Ryan-Guizhou/otryx-flow/issues/21) / [Draft PR #22](https://github.com/Ryan-Guizhou/otryx-flow/pull/22) 正在实施[Engine DAG 运行时](03-design/m3-dag-runtime.md)、[RPC/REST](04-api/m3-dag-runtime-contracts.md)、[节点级验收](06-testing/m3-dag-acceptance.md)，需真实多 Worker Compose 验收后方可认定完成。Nacos 3.2.4 仍是唯一活跃注册中心；生产 HTTPS/mTLS 未实现。
+M3 FLOW-015 / [PR #20](https://github.com/Ryan-Guizhou/otryx-flow/pull/20)、FLOW-016 / [PR #22](https://github.com/Ryan-Guizhou/otryx-flow/pull/22) 与 FLOW-017 / [PR #24](https://github.com/Ryan-Guizhou/otryx-flow/pull/24) 已通过五项 CI 和真实 Compose 验收并合并。当前 FLOW-018 / [Issue #25](https://github.com/Ryan-Guizhou/otryx-flow/issues/25) 正在交付 [Vue Flow 画布设计](03-design/m3-workflow-canvas.md)、[前端交互](05-frontend/workflow-editor.md)与[真实验收计划](06-testing/m3-workflow-canvas-acceptance.md)。Nacos 3.2.4 仍是唯一活跃注册中心；生产 HTTPS/mTLS 未实现。
 
 ### FLOW-017：取消、重试及终态竞态（待验收）
 

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import {
   refreshCsrf, currentUser, login, logout, listProjects, createProject
 } from '../flow-web/src/api.ts'
+import { validateWorkflowGraph, serializeWorkflowGraph, defaultWorkflowGraph, computeDefaultLayout } from '../flow-web/src/workflowGraph.ts'
 
 const originalFetch = globalThis.fetch
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
@@ -302,4 +303,117 @@ test('FLOW-017 browser client preserves control idempotency and optimistic Run v
     assert.ok(calls.every(c => c.credentials === 'same-origin'))
     assert.equal(calls[2].method, 'GET')
   } finally { globalThis.fetch = originalFetch }
+})
+
+
+const taskNode = (id, overrides = {}) => ({
+  id, type: 'TASK', label: id, handlerKey: 'safe.echo', parameters: {},
+  timeoutSeconds: 30, maxAttempts: 2, ...overrides
+})
+
+test('FLOW-018 graph editor validates a schema-v1 diamond and computes positions outside graph JSON', () => {
+  const graph = {
+    schemaVersion: 1,
+    nodes: ['A', 'B', 'C', 'D'].map(id => taskNode(id)),
+    edges: [
+      { id: 'ab', source: 'A', target: 'B', branch: 'ALWAYS' },
+      { id: 'ac', source: 'A', target: 'C', branch: 'ALWAYS' },
+      { id: 'bd', source: 'B', target: 'D', branch: 'ALWAYS' },
+      { id: 'cd', source: 'C', target: 'D', branch: 'ALWAYS' }
+    ]
+  }
+  assert.deepEqual(validateWorkflowGraph(graph), [])
+  const positions = computeDefaultLayout(graph)
+  assert.equal(positions.A.x, 70)
+  assert.equal(positions.B.x, 330)
+  assert.equal(positions.C.x, 330)
+  assert.equal(positions.D.x, 590)
+  const created = defaultWorkflowGraph()
+  assert.deepEqual(validateWorkflowGraph(created), [])
+  assert.equal(Object.hasOwn(created.nodes[0], 'position'), false)
+})
+
+test('FLOW-018 condition AST supports bounded operators and requires TRUE/FALSE branches', () => {
+  const graph = {
+    schemaVersion: 1,
+    nodes: [
+      { id: 'C', type: 'CONDITION', label: 'Route', condition: {
+        op: 'and',
+        conditions: [
+          { op: 'exists', path: '$.region' },
+          { op: 'in', path: '$.country', values: ['US', 'CA'] }
+        ]
+      } },
+      taskNode('T'),
+      taskNode('F')
+    ],
+    edges: [
+      { id: 'ct', source: 'C', target: 'T', branch: 'TRUE' },
+      { id: 'cf', source: 'C', target: 'F', branch: 'FALSE' }
+    ]
+  }
+  assert.deepEqual(validateWorkflowGraph(graph), [])
+  const missingBranch = { ...graph, edges: graph.edges.slice(0, 1) }
+  assert.ok(validateWorkflowGraph(missingBranch).some(message => message.includes('TRUE edge') || message.includes('FALSE edge')))
+  const unsafePath = {
+    ...graph,
+    nodes: graph.nodes.map(node => node.id === 'C'
+      ? { ...node, condition: { op: 'exists', path: '$.user; DROP TABLE users' } }
+      : node)
+  }
+  assert.ok(validateWorkflowGraph(unsafePath).some(message => message.includes('safe field path')))
+})
+
+test('FLOW-018 graph validator rejects cycles, unsafe handlers, excess depth and unsupported fields', () => {
+  const diamond = {
+    schemaVersion: 1,
+    nodes: ['A', 'B', 'C', 'D'].map(id => taskNode(id)),
+    edges: [
+      { id: 'ab', source: 'A', target: 'B', branch: 'ALWAYS' },
+      { id: 'ac', source: 'A', target: 'C', branch: 'ALWAYS' },
+      { id: 'bd', source: 'B', target: 'D', branch: 'ALWAYS' },
+      { id: 'cd', source: 'C', target: 'D', branch: 'ALWAYS' }
+    ]
+  }
+  assert.ok(validateWorkflowGraph({ ...diamond, edges: [
+    ...diamond.edges, { id: 'da', source: 'D', target: 'A', branch: 'ALWAYS' }
+  ] }).some(message => message.includes('cycle')))
+  assert.ok(validateWorkflowGraph({ ...diamond, nodes: diamond.nodes.map(node =>
+    node.id === 'A' ? { ...node, handlerKey: 'java.lang.Runtime.exec' } : node
+  ) }).some(message => message.includes('safe.echo or safe.fail')))
+  assert.ok(validateWorkflowGraph({ ...diamond, nodes: diamond.nodes.map(node =>
+    node.id === 'A' ? { ...node, unexpected: true } : node
+  ) }).some(message => message.includes('unsupported field')))
+  const deepNodes = Array.from({ length: 33 }, (_, index) => taskNode('n' + index))
+  const deepEdges = Array.from({ length: 32 }, (_, index) => ({
+    id: 'e' + index, source: 'n' + index, target: 'n' + (index + 1), branch: 'ALWAYS'
+  }))
+  assert.ok(validateWorkflowGraph({ schemaVersion: 1, nodes: deepNodes, edges: deepEdges })
+    .some(message => message.includes('depth exceeds 32')))
+  const oversized = Array.from({ length: 101 }, (_, index) => taskNode('n' + index))
+  assert.ok(validateWorkflowGraph({ schemaVersion: 1, nodes: oversized, edges: [] })
+    .some(message => message.includes('1–100 nodes')))
+})
+
+test('FLOW-018 serializer strips Vue Flow coordinates and runtime metadata before save or publish', () => {
+  const graph = {
+    schemaVersion: 1,
+    nodes: [
+      { ...taskNode('B'), position: { x: 900, y: 300 }, data: { internal: true }, selected: true },
+      taskNode('A')
+    ],
+    edges: [{
+      id: 'ab', source: 'A', target: 'B', branch: 'ALWAYS',
+      markerEnd: 'ArrowClosed', label: 'ALWAYS', data: { branch: 'ALWAYS' }
+    }]
+  }
+  const persisted = JSON.parse(serializeWorkflowGraph(graph))
+  assert.deepEqual(persisted.nodes.map(node => node.id), ['A', 'B'])
+  assert.equal(Object.hasOwn(persisted.nodes[1], 'position'), false)
+  assert.equal(Object.hasOwn(persisted.nodes[1], 'data'), false)
+  assert.equal(Object.hasOwn(persisted.nodes[1], 'selected'), false)
+  assert.equal(Object.hasOwn(persisted.edges[0], 'markerEnd'), false)
+  assert.equal(Object.hasOwn(persisted.edges[0], 'label'), false)
+  assert.equal(Object.hasOwn(persisted.edges[0], 'data'), false)
+  assert.deepEqual(validateWorkflowGraph(persisted), [])
 })

@@ -1,4 +1,4 @@
-> **GitHub execution status (2026-10-27):** M1 PR #2 and M2 Issues #3–#9 merged. FLOW-015 PR #20 and FLOW-016 PR #22 passed 5/5 and merged. FLOW-017 [Issue #23](https://github.com/Ryan-Guizhou/otryx-flow/issues/23) is in progress; cancel/retry has no completed acceptance evidence yet. FLOW-018 and later are planning tasks.
+> **GitHub execution status (2026-10-27):** M1 PR #2 and M2 Issues #3–#9 merged. FLOW-015 PR #20, FLOW-016 PR #22, and FLOW-017 [Issue #23 / PR #24](https://github.com/Ryan-Guizhou/otryx-flow/pull/24) passed 5/5 CI and real Compose acceptance and are merged. FLOW-018 [Issue #25](https://github.com/Ryan-Guizhou/otryx-flow/issues/25) is the active implementation; acceptance depends on the latest PR Head.
 
 # GitHub Issue 计划索引（部分已创建）
 

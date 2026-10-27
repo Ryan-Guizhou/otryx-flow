@@ -120,5 +120,13 @@ assert 'FOR UPDATE' in files['flow-engine/src/main/java/com/peachsoft/otryx/flow
 assert 'FLOW_E2E_M3_CONTROL' in (root/'.github/workflows/m1-integration.yml').read_text(encoding='utf-8')
 assert 'bash scripts/test_m3_control_e2e.sh' in (root/'scripts/test_m1_e2e.sh').read_text(encoding='utf-8')
 assert (root/'scripts/test_m3_control_e2e.sh').is_file()
+# FLOW-018: Vue Flow canvas stays separate from the persisted schema-v1 graph.
+assert 'flow-web/src/WorkflowEditor.vue' in files
+assert 'validateWorkflowGraph' in files['flow-web/src/workflowGraph.ts']
+assert 'serializeWorkflowGraph' in files['flow-web/src/workflowGraph.ts']
+assert 'startDagRun' in files['flow-web/src/WorkflowEditor.vue']
+assert 'localStorage' in files['flow-web/src/WorkflowEditor.vue']
+assert '@vue-flow/core' in (root/'flow-web/package.json').read_text(encoding='utf-8')
+assert 'WorkflowEditor' in files['flow-web/src/App.vue']
 print(f'PASS: M1 static contracts ({len(files)} source/config files)')
 print('NOTE: This does not run Maven, MySQL, network Nacos, OTRYX RPC, npm or a browser.')
