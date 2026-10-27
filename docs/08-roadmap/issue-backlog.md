@@ -36,6 +36,7 @@
 | FLOW-028 | M5 | 前后端 Playwright E2E、规范与发行验收 | AT-01~17；依赖 018/021/026/027 |
 | FLOW-029 | M6 | 实现 GHCR 镜像、受限 HTTPS Demo 部署 | AT-16；依赖 024/028 |
 | FLOW-030 | M6 | 执行公开站点业务验收、Release 与运维交付 | AT-01~17、Release Check；依赖 029 |
+| FLOW-031 | 横切治理 | 统一 Java 编码风格、Javadoc 与结构化日志规范 | [Issue #32](https://github.com/Ryan-Guizhou/otryx-flow/issues/32)；格式/注释/日志安全审计，不改变业务行为 |
 
 ## 每个 Issue 模板
 ```text
