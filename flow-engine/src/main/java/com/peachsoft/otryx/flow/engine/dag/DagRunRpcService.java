@@ -146,7 +146,7 @@ public class DagRunRpcService implements DagRpc {
         String owner = validOwner(ownerUsername), project = validUuid(projectId);
         List<DagRunView> runs = jdbc.query(
                 "SELECT id,project_id,workflow_id,workflow_revision,graph_sha256,status,"
-                        + "created_at,updated_at FROM flow_dag_run WHERE owner_username = ? "
+                        + "created_at,updated_at,run_version FROM flow_dag_run WHERE owner_username = ? "
                         + "AND project_id = ? ORDER BY created_at DESC,id DESC LIMIT ?",
                 (rs, row) -> view(rs), owner, project, MAX_LIST);
         return new DagRunListReply(runs.toArray(DagRunView[]::new));
@@ -208,7 +208,7 @@ public class DagRunRpcService implements DagRpc {
     private DagRunView find(String owner, String project, String id) {
         List<DagRunView> found = jdbc.query(
                 "SELECT id,project_id,workflow_id,workflow_revision,graph_sha256,status,"
-                        + "created_at,updated_at FROM flow_dag_run WHERE owner_username = ? "
+                        + "created_at,updated_at,run_version FROM flow_dag_run WHERE owner_username = ? "
                         + "AND project_id = ? AND id = ?",
                 (rs, row) -> view(rs), owner, project, id);
         return found.isEmpty() ? null : found.getFirst();
