@@ -97,6 +97,11 @@ const currentGraphJson = computed(() => serializeWorkflowGraph(canvasToGraph()))
 const localConflictJson = computed(() => prettyJson(currentGraphJson.value))
 const remoteConflictJson = computed(() => conflictRemote.value ? prettyJson(conflictRemote.value.graphJson) : '')
 const selectedCanvasEdge = computed(() => canvasEdges.value.find(edge => edge.id === selectedEdgeId.value) ?? null)
+const selectedCanvasSourceType = computed(() => {
+  const edge = selectedCanvasEdge.value
+  if (!edge) return null
+  return canvasNodes.value.find(node => node.id === edge.source)?.data.payload.type ?? null
+})
 const selectedEdgeBranch = computed(() => selectedCanvasEdge.value ? String(edgeBranch(selectedCanvasEdge.value) ?? '') : '')
 const canPublish = computed(() => canEdit.value && !hasLocalChanges.value && !!editingWorkflow.value
   && editingWorkflow.value.draftVersion > editingWorkflow.value.lastPublishedDraftVersion
@@ -1178,7 +1183,7 @@ function nodeDragStopped(): void { persistLayout() }
                 <div class="workflow-static-field"><span>Edge ID</span><code>{{ selectedCanvasEdge.id }}</code></div>
                 <label>Branch
                   <select :value="selectedEdgeBranch" :disabled="!canEdit" @change="onEdgeBranchSelect">
-                    <option v-if="canvasNodes.find(node => node.id === selectedCanvasEdge.source)?.data?.payload?.type === 'TASK'" value="ALWAYS">ALWAYS</option>
+                    <option v-if="selectedCanvasSourceType === 'TASK'" value="ALWAYS">ALWAYS</option>
                     <template v-else><option value="TRUE">TRUE</option><option value="FALSE">FALSE</option></template>
                   </select>
                 </label>
