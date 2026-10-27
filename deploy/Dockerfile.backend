@@ -6,7 +6,7 @@ RUN git clone https://github.com/Ryan-Guizhou/otryx-rpc.git /opt/otryx-rpc \
     && cd /opt/otryx-rpc \
     && git checkout "$OTRYX_RPC_SHA" \
     && test "$(git rev-parse HEAD)" = "$OTRYX_RPC_SHA" \
-    && mvn -B -ntp -pl :otryx-codegen,:otryx-spring-boot-starter,:otryx-registry-nacos -am -DskipTests install
+    && mvn -B -ntp -pl :otryx-codegen,:otryx-spring-boot-starter,:otryx-registry-nacos,:otryx-observability-micrometer,:otryx-observability-opentelemetry -am -DskipTests install
 WORKDIR /workspace
 COPY pom.xml ./
 COPY flow-contracts ./flow-contracts

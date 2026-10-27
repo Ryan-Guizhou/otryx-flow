@@ -63,7 +63,7 @@ jobs:
           cd /tmp/otryx-rpc
           git checkout 706b6506e49e1ade70de9c6c64c844fdd4631e17
           test "$(git rev-parse HEAD)" = 706b6506e49e1ade70de9c6c64c844fdd4631e17
-          ./mvnw -B -ntp -pl :otryx-codegen,:otryx-spring-boot-starter,:otryx-registry-nacos -am -DskipTests install
+          ./mvnw -B -ntp -pl :otryx-codegen,:otryx-spring-boot-starter,:otryx-registry-nacos,:otryx-observability-micrometer,:otryx-observability-opentelemetry -am -DskipTests install
       - run: mvn -B -ntp clean verify
   frontend:
     runs-on: ubuntu-latest

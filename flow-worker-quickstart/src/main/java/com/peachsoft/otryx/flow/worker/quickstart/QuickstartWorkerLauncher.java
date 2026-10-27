@@ -12,11 +12,20 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
+import io.micrometer.core.instrument.FunctionCounter;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
 
 /** 仅使用预注册 safe.echo 与 safe.fail Handler；绝不将用户参数解释为代码或可执行类名。 */
 @Component
 public final class QuickstartWorkerLauncher {
     private static final Logger LOGGER = LoggerFactory.getLogger(QuickstartWorkerLauncher.class);
+    private final MeterRegistry meterRegistry;
+
+    /** 注入进程级指标注册器。 */
+    public QuickstartWorkerLauncher(MeterRegistry meterRegistry) {
+        this.meterRegistry = meterRegistry;
+    }
 
     @OtryxRpcReference(version = "1.0.0")
     private DispatcherRpc dispatcher;
@@ -46,6 +55,18 @@ public final class QuickstartWorkerLauncher {
                     throw new IllegalStateException("intentional test failure");
                 }));
         runtime.start();
+        Gauge.builder("flow.worker.available_slots", runtime, value -> value.availableSlots()).register(meterRegistry);
+        Gauge.builder("flow.worker.active_tasks", runtime, value -> value.activeCount()).register(meterRegistry);
+        Gauge.builder("flow.worker.execution.duration.total.seconds", runtime,
+                value -> value.totalExecutionNanos() / 1_000_000_000.0).register(meterRegistry);
+        FunctionCounter.builder("flow.worker.tasks.completed", runtime, value -> value.completedTaskCount())
+                .register(meterRegistry);
+        FunctionCounter.builder("flow.worker.tasks.failed", runtime, value -> value.failedTaskCount())
+                .register(meterRegistry);
+        FunctionCounter.builder("flow.worker.tasks.cancelled", runtime, value -> value.cancelledTaskCount())
+                .register(meterRegistry);
+        FunctionCounter.builder("flow.worker.logs.dropped", runtime, value -> value.droppedLogCount())
+                .register(meterRegistry);
     }
 
     /** 启动阶段失败时关闭已创建的运行器，退出时进行有界 Drain。 */

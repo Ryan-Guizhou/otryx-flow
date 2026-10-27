@@ -1,4 +1,4 @@
-> **GitHub execution status (2026-10-27):** M1/M2 and FLOW-015/016/017 are merged and accepted. FLOW-018 [Issue #25 / PR #26](https://github.com/Ryan-Guizhou/otryx-flow/pull/26) passed all five gates including real Compose and is merged. FLOW-019 [Issue #27](https://github.com/Ryan-Guizhou/otryx-flow/issues/27) is the active implementation.
+> **GitHub execution status (2026-10-27):** M1/M2 and FLOW-015/016/017/018/019 are merged; FLOW-019 passed the real Compose gate in [PR #28](https://github.com/Ryan-Guizhou/otryx-flow/pull/28). FLOW-020 is tracked by [Issue #29](https://github.com/Ryan-Guizhou/otryx-flow/issues/29); FLOW-021 observability is tracked by [Issue #30](https://github.com/Ryan-Guizhou/otryx-flow/issues/30).
 
 # GitHub Issue 计划索引（部分已创建）
 
@@ -25,8 +25,8 @@
 | FLOW-017 | M3 | 实现取消、Retry、最终状态竞态收敛 | FR-013/014，AT-10；依赖 016 |
 | FLOW-018 | M3 | 实现 Vue Flow 工作流画布/编辑/发布 | FR-009/010/011，AT-05；依赖 005/015；[Issue #25 / PR #26](https://github.com/Ryan-Guizhou/otryx-flow/pull/26) 已合并 |
 | FLOW-019 | M3 | 实现 Run 详情、Attempt 进度、日志视图 | FR-019/020，AT-06/12；依赖 013/016/018；[Issue #27](https://github.com/Ryan-Guizhou/otryx-flow/issues/27) 开发中 |
-| FLOW-020 | M4 | 接入受保护 Etcd、mTLS、证书绑定与方法 AuthZ | NFR-001，AT-11；依赖 003/014 |
-| FLOW-021 | M4 | 接入 OpenTelemetry、业务指标、告警及审计 | FR-021/023/028，AT-12/17；依赖 014/019 |
+| FLOW-020 | M4 | Nacos 3.2.4 双通道 TLS、mTLS、证书绑定与方法 AuthZ | NFR-001，AT-11；[Issue #29](https://github.com/Ryan-Guizhou/otryx-flow/issues/29)，依赖 OTRYX RPC #179 |
+| FLOW-021 | M4 | 接入 OpenTelemetry、业务指标、告警及审计 | FR-021/023/028，AT-12/17；[Issue #30](https://github.com/Ryan-Guizhou/otryx-flow/issues/30)，依赖 014/019 |
 | FLOW-022 | M4 | 实现项目配额、Backpressure、Worker Drain | FR-008/015/017，AT-13；依赖 013/020 |
 | FLOW-023 | M4 | 实现备份、恢复、对账和历史清理 | FR-026/027，AT-15；依赖 014/017 |
 | FLOW-024 | M4 | 限制 Demo Handler、访客权限及敏感输入 | FR-024，AT-16；依赖 006/019/020 |

@@ -1,0 +1,102 @@
+# Optional local-only observability overlay. Do not use as a production deployment recipe.
+services:
+  flow-api:
+    depends_on:
+      otel-collector: {condition: service_started}
+    environment:
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: http://otel-collector:4318/v1/traces
+      FLOW_TRACE_SAMPLING_PROBABILITY: "0.1"
+  flow-metadata:
+    depends_on:
+      otel-collector: {condition: service_started}
+    environment:
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: http://otel-collector:4318/v1/traces
+      FLOW_TRACE_SAMPLING_PROBABILITY: "0.1"
+  flow-scheduler:
+    depends_on:
+      otel-collector: {condition: service_started}
+    environment:
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: http://otel-collector:4318/v1/traces
+      FLOW_TRACE_SAMPLING_PROBABILITY: "0.1"
+  flow-scheduler-replica:
+    depends_on:
+      otel-collector: {condition: service_started}
+    environment:
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: http://otel-collector:4318/v1/traces
+      FLOW_TRACE_SAMPLING_PROBABILITY: "0.1"
+  flow-engine:
+    depends_on:
+      otel-collector: {condition: service_started}
+    environment:
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: http://otel-collector:4318/v1/traces
+      FLOW_TRACE_SAMPLING_PROBABILITY: "0.1"
+  flow-dispatcher:
+    depends_on:
+      otel-collector: {condition: service_started}
+    environment:
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: http://otel-collector:4318/v1/traces
+      FLOW_TRACE_SAMPLING_PROBABILITY: "0.1"
+  flow-dispatcher-replica:
+    depends_on:
+      otel-collector: {condition: service_started}
+    environment:
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: http://otel-collector:4318/v1/traces
+      FLOW_TRACE_SAMPLING_PROBABILITY: "0.1"
+  flow-worker-demo:
+    depends_on:
+      otel-collector: {condition: service_started}
+    environment:
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: http://otel-collector:4318/v1/traces
+      MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED: "true"
+      MANAGEMENT_OTLP_METRICS_EXPORT_URL: http://otel-collector:4318/v1/metrics
+      FLOW_TRACE_SAMPLING_PROBABILITY: "0.1"
+      FLOW_OTLP_METRICS_STEP: ${FLOW_OTLP_METRICS_STEP:-15s}
+  observability-probe:
+    image: curlimages/curl:8.12.1
+    profiles: [observability-test]
+    entrypoint: ["curl"]
+    networks: [internal]
+  prometheus:
+    image: prom/prometheus:v3.7.3
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ./deploy/observability/prometheus/prometheus-flow.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/observability/prometheus/flow-alerts.yml:/etc/prometheus/flow-alerts.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      - flow-api
+      - flow-metadata
+      - flow-scheduler
+      - flow-engine
+      - flow-dispatcher
+    networks: [internal]
+    restart: unless-stopped
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.139.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./deploy/observability/otel-collector.yml:/etc/otelcol-contrib/config.yaml:ro
+    networks: [internal]
+    restart: unless-stopped
+  grafana:
+    image: grafana/grafana:12.3.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${FLOW_GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${FLOW_GRAFANA_ADMIN_PASSWORD:?Set a local Grafana password in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks: [internal]
+    restart: unless-stopped
+volumes:
+  prometheus_data:
+  grafana_data:

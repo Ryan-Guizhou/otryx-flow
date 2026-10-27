@@ -35,6 +35,11 @@ class WorkerRuntimeTest {
             assertEquals(rpc.taskId, seenTask.get());
             assertFalse(cancelled.get());
             assertTrue(await(Duration.ofSeconds(3), () -> runtime.activeCount() == 0));
+            assertEquals(1L, runtime.completedTaskCount());
+            assertEquals(0L, runtime.failedTaskCount());
+            assertEquals(0L, runtime.cancelledTaskCount());
+            assertTrue(runtime.totalExecutionNanos() >= 0L);
+            assertEquals(2, runtime.availableSlots());
         }
     }
 
@@ -69,6 +74,8 @@ class WorkerRuntimeTest {
             assertTrue(rpc.completed.await(7, TimeUnit.SECONDS));
             assertEquals("FAILED", rpc.outcome.get());
             assertTrue(await(Duration.ofSeconds(3), () -> runtime.activeCount() == 0));
+            assertEquals(1L, runtime.cancelledTaskCount());
+            assertEquals(0L, runtime.completedTaskCount());
         }
     }
 

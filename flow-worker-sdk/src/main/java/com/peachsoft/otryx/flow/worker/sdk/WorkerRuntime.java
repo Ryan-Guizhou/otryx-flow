@@ -51,6 +51,10 @@ public final class WorkerRuntime implements AutoCloseable {
     private final ScheduledExecutorService logControl;
     private final ArrayBlockingQueue<PendingLog> logQueue = new ArrayBlockingQueue<>(256);
     private final AtomicLong droppedLogs = new AtomicLong();
+    private final AtomicLong completedTasks = new AtomicLong();
+    private final AtomicLong failedTasks = new AtomicLong();
+    private final AtomicLong cancelledTasks = new AtomicLong();
+    private final AtomicLong totalExecutionNanos = new AtomicLong();
     private final ConcurrentHashMap<String, RunningTask> running = new ConcurrentHashMap<>();
     private final AtomicBoolean accepting = new AtomicBoolean(false);
     private final AtomicBoolean closed = new AtomicBoolean(false);
@@ -199,6 +203,7 @@ public final class WorkerRuntime implements AutoCloseable {
 
     private void execute(RunningTask task) {
         task.thread = Thread.currentThread();
+        long startedNanos = System.nanoTime();
         boolean success = false;
         try {
             WorkerContext context = new WorkerContext(task.lease.taskId(), task.lease.runId(), task.cancelled,
@@ -219,6 +224,14 @@ public final class WorkerRuntime implements AutoCloseable {
             LOGGER.warn("Worker handler failed: taskId={}, errorType={}",
                     task.lease.taskId(), failed.getClass().getSimpleName());
         } finally {
+            totalExecutionNanos.addAndGet(Math.max(0L, System.nanoTime() - startedNanos));
+            if (success) {
+                completedTasks.incrementAndGet();
+            } else if (task.cancelled.get() || Thread.currentThread().isInterrupted()) {
+                cancelledTasks.incrementAndGet();
+            } else {
+                failedTasks.incrementAndGet();
+            }
             if (task.terminal.compareAndSet(false, true)) report(task, success ? "SUCCEEDED" : "FAILED");
             running.remove(task.lease.taskId(), task);
             capacity.release(); // The slot is freed only after the handler body actually exits.
@@ -261,6 +274,21 @@ public final class WorkerRuntime implements AutoCloseable {
 
     /** 当前本进程持有但可能尚未完成的执行槽数量。 */
     public int activeCount() { return running.size(); }
+
+    /** 返回当前可领取任务的空闲执行槽数量。 */
+    public int availableSlots() { return capacity.availablePermits(); }
+
+    /** 返回成功退出的 Handler 数量。 */
+    public long completedTaskCount() { return completedTasks.get(); }
+
+    /** 返回失败退出的 Handler 数量。 */
+    public long failedTaskCount() { return failedTasks.get(); }
+
+    /** 返回因取消、中断或租约超时而退出的 Handler 数量。 */
+    public long cancelledTaskCount() { return cancelledTasks.get(); }
+
+    /** 返回 Handler 执行耗时的累计纳秒数。 */
+    public long totalExecutionNanos() { return totalExecutionNanos.get(); }
 
     /** Number of log records dropped because the local bounded buffer was full or the lease expired. */
     public long droppedLogCount() { return droppedLogs.get(); }
