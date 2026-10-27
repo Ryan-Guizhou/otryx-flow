@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, shallowRef, watch } from 'vue'
 import { MarkerType, VueFlow, useVueFlow } from '@vue-flow/core'
 import type { Edge as FlowEdge, Node as FlowNode, Connection } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
@@ -34,7 +34,7 @@ import {
 const props = defineProps<{ projects: Project[]; userRole: string }>()
 type ConditionOperator = 'equals' | 'notEquals' | 'exists' | 'in' | 'and' | 'or'
 interface CanvasData { payload: WorkflowNode }
-type CanvasNode = FlowNode<CanvasData>
+type CanvasNode = FlowNode<CanvasData> & { data: CanvasData }
 type CanvasEdge = FlowEdge<{ branch: WorkflowEdge['branch'] }>
 interface DraftSnapshot {
   graph: WorkflowGraphV1
@@ -49,8 +49,8 @@ const workflows = ref<WorkflowDefinition[]>([])
 const selectedWorkflowId = ref('')
 const editingWorkflow = ref<WorkflowDefinition | null>(null)
 const workflowName = ref('')
-const canvasNodes = ref<CanvasNode[]>([])
-const canvasEdges = ref<CanvasEdge[]>([])
+const canvasNodes = shallowRef<CanvasNode[]>([])
+const canvasEdges = shallowRef<CanvasEdge[]>([])
 const selectedNodeId = ref<string | null>(null)
 const selectedEdgeId = ref<string | null>(null)
 const selectedNodeDraft = ref<WorkflowNode | null>(null)
@@ -1178,7 +1178,7 @@ function nodeDragStopped(): void { persistLayout() }
                 <div class="workflow-static-field"><span>Edge ID</span><code>{{ selectedCanvasEdge.id }}</code></div>
                 <label>Branch
                   <select :value="selectedEdgeBranch" :disabled="!canEdit" @change="onEdgeBranchSelect">
-                    <option v-if="canvasNodes.find(node => node.id === selectedCanvasEdge.source)?.data.payload.type === 'TASK'" value="ALWAYS">ALWAYS</option>
+                    <option v-if="canvasNodes.find(node => node.id === selectedCanvasEdge.source)?.data?.payload?.type === 'TASK'" value="ALWAYS">ALWAYS</option>
                     <template v-else><option value="TRUE">TRUE</option><option value="FALSE">FALSE</option></template>
                   </select>
                 </label>
