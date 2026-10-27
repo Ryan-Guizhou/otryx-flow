@@ -298,6 +298,8 @@ public final class WorkerRuntime implements AutoCloseable {
                         settings.workerId(), key.taskId(), key.epoch(), key.token(), entries));
                 if (reply == null || !("OK".equals(reply.code()) || "LIMIT_REACHED".equals(reply.code()))) {
                     droppedLogs.addAndGet(items.size());
+                } else if (reply.dropped() > 0) {
+                    droppedLogs.addAndGet(reply.dropped());
                 }
             } catch (RuntimeException uncertain) {
                 for (PendingLog item : items) {

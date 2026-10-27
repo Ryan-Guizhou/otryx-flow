@@ -262,19 +262,24 @@ class DispatcherRpcServiceTest {
         DispatchEnqueueCommand command = event(2);
         service.enqueue(command);
         DispatchLeaseView lease = service.claim(new DispatchLeaseCommand("worker-logs", "safe.echo", 1)).leases()[0];
+        java.util.Map<String, String> largeFields = new java.util.LinkedHashMap<>();
+        for (int index = 0; index < 16; index++) {
+            largeFields.put("field" + index + "x".repeat(55), "\\".repeat(256));
+        }
         var entries = new DispatchLogEntry[] {
                 new DispatchLogEntry(1, "INFO", "password=top-secret Bearer abc.def",
                         java.util.Map.of("accessToken", "top-secret", "region", "CN")),
                 new DispatchLogEntry(2, "WARN", "retry scheduled",
-                        java.util.Map.of("credential", "another-secret"))
+                        java.util.Map.of("credential", "another-secret")),
+                new DispatchLogEntry(3, "INFO", "bounded fields", largeFields)
         };
         var batch = new DispatchLogBatchCommand("worker-logs", lease.taskId(),
                 lease.leaseEpoch(), lease.leaseToken(), entries);
         var first = service.appendLogs(batch);
         assertEquals("OK", first.code());
-        assertEquals(2, first.accepted());
+        assertEquals(3, first.accepted());
         var replay = service.appendLogs(batch);
-        assertEquals(2, replay.duplicates());
+        assertEquals(3, replay.duplicates());
         assertEquals(0, replay.accepted());
 
         DispatchLogPageView page1 = service.queryLogs("admin", PROJECT,
@@ -284,13 +289,20 @@ class DispatcherRpcServiceTest {
         DispatchLogPageView page2 = service.queryLogs("admin", PROJECT,
                 new String[]{command.runId()}, page1.nextCursor(), 1);
         assertEquals(1, page2.items().length);
-        assertNull(page2.nextCursor());
+        assertNotNull(page2.nextCursor());
+        DispatchLogPageView page3 = service.queryLogs("admin", PROJECT,
+                new String[]{command.runId()}, page2.nextCursor(), 1);
+        assertEquals(1, page3.items().length);
+        assertNull(page3.nextCursor());
         String all = page1.items()[0].message() + page1.items()[0].fieldsJson()
-                + page2.items()[0].message() + page2.items()[0].fieldsJson();
+                + page2.items()[0].message() + page2.items()[0].fieldsJson()
+                + page3.items()[0].message() + page3.items()[0].fieldsJson();
+        assertTrue(java.util.stream.Stream.of(page1.items()[0], page2.items()[0], page3.items()[0])
+                .allMatch(item -> item.fieldsJson().getBytes(java.nio.charset.StandardCharsets.UTF_8).length <= 4096));
         assertFalse(all.contains("top-secret"));
         assertFalse(all.contains("another-secret"));
         assertTrue(all.contains("[REDACTED]"));
-        assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM flow_dispatch_log", Integer.class));
+        assertEquals(3, jdbc.queryForObject("SELECT COUNT(*) FROM flow_dispatch_log", Integer.class));
 
         jdbc.update("UPDATE flow_dispatch_task SET lease_until=TIMESTAMP '2000-01-01 00:00:00' WHERE id=?",
                 lease.taskId());

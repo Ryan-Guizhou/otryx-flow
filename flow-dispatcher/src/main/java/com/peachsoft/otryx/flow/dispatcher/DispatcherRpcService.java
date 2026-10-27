@@ -60,6 +60,7 @@ public class DispatcherRpcService implements DispatcherRpc {
     private static final int MAX_LOGS_PER_ATTEMPT = 1000;
     private static final int MAX_LOG_MESSAGE_BYTES = 2048;
     private static final int MAX_LOG_FIELDS = 16;
+    private static final int MAX_LOG_FIELD_VALUE_BYTES = 80;
     private static final int MAX_LOG_FIELDS_BYTES = 4096;
     private static final Pattern SENSITIVE_FIELD = Pattern.compile("(?i).*(password|token|secret|authorization|cookie|credential|api[_-]?key).*");
     private static final Pattern SENSITIVE_ASSIGNMENT = Pattern.compile("(?i)(password|token|secret|authorization|cookie|credential|api[_-]?key)(\\s*[:=]\\s*)([^\\s,;]+)");
@@ -340,9 +341,10 @@ public class DispatcherRpcService implements DispatcherRpc {
                 if (key == null || !key.matches("[A-Za-z][A-Za-z0-9_.-]{0,63}")) {
                     throw new IllegalArgumentException("Invalid log field name");
                 }
-                String rawValue = field.getValue() == null ? "" : field.getValue();
+                String rawValue = (field.getValue() == null ? "" : field.getValue())
+                        .replaceAll("\\p{Cntrl}", " ");
                 String value = SENSITIVE_FIELD.matcher(key).matches()
-                        ? "[REDACTED]" : truncateUtf8(sanitizeLogMessage(rawValue), 256);
+                        ? "[REDACTED]" : truncateUtf8(sanitizeLogMessage(rawValue), MAX_LOG_FIELD_VALUE_BYTES);
                 safe.put(key, value);
             }
         }

@@ -23,7 +23,7 @@ Run 列表展示 workflowId、固定 workflowRevision、graph SHA-256、Run 状�
 `WorkerContext.log` → Worker Runtime 有界队列 → 内部 OTRYX RPC `DispatcherRpc.appendLogs` → Dispatcher MySQL `flow_dispatch_log` → Flow API owner/project-scoped 查询 → Web 游标分页。
 
 - Worker 本地队列容量 256；每批最多 32 条；每条消息最多 2 KiB UTF-8；每条最多 16 个字段；字段 JSON 最多 4 KiB。
-- 每个物理 lease attempt 最多持久化 1000 条日志。超预算或本地队列满时日志会被计数丢弃，不能阻塞 handler、心跳或完成 ACK。
+- 每个结构化字段值最多持久化 80 字节，字段 JSON 总计不超过 4 KiB；每个物理 lease attempt 最多持久化 1000 条日志。超预算或本地队列满时日志会被计数丢弃，不能阻塞 handler、心跳或完成 ACK。
 - `(task_id, lease_epoch, sequence_no)` 唯一约束保证批次重放幂等；过期 lease generation 不得追加日志。当前 generation 的终态 ACK 后允许短暂补刷已缓冲日志。
 - 服务端对消息中的 password/token/secret/authorization/cookie/credential/API key 赋值及 Bearer token 做脱敏；同名结构化字段值统一替换为 `[REDACTED]`。字段值中的敏感赋值也执行脱敏。
 - 查询按创建时间与日志 ID 倒序游标分页，每页 1–100 条，单次最多关联 300 个 NodeRun ID（100 个节点及有限 logicalAttempt）。只允许同一 owner/project 下的 NodeRun。

@@ -31,7 +31,7 @@ API 先通过 Engine 验证 Run 与项目/用户归属，再将其 NodeRun ID �
 - `DispatcherRpc.appendLogs(DispatchLogBatchCommand)`：内部 Worker 日志批量写入。请求含 workerId、taskId、leaseEpoch、leaseToken 与 1–32 条有序事件。leaseToken 只在内部 RPC 内传递，不落日志表，也不出现在浏览器响应。
 - `DispatcherRpc.queryLogs(ownerUsername, projectId, nodeRunIds, cursor, limit)`：仅供 Flow API 内部使用；owner/project 条件和 NodeRun ID 必须同时匹配。
 
-事件 sequence 从每个 lease attempt 的 1 开始。重复 sequence 返回 duplicate 计数而不重复插入；旧 lease epoch 返回 STALE；单次执行达到 1000 条日志预算后返回 LIMIT_REACHED 并丢弃超额条目。服务端对消息和字段再次校验、截断和脱敏。Worker 日志失败不得影响 heartbeat、complete 或 Engine 状态推进。
+事件 sequence 从每个 lease attempt 的 1 开始。重复 sequence 返回 duplicate 计数而不重复插入；旧 lease epoch 返回 STALE；单次执行达到 1000 条日志预算后返回 LIMIT_REACHED 并丢弃超额条目。服务端对消息和字段再次校验、截断和脱敏；每个字段值最多 80 字节，字段 JSON 总计不超过 4 KiB。Worker 日志失败不得影响 heartbeat、complete 或 Engine 状态推进。
 
 ## 错误与安全
 
