@@ -39,6 +39,21 @@ class WorkerRuntimeTest {
     }
 
     @Test
+    void handlerLogsAreFlushedAsynchronouslyThroughTheBoundedQueue() throws Exception {
+        FakeDispatcher rpc = new FakeDispatcher();
+        try (WorkerRuntime runtime = new WorkerRuntime(rpc, settings(1, 5), Map.of("safe.echo", (payload, ctx) -> {
+            ctx.log("INFO", "Business step completed", Map.of("step", "validate", "password", "redact-me"));
+        }))) {
+            runtime.start();
+            assertTrue(rpc.completed.await(6, TimeUnit.SECONDS));
+            assertTrue(await(Duration.ofSeconds(4), () -> rpc.logged.get() >= 3),
+                    "Worker start, business, and finish events should be flushed");
+            assertTrue(rpc.logMessages.get().contains("Business step completed"));
+            assertEquals(0, runtime.droppedLogCount());
+        }
+    }
+
+    @Test
     void timeoutCancelsCooperativeHandlerAndReportsFailure() throws Exception {
         FakeDispatcher rpc = new FakeDispatcher();
         CountDownLatch began = new CountDownLatch(1);
@@ -144,6 +159,8 @@ class WorkerRuntimeTest {
         final AtomicInteger claims = new AtomicInteger();
         final AtomicInteger heartbeats = new AtomicInteger();
         final AtomicInteger completionCount = new AtomicInteger();
+        final AtomicInteger logged = new AtomicInteger();
+        final AtomicReference<String> logMessages = new AtomicReference<>("");
         final AtomicReference<String> outcome = new AtomicReference<>();
         final AtomicBoolean staleHeartbeat = new AtomicBoolean();
         final CountDownLatch completed = new CountDownLatch(1);
@@ -154,6 +171,9 @@ class WorkerRuntimeTest {
         }
         @Override public DispatchTaskListReply list(String owner, String project) { throw new UnsupportedOperationException(); }
         @Override public DispatchLogBatchReply appendLogs(DispatchLogBatchCommand command) {
+            logged.addAndGet(command.entries().length);
+            logMessages.updateAndGet(old -> old + " " + java.util.Arrays.stream(command.entries())
+                    .map(DispatchLogEntry::message).collect(java.util.stream.Collectors.joining(" ")));
             return new DispatchLogBatchReply("OK", command.entries().length, 0, 0);
         }
         @Override public DispatchLogPageView queryLogs(String owner, String project, String[] nodeRunIds,
