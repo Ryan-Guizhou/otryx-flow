@@ -72,7 +72,10 @@ def inspect_source(path: Path, require_type_metadata: bool = False) -> list[dict
     except OSError as error:
         return [{"path": str(path), "line": 1, "rule": "file-read", "message": str(error)}]
 
-    relative = path.relative_to(ROOT).as_posix() if path.is_absolute() else path.as_posix()
+    try:
+        relative = path.relative_to(ROOT).as_posix()
+    except ValueError:
+        relative = path.as_posix()
     if raw.startswith(b"\xef\xbb\xbf"):
         findings.append({"path": relative, "line": 1, "rule": "utf8-bom", "message": "Remove UTF-8 BOM."})
     try:
@@ -131,16 +134,6 @@ def inspect_source(path: Path, require_type_metadata: bool = False) -> list[dict
                 "message": "Missing type Javadoc tags: " + ", ".join("@" + tag for tag in missing_tags) + ".",
             })
 
-    if require_type_metadata:
-        findings = [
-            finding for finding in findings
-            if finding["rule"] not in {"missing-type-javadoc", "missing-type-metadata"}
-            or any(
-                TYPE_DECLARATION.match(lines[index])
-                and (finding["line"] == index + 1 or finding["line"] <= index + 1)
-                for index in range(max(0, int(finding["line"]) - 1), min(len(lines), int(finding["line"]) + 45))
-            )
-        ]
     return findings
 
 
