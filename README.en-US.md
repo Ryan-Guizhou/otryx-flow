@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en-US.md)
 
-> **Verified: M1 and M2 (Issues #3–#9); M3 FLOW-015 / Issue #19 is underway.** Production mTLS and public HTTPS remain unimplemented.
+> **Verified: M1/M2 and M3 FLOW-015/016/017; FLOW-018 (Issue #25) is in progress.** Production mTLS and public HTTPS remain unimplemented.
 
 <!-- doc-section:overview -->
 ## Overview
@@ -48,13 +48,13 @@ flowchart TB
 Read the [docs index](docs/index.md), then [requirements](docs/01-product/requirements-prd.md), [architecture](docs/02-architecture/architecture-overview.md), [core design](docs/03-design/consistency-and-recovery.md), [frontend spec](docs/05-frontend/ui-ux-spec.md), [acceptance](docs/06-testing/acceptance-plan.md), and [roadmap](docs/08-roadmap/milestones.md).
 
 <!-- doc-section:status -->
-## M1/M2 and M3 FLOW-015/016 verified; FLOW-017 in progress
+## M1/M2 and M3 FLOW-015/016/017 verified; FLOW-018 in progress
 
-M1 merged in [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2), and the M2 distributed short-job lifecycle merged in [PR #18](https://github.com/Ryan-Guizhou/otryx-flow/pull/18). M3 DAG definitions / immutable revisions merged in [PR #20](https://github.com/Ryan-Guizhou/otryx-flow/pull/20); the real two-Worker DAG runtime and node-level outcomes merged in [PR #22](https://github.com/Ryan-Guizhou/otryx-flow/pull/22). Both passed the five required CI gates.
+M1 merged in [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2), and the M2 distributed short-job lifecycle merged in [PR #18](https://github.com/Ryan-Guizhou/otryx-flow/pull/18). M3 workflow definitions and immutable revisions merged in [PR #20](https://github.com/Ryan-Guizhou/otryx-flow/pull/20); the real Worker DAG runtime merged in [PR #22](https://github.com/Ryan-Guizhou/otryx-flow/pull/22); durable cancellation, lease fencing, and logical retry merged in [PR #24](https://github.com/Ryan-Guizhou/otryx-flow/pull/24). All three M3 backend issues passed five CI gates and real Compose acceptance.
 
-M3 FLOW-017 / [Issue #23](https://github.com/Ryan-Guizhou/otryx-flow/issues/23) is now implementing [durable cancellation and logical retry](docs/03-design/m3-dag-control.md), [REST/RPC control contracts](docs/04-api/m3-dag-control-contracts.md), and [fault-injection acceptance](docs/06-testing/m3-dag-control-acceptance.md). No acceptance claim until real Compose and all other CI gates pass.
+[FLOW-018 / Issue #25](https://github.com/Ryan-Guizhou/otryx-flow/issues/25) is now implementing the [Vue Flow canvas](docs/03-design/m3-workflow-canvas.md), [editor interaction](docs/05-frontend/workflow-editor.md), and [acceptance plan](docs/06-testing/m3-workflow-canvas-acceptance.md). Completion depends on all gates and real Compose evidence for the latest PR Head.
 
-**Boundary:** only isolated TRUSTED_DEVELOPMENT with Nacos 3.2.4. Production mTLS/HTTPS, Vue Flow editing, and external side-effect compensation are future work.
+**Boundary:** the current environment is isolated development with Nacos 3.2.4. Production mTLS/HTTPS, the full Playwright browser matrix, and external side-effect compensation remain future work.
 
 
 <!-- doc-section:contribute -->

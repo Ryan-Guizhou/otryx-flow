@@ -178,16 +178,28 @@ export async function listDispatchTasks(projectId: string): Promise<DispatchTask
 }
 
 /** M3 FLOW-015: definition publishing only; DAG execution and canvas are separate issues. */
-export type WorkflowNode = {
+export type WorkflowScalar = string | number | boolean | null
+export type WorkflowCondition =
+  | { op: 'equals' | 'notEquals'; path: string; value: WorkflowScalar }
+  | { op: 'exists'; path: string }
+  | { op: 'in'; path: string; values: WorkflowScalar[] }
+  | { op: 'and' | 'or'; conditions: WorkflowCondition[] }
+export interface WorkflowTaskNode {
   id: string
-  type: 'TASK' | 'CONDITION'
+  type: 'TASK'
   label?: string
-  handlerKey?: string
-  parameters?: Record<string, unknown>
-  timeoutSeconds?: number
-  maxAttempts?: number
-  condition?: Record<string, unknown>
+  handlerKey: 'safe.echo' | 'safe.fail'
+  parameters: Record<string, unknown>
+  timeoutSeconds: number
+  maxAttempts: number
 }
+export interface WorkflowConditionNode {
+  id: string
+  type: 'CONDITION'
+  label?: string
+  condition: WorkflowCondition
+}
+export type WorkflowNode = WorkflowTaskNode | WorkflowConditionNode
 export type WorkflowEdge = {
   id: string
   source: string
