@@ -13,4 +13,8 @@ public interface EngineRpc {
     /** 仅返回所给 owner/project 内的执行实例；前端身份由 API 门面校验。 */
     @OtryxRpcIdempotent
     EngineRunListReply listRuns(String ownerUsername, String projectId);
+
+    /** 按 Dispatcher eventId 幂等接收 Worker 终态，事务内同时写 Inbox 与 Run。 */
+    @OtryxRpcIdempotent
+    EngineOutcomeReply acknowledgeTaskOutcome(EngineOutcomeCommand event);
 }

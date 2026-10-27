@@ -80,6 +80,11 @@ assert 'lease_epoch' in src and 'FOR UPDATE SKIP LOCKED' in src
 assert 'flow_engine_dispatch_outbox' in src
 assert 'COPY flow-engine ./flow-engine' in (root/'deploy/Dockerfile.backend').read_text(encoding='utf-8')
 assert 'flow_engine_inbox' in src and 'flow_workflow_run' in src
+# The final Dispatcher outcome is persisted with the Worker Attempt and reconciled idempotently.
+assert 'flow_dispatch_outcome_outbox' in src and 'flow_engine_outcome_inbox' in src
+assert 'stageOutcome' in src and 'acknowledgeTaskOutcome' in src
+assert 'FLOW_E2E_M2_FINAL' in (root/'.github/workflows/m1-integration.yml').read_text(encoding='utf-8')
+assert (root/'scripts/test_m2_final_e2e.sh').is_file()
 assert 'flow_schedule_outbox' in src and 'claim_token' in src
 assert 'COPY flow-scheduler ./flow-scheduler' in (root/'deploy/Dockerfile.backend').read_text(encoding='utf-8')
 assert 'COPY flow-scheduler-core ./flow-scheduler-core' in (root/'deploy/Dockerfile.backend').read_text(encoding='utf-8'), 'Include new Maven modules in Docker build'

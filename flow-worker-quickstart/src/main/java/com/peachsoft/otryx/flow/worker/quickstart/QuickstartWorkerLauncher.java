@@ -13,7 +13,7 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
-/** 仅使用预注册 safe.echo Handler；绝不将用户参数解释为代码或可执行类名。 */
+/** 仅使用预注册 safe.echo 与 safe.fail Handler；绝不将用户参数解释为代码或可执行类名。 */
 @Component
 public final class QuickstartWorkerLauncher {
     private static final Logger LOGGER = LoggerFactory.getLogger(QuickstartWorkerLauncher.class);
@@ -36,6 +36,10 @@ public final class QuickstartWorkerLauncher {
                     // Intentionally no external I/O; a trusted, side-effect-free example.
                     LOGGER.info("Safe echo handler executed: taskId={}, runId={}, parameterBytes={}",
                             context.taskId(), context.runId(), parameters.getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
+                },
+                "safe.fail", (parameters, context) -> {
+                    context.checkCancelled();
+                    throw new IllegalStateException("intentional test failure");
                 }));
         runtime.start();
     }

@@ -22,6 +22,7 @@ on:
       - 'scripts/test_m2_engine_e2e.sh'
       - 'scripts/test_m2_dispatcher_e2e.sh'
       - 'scripts/test_m2_worker_e2e.sh'
+      - 'scripts/test_m2_final_e2e.sh'
       - 'scripts/start_dev_compose.sh'
       - '.env.example'
       - 'scripts/test_frontend_api.mjs'

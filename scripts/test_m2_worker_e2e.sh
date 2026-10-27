@@ -47,5 +47,8 @@ lease_token_leak="$(curl --max-time 15 -sS -b "$FLOW_M2_COOKIE" "$BASE/api/v1/pr
 [ "$lease_token_leak" = 0 ] || { echo 'Browser API leaked worker lease token'; exit 1; }
 # Stop the worker after the run to avoid interfering with other tests.
 docker compose --profile worker-demo stop flow-worker-demo
+if [ "${FLOW_E2E_M2_FINAL:-0}" = 1 ]; then
+  FLOW_M2_WORKER_SCHEDULE_ID="$SCHEDULE_ID" bash scripts/test_m2_final_e2e.sh
+fi
 echo 'PASS: real Nacos Worker SDK consumed allowlisted safe.echo, completed lease and persisted SUCCEEDED attempt'
 echo 'NOTE: Dispatcher terminal status is verified; Engine outcome reconciliation is reserved for Issue #9.'

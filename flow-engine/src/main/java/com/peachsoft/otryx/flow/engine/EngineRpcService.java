@@ -4,6 +4,8 @@ import com.peachsoft.otryx.flow.contracts.v1.EngineFireReply;
 import com.peachsoft.otryx.flow.contracts.v1.EngineRpc;
 import com.peachsoft.otryx.flow.contracts.v1.EngineRunListReply;
 import com.peachsoft.otryx.flow.contracts.v1.EngineRunView;
+import com.peachsoft.otryx.flow.contracts.v1.EngineOutcomeCommand;
+import com.peachsoft.otryx.flow.contracts.v1.EngineOutcomeReply;
 import com.peachsoft.otryx.flow.contracts.v1.ScheduleFireCommand;
 import com.peachsoft.otryx.spring.annotation.OtryxRpcService;
 import java.nio.charset.StandardCharsets;
@@ -84,6 +86,85 @@ public class EngineRpcService implements EngineRpc {
                         + "ORDER BY created_at DESC, id DESC LIMIT ?",
                 (rs, index) -> toView(rs), owner, project, MAX_RUNS);
         return new EngineRunListReply(runs.toArray(EngineRunView[]::new));
+    }
+
+
+    /**
+     * 接收可信 Dispatcher 的终态事件，完整载荷 SHA256 和数据库唯一索引共同仲裁重投。
+     * 同一 Run 不允许被第二种终态或者第二个 eventId 覆盖。
+     *
+     * @param command 最终 Worker Attempt 的不可变事件
+     * @return ACCEPTED、DUPLICATE 或 CONFLICT
+     */
+    @Override
+    public EngineOutcomeReply acknowledgeTaskOutcome(EngineOutcomeCommand command) {
+        if (command == null || command.leaseEpoch() < 1
+                || !("SUCCEEDED".equals(command.outcome()) || "FAILED".equals(command.outcome()))) {
+            throw new IllegalArgumentException("Invalid Engine task outcome");
+        }
+        String event = validateUuid(command.eventId());
+        String run = validateUuid(command.runId());
+        String task = validateUuid(command.taskId());
+        String project = validateUuid(command.projectId());
+        String fingerprint = outcomeFingerprint(event, run, task, project,
+                command.leaseEpoch(), command.outcome());
+
+        try {
+            return tx.execute(ignored -> {
+                // A row lock on the Run serializes all terminal attempts and replayed event IDs.
+                List<String[]> runs = jdbc.query("SELECT project_id, status FROM flow_workflow_run "
+                                + "WHERE id = ? FOR UPDATE",
+                        (rs, row) -> new String[]{rs.getString("project_id"), rs.getString("status")}, run);
+                if (runs.isEmpty() || !project.equals(runs.getFirst()[0])) {
+                    return new EngineOutcomeReply("CONFLICT", null, null);
+                }
+                List<String[]> prior = jdbc.query("SELECT event_id, payload_fingerprint, outcome "
+                                + "FROM flow_engine_outcome_inbox WHERE engine_run_id = ?",
+                        (rs, row) -> new String[]{rs.getString("event_id"),
+                                rs.getString("payload_fingerprint"), rs.getString("outcome")}, run);
+                if (!prior.isEmpty()) {
+                    String[] previous = prior.getFirst();
+                    boolean same = event.equals(previous[0]) && fingerprint.equals(previous[1])
+                            && command.outcome().equals(previous[2]);
+                    return same ? new EngineOutcomeReply("DUPLICATE", run, previous[2])
+                            : new EngineOutcomeReply("CONFLICT", null, null);
+                }
+                String status = runs.getFirst()[1];
+                if (!("WAITING_DISPATCH".equals(status) || "DISPATCHED".equals(status))) {
+                    return new EngineOutcomeReply("CONFLICT", null, null);
+                }
+                Timestamp now = Timestamp.from(Instant.now());
+                jdbc.update("INSERT INTO flow_engine_outcome_inbox "
+                                + "(event_id,engine_run_id,task_id,project_id,lease_epoch,outcome,"
+                                + "payload_fingerprint,accepted_at) VALUES (?,?,?,?,?,?,?,?)",
+                        event, run, task, project, command.leaseEpoch(), command.outcome(), fingerprint, now);
+                int changed = jdbc.update("UPDATE flow_workflow_run SET status = ?, updated_at = ? "
+                                + "WHERE id = ? AND status IN ('WAITING_DISPATCH','DISPATCHED')",
+                        command.outcome(), now, run);
+                if (changed != 1) throw new IllegalStateException("Engine terminal outcome CAS lost");
+                return new EngineOutcomeReply("ACCEPTED", run, command.outcome());
+            });
+        } catch (DuplicateKeyException race) {
+            List<String[]> previous = jdbc.query(
+                    "SELECT payload_fingerprint, outcome FROM flow_engine_outcome_inbox "
+                            + "WHERE engine_run_id = ? AND event_id = ?",
+                    (rs, row) -> new String[]{rs.getString(1), rs.getString(2)}, run, event);
+            return !previous.isEmpty() && fingerprint.equals(previous.getFirst()[0])
+                    ? new EngineOutcomeReply("DUPLICATE", run, previous.getFirst()[1])
+                    : new EngineOutcomeReply("CONFLICT", null, null);
+        }
+    }
+
+    private static String outcomeFingerprint(String event, String run, String task, String project,
+                                             long epoch, String outcome) {
+        String canonical = String.join("\u0000", event, run, task, project,
+                Long.toString(epoch), outcome);
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(canonical.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 unavailable", impossible);
+        }
     }
 
     private EngineFireReply replay(Event event) {

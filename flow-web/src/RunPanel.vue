@@ -36,7 +36,7 @@ watch(projectId, () => { void reload() }, { immediate: true })
   </div>
   <div class="panel table-panel">
     <div class="panel-heading"><div><h3>Logical runs <span class="count-tag">{{ runs.length }}</span></h3>
-      <p>WAITING_DISPATCH means the Run is persisted; DISPATCHED means Dispatcher durably accepted a task. Neither implies real Worker execution.</p></div>
+      <p>WAITING_DISPATCH is persisted; DISPATCHED is durably queued; SUCCEEDED or FAILED means the Worker outcome reached the Engine Inbox.</p></div>
       <select v-model="projectId" aria-label="Project for Engine runs">
         <option v-for="project in props.projects" :key="project.id" :value="project.id">{{ project.name }}</option>
       </select>
@@ -48,7 +48,7 @@ watch(projectId, () => { void reload() }, { immediate: true })
         <td class="mono">{{ run.jobId }} / r{{ run.jobRevision }}</td><td class="mono">{{ run.plannedFireUtc }}</td>
         <td><span class="pill-grey">{{ run.status }}</span></td></tr></tbody></table>
     <div v-else-if="!busy" class="empty-state"><h3>No Engine runs yet</h3>
-      <p>Create a Cron schedule under Jobs and wait for a real Trigger to be accepted. Worker execution arrives in a later milestone.</p>
+      <p>Create a Cron schedule under Jobs and wait for a real Trigger to be accepted. Published jobs execute only through explicitly allowlisted trusted Worker Handlers.</p>
     </div>
   </div>
 </template>

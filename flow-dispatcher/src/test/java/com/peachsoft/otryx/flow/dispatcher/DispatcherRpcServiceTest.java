@@ -42,6 +42,12 @@ class DispatcherRpcServiceTest {
         jdbc.execute("CREATE TABLE flow_dispatch_attempt (task_id VARCHAR(36), lease_epoch BIGINT, "
                 + "worker_id VARCHAR(64), lease_token VARCHAR(36), status VARCHAR(24), "
                 + "started_at TIMESTAMP(3), finished_at TIMESTAMP(3), PRIMARY KEY(task_id,lease_epoch))");
+        jdbc.execute("CREATE TABLE flow_dispatch_outcome_outbox (event_id VARCHAR(36) PRIMARY KEY, "
+                + "engine_run_id VARCHAR(36) UNIQUE, task_id VARCHAR(36), project_id VARCHAR(36), "
+                + "lease_epoch BIGINT, outcome VARCHAR(16), delivery_state VARCHAR(16), "
+                + "claim_token VARCHAR(36), lease_until TIMESTAMP(3), attempts INT, "
+                + "next_attempt_at TIMESTAMP(3), last_error VARCHAR(120), "
+                + "delivered_at TIMESTAMP(3), created_at TIMESTAMP(3))");
         manager = new DataSourceTransactionManager(source);
         service = new DispatcherRpcService(jdbc, manager, new ObjectMapper());
     }
@@ -84,6 +90,7 @@ class DispatcherRpcServiceTest {
         assertEquals("OK", service.complete(new DispatchCompleteCommand("worker-bravo", second.taskId(),
                 second.leaseEpoch(), second.leaseToken(), "SUCCEEDED")).code());
         assertEquals("SUCCEEDED", service.list("admin", PROJECT).tasks()[0].status());
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM flow_dispatch_outcome_outbox", Integer.class));
         assertEquals("STALE", service.complete(new DispatchCompleteCommand("worker-bravo", second.taskId(),
                 second.leaseEpoch(), second.leaseToken(), "SUCCEEDED")).code());
         assertEquals("EXPIRED", jdbc.queryForObject("SELECT status FROM flow_dispatch_attempt "
@@ -99,6 +106,7 @@ class DispatcherRpcServiceTest {
         assertEquals("READY", service.complete(new DispatchCompleteCommand("worker-alpha", a.taskId(),
                 a.leaseEpoch(), a.leaseToken(), "FAILED")).taskStatus());
         assertEquals(0, service.claim(new DispatchLeaseCommand("worker-bravo", "safe.echo", 1)).leases().length);
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM flow_dispatch_outcome_outbox", Integer.class));
         jdbc.update("UPDATE flow_dispatch_task SET next_attempt_at = TIMESTAMP '2000-01-01 00:00:00'");
         var b = service.claim(new DispatchLeaseCommand("worker-bravo", "safe.echo", 1)).leases()[0];
         assertEquals(2, b.attempt());
@@ -106,6 +114,7 @@ class DispatcherRpcServiceTest {
                 b.leaseEpoch(), b.leaseToken(), "FAILED")).taskStatus());
         assertEquals(0, service.claim(new DispatchLeaseCommand("worker-alpha", "safe.echo", 1)).leases().length);
         assertEquals("FAILED", service.list("admin", PROJECT).tasks()[0].status());
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM flow_dispatch_outcome_outbox", Integer.class));
     }
 
     @Test
@@ -115,6 +124,7 @@ class DispatcherRpcServiceTest {
         jdbc.update("UPDATE flow_dispatch_task SET lease_until = TIMESTAMP '2000-01-01 00:00:00'");
         assertEquals(1, service.expireExhaustedOnce());
         assertEquals("FAILED", service.list("admin", PROJECT).tasks()[0].status());
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM flow_dispatch_outcome_outbox", Integer.class));
         assertEquals(0, service.claim(new DispatchLeaseCommand("worker-next", "safe.echo", 1)).leases().length);
         assertEquals("STALE", service.complete(new DispatchCompleteCommand("worker-one", claim.taskId(),
                 claim.leaseEpoch(), claim.leaseToken(), "SUCCEEDED")).code());
