@@ -6,6 +6,12 @@ on:
       - 'docs/**'
       - 'AGENTS.md'
       - 'scripts/check_docs.py'
+      - 'scripts/check_java_style.py'
+      - 'scripts/test_check_java_style.py'
+      - 'docs/engineering/java-coding-standard.md'
+      - '.editorconfig'
+      - '.gitattributes'
+      - '**/*.java'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
 permissions:
@@ -15,8 +21,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Check Markdown documents and requirement traceability
         run: python3 scripts/check_docs.py
+      - name: Test Java style audit rules
+        run: python3 scripts/test_check_java_style.py
+      - name: Audit existing Java style debt
+        run: python3 scripts/check_java_style.py --audit --report target/java-style-audit.json
+      - name: Enforce style on changed Java files
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python3 scripts/check_java_style.py --changed --base "$BASE_SHA"
+      - name: Upload Java style audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-style-audit
+          path: target/java-style-audit.json
+          if-no-files-found: warn
