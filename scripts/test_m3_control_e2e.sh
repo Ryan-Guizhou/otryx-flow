@@ -87,7 +87,7 @@ def link(a,b):
 def write(file,payload): (d/file).write_text(json.dumps(payload),encoding="utf-8")
 graphs={
     "cancel": {"schemaVersion":1,"nodes":[node("A"),node("B")],"edges":[link("A","B")]},
-    "success": {"schemaVersion":1,"nodes":[node("A")],"edges":[]},
+    "success": {"schemaVersion":1,"nodes":[node("A","safe.fail")],"edges":[]},
     "fail": {"schemaVersion":1,"nodes":[node("A","safe.fail")],"edges":[]}
 }
 for name,graph in graphs.items():
@@ -170,14 +170,16 @@ VERSION2="$(field "$TMP/success-started.json" runVersion)"
 get "$RUNS/$RUN2" > "$TMP/success-detail.json"
 NODE2="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["nodes"][0]["id"])' "$TMP/success-detail.json")"
 wait_task "$NODE2"
-probe claim 'workerId=flow-control-probe&handlerKey=safe.echo' > "$TMP/lease.json"
-read -r TASK EPOCH TOKEN < <(python3 - "$TMP/lease.json" <<'PY'
+# Use safe.fail for the fenced probe to isolate it from recurring M2 safe.echo Cron tasks.
+probe claim 'workerId=flow-control-probe&handlerKey=safe.fail' > "$TMP/lease.json"
+read -r TASK EPOCH TOKEN CLAIM_RUN < <(python3 - "$TMP/lease.json" <<'PY'
 import json,sys
 r=json.load(open(sys.argv[1]))["leases"]
 assert len(r)==1
-print(r[0]["taskId"],r[0]["leaseEpoch"],r[0]["leaseToken"])
+print(r[0]["taskId"],r[0]["leaseEpoch"],r[0]["leaseToken"],r[0]["runId"])
 PY
 )
+[ "$CLAIM_RUN" = "$NODE2" ] || { echo "CI probe claimed unrelated NodeRun: $CLAIM_RUN != $NODE2"; exit 1; }
 code="$(cancel_run "$RUN2" "$VERSION2" "$(key)" "$TMP/lease-cancel.json")"
 expected "$code" 200 "$TMP/lease-cancel.json"
 wait_run "$RUN2" CANCELLED "$TMP/lease-cancel-done.json"
