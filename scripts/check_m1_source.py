@@ -13,7 +13,13 @@ for f in needed:
 for f in files:
     if f.endswith('.java'):
         assert re.search(r'^package\s+com\.peachsoft\.otryx\.flow\.',files[f],re.M), f
-        assert files[f].count('{') == files[f].count('}'), f
+        # Brace balance must ignore Java strings, text blocks, chars and comments.
+        # DAG fixtures legitimately contain JSON object literals with unmatched braces.
+        without_literals = re.sub(r'"""[\s\S]*?"""', '""', files[f])
+        without_literals = re.sub(r'"(?:\\.|[^"\\])*"', '""', without_literals)
+        without_literals = re.sub(r"'(?:\\.|[^'\\])*'", "''", without_literals)
+        without_literals = re.sub(r'/\*[\s\S]*?\*/|//[^\n]*', '', without_literals)
+        assert without_literals.count('{') == without_literals.count('}'), f
 src='\n'.join(files.values())
 for contract in ['@OtryxRpcContract','@OtryxRpcService','@OtryxRpcReference','@OtryxRpcIdempotent']:
     assert contract in src, contract
