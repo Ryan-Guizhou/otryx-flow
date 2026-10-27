@@ -22,7 +22,7 @@ TYPE_DECLARATION = re.compile(
     r"^\s*(?:(?:public|protected|private)\s+)?@interface\s+[A-Za-z_$][\w$]*\b"
 )
 REQUIRED_TYPE_TAGS = ("Author", "Version", "CreateTime")
-CREATE_TIME_FORMAT = re.compile(r"^\\d{4}/\\d{1,2}/\\d{1,2} \\d{2}:\\d{2}$")
+CREATE_TIME_FORMAT = re.compile(r"^\d{4}/\d{1,2}/\d{1,2} \d{2}:\d{2}$")
 PLACEHOLDER_VALUE = re.compile(r"(?i)(todo|unknown|placeholder|replace.?me|真实作者|真实时间|填写作者|填写时间|<[^>]+>)")
 
 
@@ -88,6 +88,9 @@ def inspect_source(path: Path, require_type_metadata: bool = False) -> list[dict
     if b"\r" in raw:
         findings.append({"path": relative, "line": 1, "rule": "line-ending", "message": "Use LF line endings."})
 
+    if raw and not raw.endswith(b"\n"):
+        findings.append({"path": relative, "line": 1, "rule": "missing-final-newline", "message": "End the file with a newline."})
+
     lines = text.split("\n")
     for line_number, line in enumerate(lines, start=1):
         if "\t" in line:
@@ -128,7 +131,7 @@ def inspect_source(path: Path, require_type_metadata: bool = False) -> list[dict
         metadata_values: dict[str, str] = {}
         for tag in REQUIRED_TYPE_TAGS:
             match = re.search(
-                r"^\\s*\\*\\s*@" + re.escape(tag) + r"\\s*(.*?)\\s*$",
+                r"^\s*\*\s*@" + re.escape(tag) + r"\s*(.*?)\s*$",
                 javadoc,
                 re.MULTILINE,
             )
