@@ -75,6 +75,25 @@ public final class Example {
         rules = {str(item["rule"]) for item in inspect_source(self.source, require_type_metadata=True)}
         self.assertIn("missing-type-metadata", rules)
 
+    def test_rejects_placeholder_and_malformed_creation_time(self) -> None:
+        self.source.write_text(
+            """package example;
+
+/**
+ * 示例服务。
+ *
+ * @Author TODO
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026-10-27
+ */
+public final class Example {
+}
+""",
+            encoding="utf-8",
+        )
+        rules = {str(item["rule"]) for item in inspect_source(self.source, require_type_metadata=True)}
+        self.assertIn("invalid-type-metadata", rules)
+
     def test_audit_mode_does_not_require_legacy_metadata(self) -> None:
         self.source.write_text(
             """package example;
