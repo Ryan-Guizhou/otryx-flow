@@ -17,18 +17,9 @@
 
 **文档版本规定：** 所有新设计在具体文档中标注 Proposed；上线后将“已实现”证据链接到 Commit、CI、实际请求与截图，不逆向宣称计划就是事实。
 
-M1 verified main@3291adcb: [Developer Compose](07-operations/m1-developer-compose.md) | [Implemented REST/RPC contract](04-api/m1-implemented-contracts.md) | [M1 evidence status](06-testing/m1-validation-report.md). M1 PR #2 completed Maven/Vue/real Compose RPC/MySQL E2E. Public HTTPS deployment remains unverified.
 
-M2 FLOW-008 verified in PR #10 (main@97d29bb3): [Job REST/RPC contract](04-api/m2-job-contracts.md) | [Job acceptance plan](06-testing/m2-job-acceptance.md). FLOW-009 Cron preview is [design candidate](03-design/cron-timezone.md) + [REST API](04-api/cron-preview.md). Preview is not execution or persisted scheduling.
+## 已实现与正在开发
 
-FLOW-010 / merged PR #12: [Implementation](03-design/m2-scheduler-implementation.md) | [API contracts](04-api/m2-scheduler-contracts.md) | [Acceptance](06-testing/m2-scheduler-acceptance.md). Durable fires / Outbox do **not** mean a Handler has run; FLOW-011 Engine acceptance is the next step, while Dispatcher/Worker remain future milestones.
+M1 已在 [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2) 验收。M2 定义/调度/Engine/Dispatcher/Worker 与真实终态闭环均已合并（最终 [PR #18](https://github.com/Ryan-Guizhou/otryx-flow/pull/18) 五项 CI 检查通过）；[M2 终态设计](03-design/m2-outcome-reconciliation.md)和[完整验收](06-testing/m2-final-acceptance.md)。
 
-FLOW-011 / merged PR #13: [Inbox + Relay implementation](03-design/m2-engine-outbox.md) | [RPC/REST contracts](04-api/m2-engine-contracts.md) | [Acceptance](06-testing/m2-engine-acceptance.md). `WAITING_DISPATCH` proves Run persistence, not physical task execution.
-
-FLOW-012 / merged PR #14: [Lease + Fencing design](03-design/m2-dispatcher-leases.md) | [RPC / REST contract](04-api/m2-dispatcher-contracts.md) | [Acceptance gates](06-testing/m2-dispatcher-acceptance.md). Task queue acceptance is **not** proof of physical Worker execution.
-
-Current registry migration (Issue #15): [Nacos 3.2.4-only setup and exclusive V2 mapping bootstrap](07-operations/nacos-registry.md) | [Developer Compose](07-operations/m1-developer-compose.md). Etcd is only historical CI evidence, not an active runtime option.
-
-FLOW-013 / Issue #8 candidate: [bounded Worker SDK design](03-design/m2-worker-sdk.md) | [Quickstart](../flow-worker-quickstart/README.md) | [real-Worker acceptance](06-testing/m2-worker-acceptance.md). Worker `SUCCEEDED` proves Dispatcher attempt completion; Engine outcome reconciliation is Issue #9.
-
-FLOW-014 / Issue #9 development candidate: [terminal Dispatcher Outcome Outbox and Engine Inbox](03-design/m2-outcome-reconciliation.md) | [full Nacos distributed execution acceptance](06-testing/m2-final-acceptance.md). Terminal states must be backed by actual Worker executions; production mTLS and full DAG are separate milestones.
+M3 FLOW-015 / [Issue #19](https://github.com/Ryan-Guizhou/otryx-flow/issues/19) 正在 [Draft PR #20](https://github.com/Ryan-Guizhou/otryx-flow/pull/20) 实施：[DAG 定义及不可变修订](03-design/m3-workflow-definition.md)、[RPC/REST API](04-api/m3-workflow-contracts.md)、[验收](06-testing/m3-workflow-acceptance.md)。M3 的 Engine DAG 运行、Vue Flow 画布尚未完成。注册中心使用 Nacos 3.2.4，详见[启动说明](07-operations/nacos-registry.md)，当前网络配置仅供受隔离的开发测试。

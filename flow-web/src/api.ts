@@ -176,3 +176,78 @@ export interface DispatchTask {
 export async function listDispatchTasks(projectId: string): Promise<DispatchTask[]> {
   return call(`/api/v1/projects/${encodeURIComponent(projectId)}/dispatch-tasks`)
 }
+
+/** M3 FLOW-015: definition publishing only; DAG execution and canvas are separate issues. */
+export type WorkflowNode = {
+  id: string
+  type: 'TASK' | 'CONDITION'
+  label?: string
+  handlerKey?: string
+  parameters?: Record<string, unknown>
+  timeoutSeconds?: number
+  maxAttempts?: number
+  condition?: Record<string, unknown>
+}
+export type WorkflowEdge = {
+  id: string
+  source: string
+  target: string
+  branch: 'ALWAYS' | 'TRUE' | 'FALSE'
+}
+export interface WorkflowGraphV1 {
+  schemaVersion: 1
+  nodes: WorkflowNode[]
+  edges: WorkflowEdge[]
+}
+export interface WorkflowDefinition {
+  id: string
+  projectId: string
+  name: string
+  graphJson: string
+  draftVersion: number
+  publishedRevision: number
+  lastPublishedDraftVersion: number
+  updatedAt: string
+}
+export interface WorkflowRevision {
+  workflowId: string
+  revision: number
+  name: string
+  graphJson: string
+  graphSha256: string
+  sourceDraftVersion: number
+  publishedAt: string
+}
+export interface WorkflowDraftInput { name: string; graphJson: string }
+const workflowsPath = (projectId: string) =>
+  '/api/v1/projects/' + encodeURIComponent(projectId) + '/workflows'
+
+export async function listWorkflows(projectId: string): Promise<WorkflowDefinition[]> {
+  return call(workflowsPath(projectId))
+}
+export async function createWorkflowDraft(projectId: string,
+  input: WorkflowDraftInput, requestKey: string): Promise<WorkflowDefinition> {
+  return call(workflowsPath(projectId), {
+    method: 'POST', headers: { 'Idempotency-Key': requestKey },
+    body: JSON.stringify(input)
+  })
+}
+export async function saveWorkflowDraft(projectId: string,
+  workflow: WorkflowDefinition, input: WorkflowDraftInput): Promise<WorkflowDefinition> {
+  return call(workflowsPath(projectId) + '/' + encodeURIComponent(workflow.id) + '/draft', {
+    method: 'PUT',
+    body: JSON.stringify({ ...input, expectedDraftVersion: workflow.draftVersion })
+  })
+}
+export async function publishWorkflow(projectId: string,
+  workflow: WorkflowDefinition, requestKey: string): Promise<WorkflowDefinition> {
+  return call(workflowsPath(projectId) + '/' + encodeURIComponent(workflow.id) + '/publish', {
+    method: 'POST', headers: { 'Idempotency-Key': requestKey },
+    body: JSON.stringify({ expectedDraftVersion: workflow.draftVersion })
+  })
+}
+export async function getWorkflowRevision(projectId: string, workflowId: string,
+  revision: number): Promise<WorkflowRevision> {
+  return call(workflowsPath(projectId) + '/' + encodeURIComponent(workflowId) +
+    '/revisions/' + revision)
+}
