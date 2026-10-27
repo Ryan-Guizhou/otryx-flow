@@ -48,13 +48,13 @@ flowchart TB
 Read the [docs index](docs/index.md), then [requirements](docs/01-product/requirements-prd.md), [architecture](docs/02-architecture/architecture-overview.md), [core design](docs/03-design/consistency-and-recovery.md), [frontend spec](docs/05-frontend/ui-ux-spec.md), [acceptance](docs/06-testing/acceptance-plan.md), and [roadmap](docs/08-roadmap/milestones.md).
 
 <!-- doc-section:status -->
-## M2 verified; M3 FLOW-015 in progress
+## M1/M2 and M3 FLOW-015 verified; FLOW-016 in progress
 
-M1 merged after validation in [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2). M2 Issues #3–#9 have been merged individually; final [PR #18](https://github.com/Ryan-Guizhou/otryx-flow/pull/18) passed backend, frontend, source, docs and real Nacos/MySQL/RPC/Worker Compose gates on the same Head SHA, completing short-task terminal outcome reconciliation.
+M1 merged in [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2). M2 distributed short-job execution passed five gates and merged in final [PR #18](https://github.com/Ryan-Guizhou/otryx-flow/pull/18). M3 FLOW-015 merged in [PR #20](https://github.com/Ryan-Guizhou/otryx-flow/pull/20) after Backend, Frontend, Source, Docs and real Nacos/MySQL/OTRYX RPC Compose checks; it delivers bounded DAG definition validation, optimistic drafts and immutable revisions.
 
-M3 [Issue #19 / FLOW-015](https://github.com/Ryan-Guizhou/otryx-flow/issues/19) is being implemented in [Draft PR #20](https://github.com/Ryan-Guizhou/otryx-flow/pull/20): workflow definitions, backend DAG validation, CAS drafts and immutable revisions. Refer to [design](docs/03-design/m3-workflow-definition.md), [REST/RPC](docs/04-api/m3-workflow-contracts.md), and [acceptance](docs/06-testing/m3-workflow-acceptance.md). PR #20 is not complete until its final gate passes.
+The actual DAG runtime is in [Issue #21](https://github.com/Ryan-Guizhou/otryx-flow/issues/21) / [PR #22](https://github.com/Ryan-Guizhou/otryx-flow/pull/22): node-level dispatch, conditional SKIPPED outcomes, Outbox/Inbox and recovery. **The full real multi-Worker acceptance gate has not yet passed.** See [design](docs/03-design/m3-dag-runtime.md), [API](docs/04-api/m3-dag-runtime-contracts.md), and [acceptance](docs/06-testing/m3-dag-acceptance.md).
 
-**Boundary:** FLOW-015 does not execute DAGs; parallel NodeRuns, conditional advancement, cancel/retry and Vue Flow canvas come later. Nacos 3.2.4 is the only active registry. The current RPC profile is isolated TRUSTED_DEVELOPMENT, not production mTLS or public HTTPS.
+**Boundary:** isolated TRUSTED_DEVELOPMENT + Nacos 3.2.4 only. Production mTLS, public HTTPS, full cancellation/retry and Vue Flow canvas are later milestones.
 
 <!-- doc-section:contribute -->
 ## Engineering

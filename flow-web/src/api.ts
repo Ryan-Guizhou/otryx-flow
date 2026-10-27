@@ -251,3 +251,43 @@ export async function getWorkflowRevision(projectId: string, workflowId: string,
   return call(workflowsPath(projectId) + '/' + encodeURIComponent(workflowId) +
     '/revisions/' + revision)
 }
+
+/** M3 FLOW-016: durable DAG instances distinct from M2 short-task Runs. */
+export interface DagRun {
+  id: string
+  projectId: string
+  workflowId: string
+  workflowRevision: number
+  graphSha256: string
+  status: 'RUNNING' | 'SUCCEEDED' | 'FAILED'
+  createdAt: string
+  updatedAt: string
+}
+export type DagNodePhase = 'BLOCKED' | 'READY' | 'DISPATCHED' |
+  'SUCCEEDED' | 'FAILED' | 'SKIPPED'
+export interface DagNode {
+  id: string
+  nodeId: string
+  type: 'TASK' | 'CONDITION'
+  status: DagNodePhase
+  conditionDecision: boolean | null
+  updatedAt: string
+}
+export interface DagRunDetail { run: DagRun; nodes: DagNode[] }
+export interface DagStartInput { workflowId: string; workflowRevision: number; inputJson: string }
+const dagPath = (projectId: string) =>
+  '/api/v1/projects/' + encodeURIComponent(projectId) + '/workflow-runs'
+
+export async function startDagRun(projectId: string,
+  input: DagStartInput, requestKey: string): Promise<DagRun> {
+  return call(dagPath(projectId), {
+    method: 'POST', headers: { 'Idempotency-Key': requestKey },
+    body: JSON.stringify(input)
+  })
+}
+export async function listDagRuns(projectId: string): Promise<DagRun[]> {
+  return call(dagPath(projectId))
+}
+export async function getDagRun(projectId: string, runId: string): Promise<DagRunDetail> {
+  return call(dagPath(projectId) + '/' + encodeURIComponent(runId))
+}
