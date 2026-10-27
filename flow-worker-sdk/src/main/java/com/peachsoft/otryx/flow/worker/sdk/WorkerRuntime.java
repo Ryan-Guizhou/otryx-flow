@@ -6,12 +6,19 @@ import com.peachsoft.otryx.flow.contracts.v1.DispatchLeaseCommand;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchLeaseReply;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchLeaseView;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchMutationReply;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchLogBatchCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchLogBatchReply;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchLogEntry;
 import com.peachsoft.otryx.flow.contracts.v1.DispatcherRpc;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -41,6 +48,9 @@ public final class WorkerRuntime implements AutoCloseable {
     private final Semaphore capacity;
     private final ExecutorService execution;
     private final ScheduledExecutorService control;
+    private final ScheduledExecutorService logControl;
+    private final ArrayBlockingQueue<PendingLog> logQueue = new ArrayBlockingQueue<>(256);
+    private final AtomicLong droppedLogs = new AtomicLong();
     private final ConcurrentHashMap<String, RunningTask> running = new ConcurrentHashMap<>();
     private final AtomicBoolean accepting = new AtomicBoolean(false);
     private final AtomicBoolean closed = new AtomicBoolean(false);
@@ -73,6 +83,8 @@ public final class WorkerRuntime implements AutoCloseable {
         // Keep the standalone non-web Worker JVM alive until explicit close().
         this.control = Executors.newScheduledThreadPool(2,
                 runnable -> Thread.ofPlatform().name("flow-worker-control-", 0).daemon(false).unstarted(runnable));
+        this.logControl = Executors.newSingleThreadScheduledExecutor(
+                runnable -> Thread.ofPlatform().name("flow-worker-log-", 0).daemon(false).unstarted(runnable));
     }
 
     /** 启动轮询与定期续租。多次调用 start 不会产生多套线程。 */
@@ -83,6 +95,7 @@ public final class WorkerRuntime implements AutoCloseable {
                 settings.pollInterval().toMillis(), TimeUnit.MILLISECONDS);
         control.scheduleAtFixedRate(this::tickSafe, settings.heartbeatInterval().toMillis(),
                 settings.heartbeatInterval().toMillis(), TimeUnit.MILLISECONDS);
+        logControl.scheduleWithFixedDelay(this::flushLogsSafe, 250, 250, TimeUnit.MILLISECONDS);
         LOGGER.info("Worker started: workerId={}, handlers={}, maxConcurrent={}",
                 settings.workerId(), handlers.keySet(), settings.maxConcurrent());
     }
@@ -188,15 +201,21 @@ public final class WorkerRuntime implements AutoCloseable {
         task.thread = Thread.currentThread();
         boolean success = false;
         try {
-            WorkerContext context = new WorkerContext(task.lease.taskId(), task.lease.runId(), task.cancelled);
+            WorkerContext context = new WorkerContext(task.lease.taskId(), task.lease.runId(), task.cancelled,
+                    (level, message, fields) -> enqueueLog(task, level, message, fields));
+            context.log("INFO", "Handler execution started", Map.of("handlerKey", task.lease.handlerKey()));
             context.checkCancelled();
             task.handler.execute(task.lease.parametersJson(), context);
             context.checkCancelled();
             success = true;
+            context.log("INFO", "Handler execution finished", Map.of("outcome", "SUCCEEDED"));
         } catch (InterruptedException cancelled) {
             Thread.currentThread().interrupt();
+            enqueueLog(task, "WARN", "Handler execution interrupted", Map.of());
             LOGGER.warn("Worker handler interrupted: taskId={}", task.lease.taskId());
         } catch (Exception failed) {
+            enqueueLog(task, "ERROR", "Handler execution failed",
+                    Map.of("errorType", failed.getClass().getSimpleName()));
             LOGGER.warn("Worker handler failed: taskId={}, errorType={}",
                     task.lease.taskId(), failed.getClass().getSimpleName());
         } finally {
@@ -243,6 +262,65 @@ public final class WorkerRuntime implements AutoCloseable {
     /** 当前本进程持有但可能尚未完成的执行槽数量。 */
     public int activeCount() { return running.size(); }
 
+    /** Number of log records dropped because the local bounded buffer was full or the lease expired. */
+    public long droppedLogCount() { return droppedLogs.get(); }
+
+    private void enqueueLog(RunningTask task, String level, String message, Map<String, String> fields) {
+        long sequence = task.logSequence.incrementAndGet();
+        PendingLog pending = new PendingLog(task.lease.taskId(), settings.workerId(),
+                task.lease.leaseEpoch(), task.lease.leaseToken(),
+                new DispatchLogEntry(sequence, level, message, Map.copyOf(fields)), 0);
+        if (!logQueue.offer(pending)) droppedLogs.incrementAndGet();
+    }
+
+    private void flushLogsSafe() {
+        try { flushLogsOnce(); }
+        catch (RuntimeException failure) {
+            LOGGER.warn("Worker log flush failed: errorType={}", failure.getClass().getSimpleName());
+        }
+    }
+
+    private void flushLogsOnce() {
+        List<PendingLog> batch = new ArrayList<>(32);
+        logQueue.drainTo(batch, 32);
+        if (batch.isEmpty()) return;
+        Map<LogGroupKey, List<PendingLog>> groups = new LinkedHashMap<>();
+        for (PendingLog item : batch) {
+            groups.computeIfAbsent(new LogGroupKey(item.taskId(), item.epoch(), item.token()),
+                    ignored -> new ArrayList<>()).add(item);
+        }
+        for (Map.Entry<LogGroupKey, List<PendingLog>> group : groups.entrySet()) {
+            LogGroupKey key = group.getKey();
+            List<PendingLog> items = group.getValue();
+            DispatchLogEntry[] entries = items.stream().map(PendingLog::entry).toArray(DispatchLogEntry[]::new);
+            try {
+                DispatchLogBatchReply reply = dispatcher.appendLogs(new DispatchLogBatchCommand(
+                        settings.workerId(), key.taskId(), key.epoch(), key.token(), entries));
+                if (reply == null || !("OK".equals(reply.code()) || "LIMIT_REACHED".equals(reply.code()))) {
+                    droppedLogs.addAndGet(items.size());
+                } else if (reply.dropped() > 0) {
+                    droppedLogs.addAndGet(reply.dropped());
+                }
+            } catch (RuntimeException uncertain) {
+                for (PendingLog item : items) {
+                    if (item.retries() < 3) {
+                        if (!logQueue.offer(item.withRetry())) droppedLogs.incrementAndGet();
+                    } else {
+                        droppedLogs.incrementAndGet();
+                    }
+                }
+            }
+        }
+    }
+
+    private record LogGroupKey(String taskId, long epoch, String token) { }
+    private record PendingLog(String taskId, String workerId, long epoch, String token,
+            DispatchLogEntry entry, int retries) {
+        private PendingLog withRetry() {
+            return new PendingLog(taskId, workerId, epoch, token, entry, retries + 1);
+        }
+    }
+
     /** 对当前正在运行的 Task 发起本地协作取消；不改变 Dispatcher 的租约或终态。 */
     public boolean requestCancel(String taskId) {
         RunningTask task = running.get(Objects.requireNonNull(taskId));
@@ -278,6 +356,8 @@ public final class WorkerRuntime implements AutoCloseable {
     public void close() {
         if (!closed.compareAndSet(false, true)) return;
         drain(settings.drainTimeout());
+        for (int attempt = 0; attempt < 8 && !logQueue.isEmpty(); attempt++) flushLogsSafe();
+        logControl.shutdownNow();
         control.shutdownNow();
         execution.shutdownNow();
         try { execution.awaitTermination(5, TimeUnit.SECONDS); }
@@ -290,6 +370,7 @@ public final class WorkerRuntime implements AutoCloseable {
         private final WorkerHandler handler;
         private final AtomicBoolean cancelled = new AtomicBoolean();
         private final AtomicBoolean terminal = new AtomicBoolean();
+        private final AtomicLong logSequence = new AtomicLong();
         private final Instant executionDeadline;
         private volatile Instant leaseDeadline;
         private volatile Thread thread;

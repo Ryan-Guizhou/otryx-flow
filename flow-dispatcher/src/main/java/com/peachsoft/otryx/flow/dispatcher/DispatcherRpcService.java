@@ -12,6 +12,11 @@ import com.peachsoft.otryx.flow.contracts.v1.DispatchLeaseCommand;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchLeaseReply;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchLeaseView;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchMutationReply;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchLogBatchCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchLogBatchReply;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchLogEntry;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchLogPageView;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchLogView;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchTaskListReply;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchTaskView;
 import com.peachsoft.otryx.flow.contracts.v1.DispatcherRpc;
@@ -24,6 +29,10 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Base64;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
@@ -47,6 +56,16 @@ public class DispatcherRpcService implements DispatcherRpc {
     private static final int CLAIM_LIMIT = 8;
     private static final int LIST_LIMIT = 100;
     private static final int REAPER_LIMIT = 16;
+    private static final int MAX_LOG_BATCH = 32;
+    private static final int MAX_LOG_QUERY_NODES = 300;
+    private static final int MAX_LOGS_PER_ATTEMPT = 1000;
+    private static final int MAX_LOG_MESSAGE_BYTES = 2048;
+    private static final int MAX_LOG_FIELDS = 16;
+    private static final int MAX_LOG_FIELD_VALUE_BYTES = 80;
+    private static final int MAX_LOG_FIELDS_BYTES = 4096;
+    private static final Pattern SENSITIVE_FIELD = Pattern.compile("(?i).*(password|token|secret|authorization|cookie|credential|api[_-]?key).*");
+    private static final Pattern SENSITIVE_ASSIGNMENT = Pattern.compile("(?i)(password|token|secret|authorization|cookie|credential|api[_-]?key)(\\s*[:=]\\s*)([^\\s,;]+)");
+    private static final Pattern BEARER = Pattern.compile("(?i)Bearer\\s+[A-Za-z0-9._~+/=-]+");
     private static final long LEASE_SECONDS = 30;
     private static final String READY = "READY";
     private static final String LEASED = "LEASED";
@@ -182,6 +201,212 @@ public class DispatcherRpcService implements DispatcherRpc {
 
     private record CancelRow(String id, String owner, String project, String dagRun,
                              String workflow, int revision, String status) { }
+
+
+    /**
+     * Persist a bounded batch only for the current lease generation. A completed attempt may
+     * still flush buffered logs, but an expired generation cannot append after a new claim.
+     */
+    @Override
+    public DispatchLogBatchReply appendLogs(DispatchLogBatchCommand command) {
+        if (command == null || command.entries() == null || command.entries().length < 1
+                || command.entries().length > MAX_LOG_BATCH || command.leaseEpoch() < 1) {
+            return new DispatchLogBatchReply("INVALID", 0, 0, 0);
+        }
+        String worker = validateWorker(command.workerId());
+        String task = validateUuid(command.taskId());
+        String token = validateUuid(command.leaseToken());
+        List<SanitizedLog> sanitized = new ArrayList<>(command.entries().length);
+        try {
+            for (DispatchLogEntry entry : command.entries()) {
+                if (entry == null || entry.sequence() < 1 || entry.level() == null
+                        || !List.of("TRACE", "DEBUG", "INFO", "WARN", "ERROR").contains(entry.level())) {
+                    return new DispatchLogBatchReply("INVALID", 0, 0, command.entries().length);
+                }
+                String message = sanitizeLogMessage(entry.message());
+                String fieldsJson = sanitizeLogFields(entry.fields());
+                sanitized.add(new SanitizedLog(entry.sequence(), entry.level(),
+                        message.isBlank() ? "(empty log message)" : message, fieldsJson));
+            }
+        } catch (IllegalArgumentException invalid) {
+            return new DispatchLogBatchReply("INVALID", 0, 0, command.entries().length);
+        }
+        return tx.execute(ignored -> {
+            List<LogLeaseRow> leases = jdbc.query(
+                    "SELECT t.engine_run_id,t.owner_username,t.project_id,t.lease_epoch,"
+                            + "a.worker_id,a.lease_token FROM flow_dispatch_task t "
+                            + "JOIN flow_dispatch_attempt a ON a.task_id=t.id AND a.lease_epoch=? "
+                            + "WHERE t.id=? FOR UPDATE",
+                    (rs, row) -> new LogLeaseRow(rs.getString(1), rs.getString(2),
+                            rs.getString(3), rs.getLong(4), rs.getString(5), rs.getString(6)),
+                    command.leaseEpoch(), task);
+            if (leases.isEmpty()) return new DispatchLogBatchReply("STALE", 0, 0, 0);
+            LogLeaseRow lease = leases.getFirst();
+            if (lease.epoch() != command.leaseEpoch() || !lease.worker().equals(worker)
+                    || !lease.token().equals(token)) {
+                return new DispatchLogBatchReply("STALE", 0, 0, 0);
+            }
+            int currentCount = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM flow_dispatch_log WHERE task_id=? AND lease_epoch=?",
+                    Integer.class, task, command.leaseEpoch());
+            int accepted = 0;
+            int duplicates = 0;
+            int dropped = 0;
+            Timestamp now = dbNow();
+            for (SanitizedLog entry : sanitized) {
+                int exists = jdbc.queryForObject(
+                        "SELECT COUNT(*) FROM flow_dispatch_log WHERE task_id=? AND lease_epoch=? AND sequence_no=?",
+                        Integer.class, task, command.leaseEpoch(), entry.sequence());
+                if (exists > 0) {
+                    duplicates++;
+                    continue;
+                }
+                if (currentCount >= MAX_LOGS_PER_ATTEMPT) {
+                    dropped++;
+                    continue;
+                }
+                int inserted = jdbc.update("INSERT IGNORE INTO flow_dispatch_log "
+                                + "(id,task_id,engine_run_id,owner_username,project_id,lease_epoch,"
+                                + "sequence_no,level,message,fields_json,created_at) "
+                                + "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                        UUID.randomUUID().toString(), task, lease.nodeRunId(), lease.owner(),
+                        lease.project(), command.leaseEpoch(), entry.sequence(), entry.level(),
+                        entry.message(), entry.fieldsJson(), now);
+                if (inserted == 1) {
+                    accepted++;
+                    currentCount++;
+                } else {
+                    duplicates++;
+                }
+            }
+            return new DispatchLogBatchReply(dropped > 0 ? "LIMIT_REACHED" : "OK",
+                    accepted, duplicates, dropped);
+        });
+    }
+
+    /** Read-only query: callers must first prove the Run belongs to the principal/project. */
+    @Override
+    public DispatchLogPageView queryLogs(String ownerUsername, String projectId,
+            String[] nodeRunIds, String cursor, int limit) {
+        String owner = validateOwner(ownerUsername);
+        String project = validateUuid(projectId);
+        if (limit < 1 || limit > 100 || nodeRunIds == null || nodeRunIds.length > MAX_LOG_QUERY_NODES) {
+            throw new IllegalArgumentException("Invalid log query bounds");
+        }
+        if (nodeRunIds.length == 0) return new DispatchLogPageView(new DispatchLogView[0], null, limit);
+        List<String> ids = new ArrayList<>(nodeRunIds.length);
+        for (String id : nodeRunIds) {
+            String valid = validateUuid(id);
+            if (!ids.contains(valid)) ids.add(valid);
+        }
+        if (ids.isEmpty()) return new DispatchLogPageView(new DispatchLogView[0], null, limit);
+        String placeholders = String.join(",", Collections.nCopies(ids.size(), "?"));
+        List<Object> args = new ArrayList<>();
+        args.add(owner);
+        args.add(project);
+        args.addAll(ids);
+        String cursorClause = "";
+        if (cursor != null && !cursor.isBlank()) {
+            if (cursor.length() > 512) throw new IllegalArgumentException("Invalid log cursor length");
+            LogCursor parsed = decodeLogCursor(cursor);
+            cursorClause = " AND (l.created_at < ? OR (l.created_at = ? AND l.id < ?))";
+            args.add(parsed.createdAt());
+            args.add(parsed.createdAt());
+            args.add(parsed.id());
+        }
+        args.add(limit + 1);
+        List<DispatchLogView> rows = jdbc.query(
+                "SELECT l.id,l.engine_run_id,l.task_id,l.lease_epoch,l.sequence_no,l.level,"
+                        + "l.message,l.fields_json,l.created_at FROM flow_dispatch_log l "
+                        + "WHERE l.owner_username=? AND l.project_id=? AND l.engine_run_id IN ("
+                        + placeholders + ")" + cursorClause
+                        + " ORDER BY l.created_at DESC,l.id DESC LIMIT ?",
+                (rs, row) -> new DispatchLogView(rs.getString("id"), rs.getString("engine_run_id"),
+                        rs.getString("task_id"), rs.getLong("lease_epoch"), rs.getLong("sequence_no"),
+                        rs.getString("level"), rs.getString("message"), rs.getString("fields_json"),
+                        rs.getTimestamp("created_at").toInstant().toString()),
+                args.toArray());
+        String next = null;
+        if (rows.size() > limit) {
+            rows.remove(rows.size() - 1);
+            DispatchLogView last = rows.getLast();
+            next = encodeLogCursor(last.createdAt(), last.id());
+        }
+        return new DispatchLogPageView(rows.toArray(DispatchLogView[]::new), next, limit);
+    }
+
+    private static String sanitizeLogMessage(String value) {
+        String message = value == null ? "" : value;
+        message = SENSITIVE_ASSIGNMENT.matcher(message).replaceAll("$1$2[REDACTED]");
+        message = BEARER.matcher(message).replaceAll("Bearer [REDACTED]");
+        return truncateUtf8(message, MAX_LOG_MESSAGE_BYTES);
+    }
+
+    private String sanitizeLogFields(Map<String, String> fields) {
+        Map<String, String> safe = new LinkedHashMap<>();
+        if (fields != null) {
+            if (fields.size() > MAX_LOG_FIELDS) throw new IllegalArgumentException("Too many log fields");
+            for (Map.Entry<String, String> field : fields.entrySet()) {
+                String key = field.getKey();
+                if (key == null || !key.matches("[A-Za-z][A-Za-z0-9_.-]{0,63}")) {
+                    throw new IllegalArgumentException("Invalid log field name");
+                }
+                String rawValue = (field.getValue() == null ? "" : field.getValue())
+                        .replaceAll("\\p{Cntrl}", " ");
+                String value = SENSITIVE_FIELD.matcher(key).matches()
+                        ? "[REDACTED]" : truncateUtf8(sanitizeLogMessage(rawValue), MAX_LOG_FIELD_VALUE_BYTES);
+                safe.put(key, value);
+            }
+        }
+        try {
+            String json = mapper.writeValueAsString(safe);
+            if (json.getBytes(StandardCharsets.UTF_8).length > MAX_LOG_FIELDS_BYTES) {
+                throw new IllegalArgumentException("Log fields exceed 4 KiB");
+            }
+            return json;
+        } catch (com.fasterxml.jackson.core.JsonProcessingException invalid) {
+            throw new IllegalArgumentException("Log fields are not JSON serializable", invalid);
+        }
+    }
+
+    private static String truncateUtf8(String value, int maxBytes) {
+        StringBuilder result = new StringBuilder();
+        int bytes = 0;
+        for (int offset = 0; offset < value.length();) {
+            int codePoint = value.codePointAt(offset);
+            String part = new String(Character.toChars(codePoint));
+            int size = part.getBytes(StandardCharsets.UTF_8).length;
+            if (bytes + size > maxBytes) break;
+            result.append(part);
+            bytes += size;
+            offset += Character.charCount(codePoint);
+        }
+        return result.toString();
+    }
+
+    private static String encodeLogCursor(String createdAt, String id) {
+        String value = createdAt + "|" + id;
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static LogCursor decodeLogCursor(String cursor) {
+        try {
+            String decoded = new String(Base64.getUrlDecoder().decode(cursor), StandardCharsets.UTF_8);
+            int delimiter = decoded.indexOf('|');
+            if (delimiter < 1 || delimiter == decoded.length() - 1) {
+                throw new IllegalArgumentException("Invalid log cursor");
+            }
+            return new LogCursor(Timestamp.from(Instant.parse(decoded.substring(0, delimiter))),
+                    validateUuid(decoded.substring(delimiter + 1)));
+        } catch (RuntimeException invalid) {
+            throw new IllegalArgumentException("Invalid log cursor", invalid);
+        }
+    }
+
+    private record LogLeaseRow(String nodeRunId, String owner, String project,
+            long epoch, String worker, String token) { }
+    private record SanitizedLog(long sequence, String level, String message, String fieldsJson) { }
+    private record LogCursor(Timestamp createdAt, String id) { }
 
     /** 仅读取租户拥有的任务元数据；对浏览器不暴露 leaseToken。 */
     @Override

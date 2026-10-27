@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.when;
 
 import com.peachsoft.otryx.flow.contracts.v1.DagRpc;
@@ -13,6 +15,10 @@ import com.peachsoft.otryx.flow.contracts.v1.DagControlReply;
 import com.peachsoft.otryx.flow.contracts.v1.DagControlHistoryReply;
 import com.peachsoft.otryx.flow.contracts.v1.DagControlAuditView;
 import com.peachsoft.otryx.flow.contracts.v1.DagRunDetailView;
+import com.peachsoft.otryx.flow.contracts.v1.DagNodeView;
+import com.peachsoft.otryx.flow.contracts.v1.DispatcherRpc;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchLogPageView;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchLogView;
 import java.security.Principal;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,6 +30,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 class DagRunControllerTest {
     private final DagRunController controller = new DagRunController();
     private final DagRpc rpc = mock(DagRpc.class);
+    private final DispatcherRpc dispatcher = mock(DispatcherRpc.class);
     private final Principal principal = () -> "admin";
     private final String project = UUID.randomUUID().toString();
     private final String workflow = UUID.randomUUID().toString();
@@ -58,6 +65,32 @@ class DagRunControllerTest {
         verifyNoInteractions(rpc);
     }
 
+
+    @Test
+    void logsRequireRunOwnershipAndDelegateOnlyThatRunsNodeIds() {
+        ReflectionTestUtils.setField(controller, "dispatcher", dispatcher);
+        String runId = UUID.randomUUID().toString();
+        String nodeRunId = UUID.randomUUID().toString();
+        DagRunView run = new DagRunView(runId, project, workflow, 1, "a".repeat(64),
+                "FAILED", "2026-10-27T00:00:00Z", "2026-10-27T00:00:01Z", 2);
+        when(rpc.detail("admin", project, runId)).thenReturn(new DagRunDetailView(run,
+                new DagNodeView[]{new DagNodeView(nodeRunId, "A", "TASK", "FAILED",
+                        null, "2026-10-27T00:00:01Z", 2)}));
+        when(dispatcher.queryLogs("admin", project, new String[]{nodeRunId}, "cursor-1", 10))
+                .thenReturn(new DispatchLogPageView(new DispatchLogView[0], null, 10));
+        assertEquals(HttpStatus.OK, controller.logs(principal, project, runId, "cursor-1", 10).getStatusCode());
+        verify(dispatcher).queryLogs(org.mockito.ArgumentMatchers.eq("admin"),
+                org.mockito.ArgumentMatchers.eq(project),
+                argThat(ids -> java.util.Arrays.equals(ids, new String[]{nodeRunId})),
+                org.mockito.ArgumentMatchers.eq("cursor-1"), org.mockito.ArgumentMatchers.eq(10));
+    }
+
+    @Test
+    void invalidLogQueryDoesNotCallEngineOrDispatcher() {
+        assertEquals(HttpStatus.BAD_REQUEST, controller.logs(principal, project,
+                UUID.randomUUID().toString(), "x".repeat(513), 10).getStatusCode());
+        verifyNoInteractions(rpc, dispatcher);
+    }
 
     @Test
     void cancelAndRetryStatusMappingsEnforceVersionAndIdempotencyKeys() {

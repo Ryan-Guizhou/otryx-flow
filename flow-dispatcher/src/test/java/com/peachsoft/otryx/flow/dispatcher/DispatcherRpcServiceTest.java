@@ -7,6 +7,9 @@ import com.peachsoft.otryx.flow.contracts.v1.DispatchCompleteCommand;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchCancelCommand;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchEnqueueCommand;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchHeartbeatCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchLogBatchCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchLogEntry;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchLogPageView;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchLeaseCommand;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchLeaseView;
 import java.util.UUID;
@@ -43,6 +46,11 @@ class DispatcherRpcServiceTest {
         jdbc.execute("CREATE TABLE flow_dispatch_attempt (task_id VARCHAR(36), lease_epoch BIGINT, "
                 + "worker_id VARCHAR(64), lease_token VARCHAR(36), status VARCHAR(24), "
                 + "started_at TIMESTAMP(3), finished_at TIMESTAMP(3), PRIMARY KEY(task_id,lease_epoch))");
+        jdbc.execute("CREATE TABLE flow_dispatch_log (id VARCHAR(36) PRIMARY KEY, task_id VARCHAR(36), "
+                + "engine_run_id VARCHAR(36), owner_username VARCHAR(64), project_id VARCHAR(36), "
+                + "lease_epoch BIGINT, sequence_no BIGINT, level VARCHAR(8), message VARCHAR(2048), "
+                + "fields_json VARCHAR(4096), created_at TIMESTAMP(3), UNIQUE(task_id,lease_epoch,sequence_no), "
+                + "FOREIGN KEY(task_id) REFERENCES flow_dispatch_task(id))");
         jdbc.execute("CREATE TABLE flow_dispatch_outcome_outbox (event_id VARCHAR(36) PRIMARY KEY, "
                 + "engine_run_id VARCHAR(36) UNIQUE, task_id VARCHAR(36), project_id VARCHAR(36), "
                 + "lease_epoch BIGINT, outcome VARCHAR(16), delivery_state VARCHAR(16), "
@@ -247,6 +255,77 @@ class DispatcherRpcServiceTest {
                     String.class, command.runId()));
         }
         assertEquals(0, service.claim(new DispatchLeaseCommand("worker-racer","safe.echo",8)).leases().length);
+    }
+
+    @Test
+    void logsAreLeaseBoundedRedactedIdempotentAndCursorPaginated() {
+        DispatchEnqueueCommand command = event(2);
+        service.enqueue(command);
+        DispatchLeaseView lease = service.claim(new DispatchLeaseCommand("worker-logs", "safe.echo", 1)).leases()[0];
+        java.util.Map<String, String> largeFields = new java.util.LinkedHashMap<>();
+        for (int index = 0; index < 16; index++) {
+            largeFields.put("field" + index + "x".repeat(55), "\\".repeat(256));
+        }
+        var entries = new DispatchLogEntry[] {
+                new DispatchLogEntry(1, "INFO", "password=top-secret Bearer abc.def",
+                        java.util.Map.of("accessToken", "top-secret", "region", "CN")),
+                new DispatchLogEntry(2, "WARN", "retry scheduled",
+                        java.util.Map.of("credential", "another-secret")),
+                new DispatchLogEntry(3, "INFO", "bounded fields", largeFields)
+        };
+        var batch = new DispatchLogBatchCommand("worker-logs", lease.taskId(),
+                lease.leaseEpoch(), lease.leaseToken(), entries);
+        var first = service.appendLogs(batch);
+        assertEquals("OK", first.code());
+        assertEquals(3, first.accepted());
+        var replay = service.appendLogs(batch);
+        assertEquals(3, replay.duplicates());
+        assertEquals(0, replay.accepted());
+
+        DispatchLogPageView page1 = service.queryLogs("admin", PROJECT,
+                new String[]{command.runId()}, null, 1);
+        assertEquals(1, page1.items().length);
+        assertNotNull(page1.nextCursor());
+        DispatchLogPageView page2 = service.queryLogs("admin", PROJECT,
+                new String[]{command.runId()}, page1.nextCursor(), 1);
+        assertEquals(1, page2.items().length);
+        assertNotNull(page2.nextCursor());
+        DispatchLogPageView page3 = service.queryLogs("admin", PROJECT,
+                new String[]{command.runId()}, page2.nextCursor(), 1);
+        assertEquals(1, page3.items().length);
+        assertNull(page3.nextCursor());
+        String all = page1.items()[0].message() + page1.items()[0].fieldsJson()
+                + page2.items()[0].message() + page2.items()[0].fieldsJson()
+                + page3.items()[0].message() + page3.items()[0].fieldsJson();
+        assertTrue(java.util.stream.Stream.of(page1.items()[0], page2.items()[0], page3.items()[0])
+                .allMatch(item -> item.fieldsJson().getBytes(java.nio.charset.StandardCharsets.UTF_8).length <= 4096));
+        assertFalse(all.contains("top-secret"));
+        assertFalse(all.contains("another-secret"));
+        assertTrue(all.contains("[REDACTED]"));
+        assertEquals(3, jdbc.queryForObject("SELECT COUNT(*) FROM flow_dispatch_log", Integer.class));
+
+        jdbc.update("UPDATE flow_dispatch_task SET lease_until=TIMESTAMP '2000-01-01 00:00:00' WHERE id=?",
+                lease.taskId());
+        DispatchLeaseView next = service.claim(new DispatchLeaseCommand("worker-next", "safe.echo", 1)).leases()[0];
+        assertEquals(2L, next.leaseEpoch());
+        assertEquals("STALE", service.appendLogs(batch).code());
+    }
+
+    @Test
+    void invalidLogBatchIsRejectedBeforeAnyRecordIsWritten() {
+        DispatchEnqueueCommand command = event(2);
+        service.enqueue(command);
+        DispatchLeaseView lease = service.claim(new DispatchLeaseCommand("worker-invalid-logs", "safe.echo", 1)).leases()[0];
+        java.util.Map<String, String> oversizedFields = new java.util.LinkedHashMap<>();
+        for (int index = 0; index < 17; index++) oversizedFields.put("field" + index, "value");
+        var batch = new DispatchLogBatchCommand("worker-invalid-logs", lease.taskId(),
+                lease.leaseEpoch(), lease.leaseToken(), new DispatchLogEntry[]{
+                    new DispatchLogEntry(1, "INFO", "valid entry before invalid entry", java.util.Map.of()),
+                    new DispatchLogEntry(2, "INFO", "invalid field count", oversizedFields)
+                });
+        var reply = service.appendLogs(batch);
+        assertEquals("INVALID", reply.code());
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM flow_dispatch_log", Integer.class));
     }
 
     private static DispatchEnqueueCommand event(int max) {

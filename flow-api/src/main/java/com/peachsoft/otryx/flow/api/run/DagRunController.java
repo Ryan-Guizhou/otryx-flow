@@ -3,6 +3,9 @@ package com.peachsoft.otryx.flow.api.run;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.peachsoft.otryx.flow.contracts.v1.DagRpc;
+import com.peachsoft.otryx.flow.contracts.v1.DispatcherRpc;
+import com.peachsoft.otryx.flow.contracts.v1.DagRunDetailView;
+import com.peachsoft.otryx.flow.contracts.v1.DagNodeView;
 import com.peachsoft.otryx.flow.contracts.v1.DagStartCommand;
 import com.peachsoft.otryx.flow.contracts.v1.DagCancelCommand;
 import com.peachsoft.otryx.flow.contracts.v1.DagRetryCommand;
@@ -27,6 +30,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /** 用户授权的 DAG Run 手动触发与节点级进度查询；不暴露 RPC 租约 Token。 */
@@ -39,6 +43,9 @@ public class DagRunController {
 
     @OtryxRpcReference(version = "1.0.0")
     private DagRpc dag;
+
+    @OtryxRpcReference(version = "1.0.0")
+    private DispatcherRpc dispatcher;
 
     /** 手动触发固定工作流版本，而不是可变草稿。 */
     @PostMapping
@@ -82,6 +89,26 @@ public class DagRunController {
         return detail == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(detail);
     }
 
+
+    /** Read redacted Dispatcher logs only after the Engine confirms Run ownership. */
+    @GetMapping("/{runId}/logs")
+    public ResponseEntity<?> logs(Principal principal, @PathVariable String projectId,
+            @PathVariable String runId, @RequestParam(required = false) String cursor,
+            @RequestParam(defaultValue = "100") int limit) {
+        if (!validId(projectId) || !validId(runId) || limit < 1 || limit > 100
+                || (cursor != null && cursor.length() > 512)) return invalid();
+        DagRunDetailView detail = dag.detail(principal.getName(), projectId, runId);
+        if (detail == null) return ResponseEntity.notFound().build();
+        String[] nodeRunIds = detail.nodes() == null ? new String[0] : Arrays.stream(detail.nodes())
+                .map(DagNodeView::id).distinct().toArray(String[]::new);
+        if (cursor != null && cursor.length() > 512) return invalid();
+        try {
+            return ResponseEntity.ok(dispatcher.queryLogs(principal.getName(), projectId,
+                    nodeRunIds, cursor, limit));
+        } catch (IllegalArgumentException invalidCursor) {
+            return invalid();
+        }
+    }
 
     /** 取消之前客户端必须读取当前 runVersion；请求幂等键必须在重试时复用。 */
     @PostMapping("/{runId}/cancel")

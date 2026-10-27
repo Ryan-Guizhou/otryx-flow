@@ -25,5 +25,12 @@ public interface DispatcherRpc {
     /** 幂等的 DAG 节点取消栅栏，阻止未来 enqueue 并 fencing 当前 Worker 租约。 */
     @OtryxRpcIdempotent
     DispatchCancelReply cancelDagTask(DispatchCancelCommand command);
+
+    /** Append a bounded batch of logs for the current Worker lease. */
+    DispatchLogBatchReply appendLogs(DispatchLogBatchCommand command);
+
+    /** Query bounded logs for a set of owner-scoped NodeRun IDs. */
+    DispatchLogPageView queryLogs(String ownerUsername, String projectId, String[] nodeRunIds,
+            String cursor, int limit);
 }
 

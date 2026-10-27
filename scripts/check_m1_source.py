@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
 root=Path(__file__).resolve().parent.parent
 files={p.relative_to(root).as_posix():p.read_text(encoding='utf-8') for p in root.rglob('*') if p.is_file() and p.suffix in {'.java','.xml','.ts','.vue','.sql','.yml','.yaml'}}
 needed=['pom.xml','flow-api/pom.xml','flow-metadata/pom.xml','flow-contracts/pom.xml','flow-scheduler-core/pom.xml',
-        'flow-web/src/App.vue','flow-web/src/api.ts','compose.yaml',
+        'flow-web/src/App.vue','flow-web/src/api.ts','flow-web/src/DagRunPanel.vue','compose.yaml',
         'flow-scheduler/pom.xml','flow-engine/pom.xml','flow-dispatcher/pom.xml','flow-worker-sdk/pom.xml','flow-worker-quickstart/pom.xml', 'flow-scheduler/src/main/resources/db/migration/V1__create_schedule_outbox.sql']
 for f in needed:
     assert f in files, f'Missing {f}'
@@ -128,5 +128,27 @@ assert 'startDagRun' in files['flow-web/src/WorkflowEditor.vue']
 assert 'localStorage' in files['flow-web/src/WorkflowEditor.vue']
 assert '@vue-flow/core' in (root/'flow-web/package.json').read_text(encoding='utf-8')
 assert 'WorkflowEditor' in files['flow-web/src/App.vue']
-print(f'PASS: M1 static contracts ({len(files)} source/config files)')
+# FLOW-019 bounded, redacted Dispatcher logs and owner-scoped DAG run details.
+assert 'flow-dispatcher/src/main/resources/db/migration/V3__bounded_execution_logs.sql' in files
+assert 'flow_dispatch_log' in src and 'uq_dispatch_log_sequence' in src
+assert 'appendLogs' in files['flow-contracts/src/main/java/com/peachsoft/otryx/flow/contracts/v1/DispatcherRpc.java']
+assert 'queryLogs' in files['flow-contracts/src/main/java/com/peachsoft/otryx/flow/contracts/v1/DispatcherRpc.java']
+assert 'SENSITIVE_ASSIGNMENT' in files['flow-dispatcher/src/main/java/com/peachsoft/otryx/flow/dispatcher/DispatcherRpcService.java']
+assert 'ArrayBlockingQueue<PendingLog>' in files['flow-worker-sdk/src/main/java/com/peachsoft/otryx/flow/worker/sdk/WorkerRuntime.java']
+assert 'getDagRunLogs' in files['flow-web/src/api.ts']
+assert 'cancelDagRun' in files['flow-web/src/DagRunPanel.vue']
+assert 'flow-dispatcher/src/main/java/com/peachsoft/otryx/flow/dispatcher/DispatchLogRetentionTask.java' in files
+assert 'List<SanitizedLog> sanitized' in files['flow-dispatcher/src/main/java/com/peachsoft/otryx/flow/dispatcher/DispatcherRpcService.java']
+assert 'MAX_LOG_QUERY_NODES = 300' in files['flow-dispatcher/src/main/java/com/peachsoft/otryx/flow/dispatcher/DispatcherRpcService.java']
+assert 'cursor.length() > 512' in files['flow-dispatcher/src/main/java/com/peachsoft/otryx/flow/dispatcher/DispatcherRpcService.java']
+assert 'cursor.length() > 512' in files['flow-api/src/main/java/com/peachsoft/otryx/flow/api/run/DagRunController.java']
+assert 'invalidLogBatchIsRejectedBeforeAnyRecordIsWritten' in files['flow-dispatcher/src/test/java/com/peachsoft/otryx/flow/dispatcher/DispatcherRpcServiceTest.java']
+assert 'logsRequireRunOwnershipAndDelegateOnlyThatRunsNodeIds' in files['flow-api/src/test/java/com/peachsoft/otryx/flow/api/run/DagRunControllerTest.java']
+assert 'handlerLogsAreFlushedAsynchronouslyThroughTheBoundedQueue' in files['flow-worker-sdk/src/test/java/com/peachsoft/otryx/flow/worker/sdk/WorkerRuntimeTest.java']
+assert 'getWorkflowRevision' in files['flow-web/src/DagRunPanel.vue']
+assert 'pagedRuns' in files['flow-web/src/DagRunPanel.vue']
+assert 'Retry same request' in files['flow-web/src/DagRunPanel.vue']
+assert 'logs?limit=100' in (root/'scripts/test_m3_dag_e2e.sh').read_text(encoding='utf-8')
+assert 'Handler execution started' in (root/'scripts/test_m3_dag_e2e.sh').read_text(encoding='utf-8')
+print(f'PASS: M1/M2/M3 static contracts ({len(files)} source/config files)')
 print('NOTE: This does not run Maven, MySQL, network Nacos, OTRYX RPC, npm or a browser.')

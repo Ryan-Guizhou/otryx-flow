@@ -340,3 +340,26 @@ export async function listDagControlHistory(projectId: string,
   runId: string): Promise<DagControlAudit[]> {
   return call(dagPath(projectId) + '/' + encodeURIComponent(runId) + '/history')
 }
+
+export interface DispatchLogView {
+  id: string
+  nodeRunId: string
+  taskId: string
+  leaseEpoch: number
+  sequence: number
+  level: 'TRACE' | 'DEBUG' | 'INFO' | 'WARN' | 'ERROR'
+  message: string
+  fieldsJson: string
+  createdAt: string
+}
+export interface DispatchLogPage {
+  items: DispatchLogView[]
+  nextCursor: string | null
+  limit: number
+}
+export async function getDagRunLogs(projectId: string, runId: string,
+  cursor?: string | null, limit = 100): Promise<DispatchLogPage> {
+  const query = new URLSearchParams({ limit: String(limit) })
+  if (cursor) query.set('cursor', cursor)
+  return call(dagPath(projectId) + '/' + encodeURIComponent(runId) + '/logs?' + query.toString())
+}

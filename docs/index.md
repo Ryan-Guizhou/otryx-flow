@@ -22,8 +22,6 @@
 
 M1 已在 [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2) 验收。M2 定义/调度/Engine/Dispatcher/Worker 与真实终态闭环均已合并（最终 [PR #18](https://github.com/Ryan-Guizhou/otryx-flow/pull/18) 五项 CI 检查通过）；[M2 终态设计](03-design/m2-outcome-reconciliation.md)和[完整验收](06-testing/m2-final-acceptance.md)。
 
-M3 FLOW-015 / [PR #20](https://github.com/Ryan-Guizhou/otryx-flow/pull/20)、FLOW-016 / [PR #22](https://github.com/Ryan-Guizhou/otryx-flow/pull/22) 与 FLOW-017 / [PR #24](https://github.com/Ryan-Guizhou/otryx-flow/pull/24) 已通过五项 CI 和真实 Compose 验收并合并。当前 FLOW-018 / [Issue #25](https://github.com/Ryan-Guizhou/otryx-flow/issues/25) 正在交付 [Vue Flow 画布设计](03-design/m3-workflow-canvas.md)、[前端交互](05-frontend/workflow-editor.md)与[真实验收计划](06-testing/m3-workflow-canvas-acceptance.md)。Nacos 3.2.4 仍是唯一活跃注册中心；生产 HTTPS/mTLS 未实现。
+M3 FLOW-015 / [PR #20](https://github.com/Ryan-Guizhou/otryx-flow/pull/20)、FLOW-016 / [PR #22](https://github.com/Ryan-Guizhou/otryx-flow/pull/22)、FLOW-017 / [PR #24](https://github.com/Ryan-Guizhou/otryx-flow/pull/24) 均通过五项 CI 和真实 Compose 验收并合并。FLOW-018 / [PR #26](https://github.com/Ryan-Guizhou/otryx-flow/pull/26) 已交付 Vue Flow 工作流画布、草稿 CAS、不可变 Revision 与固定版本运行入口。
 
-### FLOW-017：取消、重试及终态竞态（待验收）
-
-[M3 DAG 控制面设计](03-design/m3-dag-control.md)、[REST/RPC](04-api/m3-dag-control-contracts.md)、[真实 Compose 验收](06-testing/m3-dag-control-acceptance.md)分别记录 CANCEL_REQUESTED 可靠栅栏、Run 版本 CAS 和新 NodeRun logicalAttempt。对应 [Issue #23](https://github.com/Ryan-Guizhou/otryx-flow/issues/23)，与已验收的 FLOW-016 节点派发阶段隔离；通过最新 Head 全量 CI 前保持进行中。
+当前 FLOW-019 / [Issue #27](https://github.com/Ryan-Guizhou/otryx-flow/issues/27) 正在实现 [DAG Run 观测设计](03-design/m3-run-observability.md)、[REST/RPC 契约](04-api/m3-run-observability.md)和[真实验收计划](06-testing/m3-run-observability-acceptance.md)：包括 NodeRun logicalAttempt 历史、取消/重试审计和有界脱敏日志。Nacos 3.2.4 仍是唯一活跃注册中心；生产 HTTPS/mTLS 与完整 Playwright 矩阵尚未完成。

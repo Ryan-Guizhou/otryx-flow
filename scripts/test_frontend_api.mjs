@@ -417,3 +417,23 @@ test('FLOW-018 serializer strips Vue Flow coordinates and runtime metadata befor
   assert.equal(Object.hasOwn(persisted.edges[0], 'data'), false)
   assert.deepEqual(validateWorkflowGraph(persisted), [])
 })
+
+
+test('FLOW-019 DAG log client uses bounded cursor pagination and same-origin credentials', async () => {
+  const { getDagRunLogs } = await import('../flow-web/src/api.ts')
+  const project = '00000000-0000-4000-8000-000000000001'
+  const runId = '00000000-0000-4000-8000-000000000002'
+  const calls = []
+  globalThis.fetch = async (path, init = {}) => {
+    calls.push({ path: String(path), method: init.method || 'GET', credentials: init.credentials })
+    return json({ items: [], nextCursor: null, limit: 50 })
+  }
+  try {
+    const page = await getDagRunLogs(project, runId, 'opaque|cursor', 50)
+    assert.equal(page.limit, 50)
+    assert.equal(calls[0].method, 'GET')
+    assert.equal(calls[0].path, '/api/v1/projects/' + project + '/workflow-runs/' + runId +
+      '/logs?limit=50&cursor=opaque%7Ccursor')
+    assert.equal(calls[0].credentials, 'same-origin')
+  } finally { globalThis.fetch = originalFetch }
+})

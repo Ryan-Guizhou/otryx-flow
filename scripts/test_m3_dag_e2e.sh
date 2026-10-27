@@ -130,6 +130,24 @@ docker compose --profile worker-demo up -d flow-worker-demo
 docker compose --profile worker-demo run --detach --no-deps --name flow-worker-demo-m3 \
   -e FLOW_WORKER_ID=flow-worker-demo-m3 flow-worker-demo >/dev/null
 wait_run "$RUN" SUCCEEDED "$TMP/diamond-finished.json"
+# Logs are a separate bounded stream and may flush just after the terminal NodeRun ACK.
+LOG_READY=0
+for i in $(seq 1 12); do
+  if get "$RUNS/$RUN/logs?limit=100" > "$TMP/run-logs.json" 2>/dev/null; then
+    if python3 - "$TMP/run-logs.json" <<'PY'
+import json,sys
+page=json.load(open(sys.argv[1]))
+items=page.get("items",[])
+assert len(items) >= 8
+assert any("Handler execution started" in item["message"] for item in items)
+assert any("safe.echo handler executed" in item["message"] for item in items)
+assert all("leaseToken" not in json.dumps(item) and "claimToken" not in json.dumps(item) for item in items)
+PY
+    then LOG_READY=1; break; fi
+  fi
+  sleep 1
+done
+[ "$LOG_READY" = 1 ] || { echo 'DAG execution logs did not persist or failed the redaction contract'; cat "$TMP/run-logs.json" 2>/dev/null || true; exit 1; }
 python3 - "$TMP/diamond-finished.json" <<'PY'
 import json,sys
 run=json.load(open(sys.argv[1])); nodes={n["nodeId"]:n for n in run["nodes"]}

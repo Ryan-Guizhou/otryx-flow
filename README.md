@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en-US.md)
 
-> **已验收：M1/M2 与 M3 FLOW-015/016/017；FLOW-018（Issue #25）正在开发。** 生产 mTLS 与公网 HTTPS 尚未完成。
+> **已验收：M1/M2 与 M3 FLOW-015/016/017/018；FLOW-019（Issue #27）正在开发。** 生产 mTLS 与公网 HTTPS 尚未完成。
 
 <!-- doc-section:overview -->
 ## 简介
@@ -48,11 +48,13 @@ flowchart TB
 从 [文档入口](docs/index.md) 开始，按 [需求 PRD](docs/01-product/requirements-prd.md) → [总体架构](docs/02-architecture/architecture-overview.md) → [核心设计](docs/03-design/consistency-and-recovery.md) → [前端规范](docs/05-frontend/ui-ux-spec.md) → [验收计划](docs/06-testing/acceptance-plan.md) → [实施路线图](docs/08-roadmap/milestones.md) 阅读。
 
 <!-- doc-section:status -->
-## M1/M2 与 M3 FLOW-015/016/017 已验收；FLOW-018 正在开发
+## M1/M2 与 M3 FLOW-015/016/017/018 已验收；FLOW-019 正在开发
 
 M1 合并于 [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2)，M2 完整分布式短任务闭环合并于 [PR #18](https://github.com/Ryan-Guizhou/otryx-flow/pull/18)。M3 FLOW-015 / [PR #20](https://github.com/Ryan-Guizhou/otryx-flow/pull/20) 提供 DAG 校验与不可变版本；FLOW-016 / [PR #22](https://github.com/Ryan-Guizhou/otryx-flow/pull/22) 提供真实 Worker DAG 执行；FLOW-017 / [PR #24](https://github.com/Ryan-Guizhou/otryx-flow/pull/24) 完成持久取消、租约 fencing 与逻辑重试。三项均通过五项 CI 和真实 Compose 验收。
 
-当前 [FLOW-018 / Issue #25](https://github.com/Ryan-Guizhou/otryx-flow/issues/25) 正在交付 [Vue Flow 画布](docs/03-design/m3-workflow-canvas.md)、[交互设计](docs/05-frontend/workflow-editor.md)和[验收计划](docs/06-testing/m3-workflow-canvas-acceptance.md)。本阶段的完成状态以对应 PR 最新 Head 的前后端门禁与真实 Compose 结果为准。
+FLOW-018 / [PR #26](https://github.com/Ryan-Guizhou/otryx-flow/pull/26) 已通过五项门禁与真实 Compose 验收并合并，提供 Vue Flow DAG 编辑、草稿 CAS、不可变发布版本和固定 Revision 运行入口。
+
+当前 [FLOW-019 / Issue #27](https://github.com/Ryan-Guizhou/otryx-flow/issues/27) 正在交付 [DAG Run 观测设计](docs/03-design/m3-run-observability.md)、[API 契约](docs/04-api/m3-run-observability.md)和[验收计划](docs/06-testing/m3-run-observability-acceptance.md)。
 
 **边界：** 当前为 Nacos 3.2.4 的隔离开发环境；生产 mTLS/HTTPS、完整 Playwright 浏览器矩阵与外部副作用补偿仍是后续阶段。
 
