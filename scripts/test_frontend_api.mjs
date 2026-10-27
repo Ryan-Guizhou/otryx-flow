@@ -198,3 +198,40 @@ test('Dispatch queue GET exposes only scoped, read-only task metadata', async ()
     assert.equal(Object.hasOwn(tasks[0], 'leaseToken'), false)
   } finally { globalThis.fetch = originalFetch }
 })
+
+test('M3 workflow API sends scoped paths, stable keys and draft-version CAS', async () => {
+  const { listWorkflows, createWorkflowDraft, saveWorkflowDraft, publishWorkflow,
+    getWorkflowRevision } = await import('../flow-web/src/api.ts')
+  const project = '00000000-0000-4000-8000-000000000001'
+  const workflow = { id: '00000000-0000-4000-8000-000000000004', projectId: project,
+    name: 'Graph', graphJson: '{"schemaVersion":1,"nodes":[],"edges":[]}',
+    draftVersion: 3, publishedRevision: 1, lastPublishedDraftVersion: 2,
+    updatedAt: '2026-10-27T00:00:00Z' }
+  const key = 'valid-workflow-key-1234567890'
+  const requests = []
+  globalThis.fetch = async (path, init = {}) => {
+    const request = { path: String(path), method: init.method || 'GET',
+      body: init.body && JSON.parse(init.body), headers: new Headers(init.headers),
+      credentials: init.credentials }
+    requests.push(request)
+    if (request.path.endsWith('/revisions/1')) {
+      return json({ workflowId: workflow.id, revision: 1, graphSha256: 'a'.repeat(64) })
+    }
+    if (request.method === 'GET') return json([workflow])
+    return json(workflow, request.method === 'POST' ? 201 : 200)
+  }
+  try {
+    assert.deepEqual(await listWorkflows(project), [workflow])
+    await createWorkflowDraft(project, { name: 'Graph', graphJson: workflow.graphJson }, key)
+    await saveWorkflowDraft(project, workflow, { name: 'Edited', graphJson: workflow.graphJson })
+    await publishWorkflow(project, workflow, key)
+    assert.equal((await getWorkflowRevision(project, workflow.id, 1)).revision, 1)
+    assert.equal(requests[0].path, '/api/v1/projects/' + project + '/workflows')
+    assert.equal(requests[1].headers.get('Idempotency-Key'), key)
+    assert.equal(requests[2].body.expectedDraftVersion, 3)
+    assert.equal(requests[3].body.expectedDraftVersion, 3)
+    assert.equal(requests[3].headers.get('Idempotency-Key'), key)
+    assert.ok(requests.every(request => request.credentials === 'same-origin'))
+    assert.ok(requests.slice(1,4).every(request => request.headers.get('X-XSRF-TOKEN')))
+  } finally { globalThis.fetch = originalFetch }
+})

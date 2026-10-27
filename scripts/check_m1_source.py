@@ -88,5 +88,13 @@ assert (root/'scripts/test_m2_final_e2e.sh').is_file()
 assert 'flow_schedule_outbox' in src and 'claim_token' in src
 assert 'COPY flow-scheduler ./flow-scheduler' in (root/'deploy/Dockerfile.backend').read_text(encoding='utf-8')
 assert 'COPY flow-scheduler-core ./flow-scheduler-core' in (root/'deploy/Dockerfile.backend').read_text(encoding='utf-8'), 'Include new Maven modules in Docker build'
+# FLOW-015 workflow correctness contracts; real build and Nacos E2E run independently.
+assert 'flow-metadata/src/main/resources/db/migration/V3__workflow_definition.sql' in files
+assert 'flow_workflow_revision' in src and 'graph_sha256' in src
+assert 'WorkflowDagValidator.validate' in files['flow-metadata/src/main/java/com/peachsoft/otryx/flow/metadata/workflow/WorkflowDefinitionGraph.java']
+assert "hasRole('ADMIN')" in files['flow-api/src/main/java/com/peachsoft/otryx/flow/api/workflow/WorkflowController.java']
+assert (root/'scripts/test_m3_workflow_e2e.sh').is_file()
+assert 'FLOW_E2E_M3_WORKFLOWS' in (root/'.github/workflows/m1-integration.yml').read_text(encoding='utf-8')
+assert 'bash scripts/test_m3_workflow_e2e.sh' in (root/'scripts/test_m1_e2e.sh').read_text(encoding='utf-8')
 print(f'PASS: M1 static contracts ({len(files)} source/config files)')
 print('NOTE: This does not run Maven, MySQL, network Nacos, OTRYX RPC, npm or a browser.')

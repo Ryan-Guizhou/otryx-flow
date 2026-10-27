@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en-US.md)
 
-> **M1 与 M2 #3–#8 已通过门禁并合并**（见对应 PR 及 CI）。当前 Issue #9 在独立 PR 中完善真实 Worker → Dispatcher 终态 Outbox → Engine Inbox 的收敛和故障演练；只有本 PR 的五项门禁全部通过后才计入完成。生产 Nacos mTLS 与公网 HTTPS 仍未实现。
+> **已验收：M1 与 M2（Issue #3–#9）；M3 FLOW-015 / Issue #19 进入开发。** 生产 mTLS 与公网 HTTPS 尚未完成。
 
 <!-- doc-section:overview -->
 ## 简介
@@ -48,12 +48,13 @@ flowchart TB
 从 [文档入口](docs/index.md) 开始，按 [需求 PRD](docs/01-product/requirements-prd.md) → [总体架构](docs/02-architecture/architecture-overview.md) → [核心设计](docs/03-design/consistency-and-recovery.md) → [前端规范](docs/05-frontend/ui-ux-spec.md) → [验收计划](docs/06-testing/acceptance-plan.md) → [实施路线图](docs/08-roadmap/milestones.md) 阅读。
 
 <!-- doc-section:status -->
-## M1 已验收，M2 开发中
-M1 在 [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2) 通过 Maven、Vue、源码、文档以及真实 Docker Compose 跨 JVM RPC 集成验收，已合并 main。
+## M2 已验收，M3 FLOW-015 开发中
 
-M2 FLOW-008 已在 [PR #10](https://github.com/Ryan-Guizhou/otryx-flow/pull/10) 完成：任务草稿、幂等创建、乐观版本 CAS、不可变发布 Revision 及 Vue 任务页面。参见 [M2 RPC/REST 契约](docs/04-api/m2-job-contracts.md) 和 [M2 验收计划](docs/06-testing/m2-job-acceptance.md)。FLOW-009 已于 [PR #11](https://github.com/Ryan-Guizhou/otryx-flow/pull/11) 合并无副作用的 Cron/IANA 时区预览（[设计](docs/03-design/cron-timezone.md) · [API](docs/04-api/cron-preview.md)）。FLOW-010 已在 [PR #12](https://github.com/Ryan-Guizhou/otryx-flow/pull/12) 完成双副本持久化 Scheduler、唯一 Trigger 与事务 Outbox；参见 [实现](docs/03-design/m2-scheduler-implementation.md)、[API](docs/04-api/m2-scheduler-contracts.md) 与 [验收](docs/06-testing/m2-scheduler-acceptance.md)。FLOW-011 已于 [PR #13](https://github.com/Ryan-Guizhou/otryx-flow/pull/13) 引入独立 Engine、Inbox 幂等和 Outbox 可靠重投（[设计](docs/03-design/m2-engine-outbox.md) · [RPC/REST](docs/04-api/m2-engine-contracts.md) · [验收](docs/06-testing/m2-engine-acceptance.md)）。FLOW-012 已合并 [PR #14](https://github.com/Ryan-Guizhou/otryx-flow/pull/14)：[Dispatcher/Lease 设计](docs/03-design/m2-dispatcher-leases.md) · [RPC/REST 契约](docs/04-api/m2-dispatcher-contracts.md) · [验收](docs/06-testing/m2-dispatcher-acceptance.md)。**FLOW-013 已交付可信 Java Worker SDK 与 Nacos Quickstart，真实 Handler 可完成 Dispatcher Attempt；FLOW-014（#9）正在补齐 Engine SUCCEEDED/FAILED 终态与故障恢复验收**，公网部署也未完成。
+M1 已在 [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2) 验收合并。M2 #3–#9 已逐项合并；最终的 [PR #18](https://github.com/Ryan-Guizhou/otryx-flow/pull/18) 在同一个 Head 上通过 Maven、前端、源码、文档和真实 Nacos/MySQL/RPC/Worker Compose 五项门禁，完成短任务终态收敛。
 
-[终态 Outbox/Inbox 设计](docs/03-design/m2-outcome-reconciliation.md) · [综合验收](docs/06-testing/m2-final-acceptance.md) · [Worker SDK 设计](docs/03-design/m2-worker-sdk.md) · [Quickstart](flow-worker-quickstart/README.md) · [验收清单](docs/06-testing/m2-worker-acceptance.md)。注册中心仅支持 **Nacos 3.2.4**，不再部署 Etcd。首次部署前必须完成 [Nacos V2 Config 分片初始化](docs/07-operations/nacos-registry.md)。当前适配器仍限制为 `TRUSTED_DEVELOPMENT`，不可公网或生产使用。
+M3 目前正在实施 [Issue #19 / FLOW-015](https://github.com/Ryan-Guizhou/otryx-flow/issues/19)，通过 [Draft PR #20](https://github.com/Ryan-Guizhou/otryx-flow/pull/20) 增加工作流定义、后端 DAG 校验、CAS 草稿和不可变发布。对应[设计](docs/03-design/m3-workflow-definition.md)、[API/RPC](docs/04-api/m3-workflow-contracts.md)和[验收](docs/06-testing/m3-workflow-acceptance.md)。PR #20 尚未通过最终门禁前不得宣称完成。
+
+**边界：** M3 FLOW-015 不执行 DAG；并行节点执行、条件分支、取消重试及 Vue Flow 画布属于后续 Issue。Nacos 3.2.4 是唯一活跃注册中心；当前 RPC 为隔离开发网络 TRUSTED_DEVELOPMENT，尚未实现可供公网生产使用的 mTLS 与 HTTPS 部署。
 
 <!-- doc-section:contribute -->
 ## 工程协作
