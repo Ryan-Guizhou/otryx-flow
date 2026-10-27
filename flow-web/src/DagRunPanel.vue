@@ -13,6 +13,7 @@ import type {
 import {
   cancelDagRun,
   getDagRun,
+  getWorkflowRevision,
   getDagRunLogs,
   listDagControlHistory,
   listDagRuns,
@@ -27,21 +28,29 @@ const detail = ref<DagRunDetail | null>(null)
 const history = ref<DagControlAudit[]>([])
 const logs = ref<DispatchLogView[]>([])
 const logCursor = ref<string | null>(null)
+const graphNodes = ref<Array<{ id: string; type: string; label?: string }>>([])
+const graphEdges = ref<Array<{ id: string; source: string; target: string; branch: string }>>([])
+const graphError = ref('')
 const statusFilter = ref('ALL')
-const activeTab = ref<'nodes' | 'history' | 'logs'>('nodes')
+const currentPage = ref(1)
+const pageSize = 10
+const activeTab = ref<'topology' | 'nodes' | 'history' | 'logs'>('topology')
 const busy = ref(false)
 const detailBusy = ref(false)
 const logBusy = ref(false)
 const error = ref('')
 const logError = ref('')
 const statusMessage = ref('')
-const cancelKey = ref<string | null>(null)
-const retryKeys = ref<Record<string, string>>({})
+const cancelRequest = ref<{ key: string; version: number; runId: string } | null>(null)
+const retryKeys = ref<Record<string, { key: string; version: number; runId: string }>>({})
 const isAdmin = computed(() => props.userRole === 'ADMIN')
 const selectedRun = computed(() => runs.value.find(run => run.id === selectedRunId.value) ?? detail.value?.run ?? null)
 const filteredRuns = computed(() => statusFilter.value === 'ALL'
   ? runs.value
   : runs.value.filter(run => run.status === statusFilter.value))
+const pageCount = computed(() => Math.max(1, Math.ceil(filteredRuns.value.length / pageSize)))
+const pagedRuns = computed(() => filteredRuns.value.slice((currentPage.value - 1) * pageSize,
+  currentPage.value * pageSize))
 const latestNodes = computed(() => {
   const byNode = new Map<string, DagNode>()
   for (const node of detail.value?.nodes ?? []) {
@@ -101,6 +110,10 @@ async function reloadRuns(): Promise<void> {
     detail.value = null
     history.value = []
     logs.value = []
+    logCursor.value = null
+    graphNodes.value = []
+    graphEdges.value = []
+    graphError.value = ''
     return
   }
   busy.value = true
@@ -108,6 +121,7 @@ async function reloadRuns(): Promise<void> {
   try {
     runs.value = (await listDagRuns(projectId.value))
       .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+    currentPage.value = 1
     if (selectedRunId.value && !runs.value.some(run => run.id === selectedRunId.value)) {
       selectedRunId.value = ''
       detail.value = null
@@ -126,14 +140,36 @@ async function reloadDetail(): Promise<void> {
   error.value = ''
   statusMessage.value = ''
   try {
-    detail.value = await getDagRun(projectId.value, selectedRunId.value)
+    const current = await getDagRun(projectId.value, selectedRunId.value)
+    detail.value = current
+    graphNodes.value = []
+    graphEdges.value = []
+    graphError.value = ''
     const tasks: Promise<unknown>[] = [
       listDagControlHistory(projectId.value, selectedRunId.value).then(value => { history.value = value })
         .catch(problem => { error.value = 'Run loaded, but control history could not be read: ' + messageForError(problem) }),
       reloadLogs(true),
     ]
     await Promise.all(tasks)
-    const index = runs.value.findIndex(run => run.id === detail.value?.run.id)
+    try {
+      const revision = await getWorkflowRevision(projectId.value,
+        current.run.workflowId, current.run.workflowRevision)
+      if (revision.graphSha256 !== current.run.graphSha256) {
+        throw new Error('Immutable workflow revision hash does not match this Run.')
+      }
+      const graph = JSON.parse(revision.graphJson) as {
+        nodes: Array<{ id: string; type: string; label?: string }>
+        edges: Array<{ id: string; source: string; target: string; branch: string }>
+      }
+      if (!Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) {
+        throw new Error('Immutable workflow graph is invalid.')
+      }
+      graphNodes.value = graph.nodes
+      graphEdges.value = graph.edges
+    } catch (problem) {
+      graphError.value = messageForError(problem)
+    }
+    const index = runs.value.findIndex(run => run.id === current.run.id)
     if (index >= 0 && detail.value) runs.value[index] = detail.value.run
   } catch (problem) {
     error.value = messageForError(problem)
@@ -164,9 +200,12 @@ async function selectRun(id: string): Promise<void> {
   detail.value = null
   history.value = []
   logs.value = []
-  activeTab.value = 'nodes'
-  cancelKey.value = null
+  activeTab.value = 'topology'
+  cancelRequest.value = null
   retryKeys.value = {}
+  graphNodes.value = []
+  graphEdges.value = []
+  graphError.value = ''
   await reloadDetail()
 }
 async function refreshAll(): Promise<void> {
@@ -174,40 +213,48 @@ async function refreshAll(): Promise<void> {
   if (selectedRunId.value) await reloadDetail()
 }
 async function cancelSelectedRun(): Promise<void> {
-  if (!isAdmin.value || !controlAvailable() || !detail.value || detail.value.run.status !== 'RUNNING') return
-  if (!window.confirm('Request cancellation for this workflow run? In-flight external side effects cannot be rolled back.')) return
-  const key = cancelKey.value ?? newKey()
-  cancelKey.value = key
+  if (!isAdmin.value || !controlAvailable() || !detail.value) return
+  const run = detail.value.run
+  const pending = cancelRequest.value
+  if (!pending && run.status !== 'RUNNING') return
+  if (!pending && !window.confirm('Request cancellation for this workflow run? In-flight external side effects cannot be rolled back.')) return
+  const request = pending && pending.runId === run.id
+    ? pending : { key: newKey(), version: run.runVersion, runId: run.id }
+  cancelRequest.value = request
   busy.value = true
   error.value = ''
   statusMessage.value = ''
   try {
-    await cancelDagRun(projectId.value, detail.value.run.id, detail.value.run.runVersion, key)
-    cancelKey.value = null
+    await cancelDagRun(projectId.value, request.runId, request.version, request.key)
+    cancelRequest.value = null
     statusMessage.value = 'Cancellation requested. The Run remains CANCEL_REQUESTED until Dispatcher fencing converges.'
     await refreshAll()
   } catch (problem) {
     const e = apiError(problem)
     error.value = messageForError(problem)
     if (e.status === 409) {
-      cancelKey.value = null
+      cancelRequest.value = null
       await reloadDetail()
+      error.value = messageForError(problem)
     }
   } finally {
     busy.value = false
   }
 }
 async function retryNode(node: DagNode): Promise<void> {
-  if (!isAdmin.value || !controlAvailable() || !detail.value || detail.value.run.status !== 'FAILED'
-      || node.status !== 'FAILED' || node.logicalAttempt !== latestAttemptNumber(node.nodeId)
-      || node.logicalAttempt >= 3) return
-  const key = retryKeys.value[node.nodeId] ?? newKey()
-  retryKeys.value = { ...retryKeys.value, [node.nodeId]: key }
+  if (!isAdmin.value || !controlAvailable() || !detail.value) return
+  const run = detail.value.run
+  const pending = retryKeys.value[node.nodeId]
+  if (!pending && (run.status !== 'FAILED' || node.status !== 'FAILED'
+      || node.logicalAttempt !== latestAttemptNumber(node.nodeId) || node.logicalAttempt >= 3)) return
+  const request = pending && pending.runId === run.id
+    ? pending : { key: newKey(), version: run.runVersion, runId: run.id }
+  retryKeys.value = { ...retryKeys.value, [node.nodeId]: request }
   busy.value = true
   error.value = ''
   statusMessage.value = ''
   try {
-    await retryDagNode(projectId.value, detail.value.run.id, node.nodeId, detail.value.run.runVersion, key)
+    await retryDagNode(projectId.value, request.runId, node.nodeId, request.version, request.key)
     const next = { ...retryKeys.value }
     delete next[node.nodeId]
     retryKeys.value = next
@@ -236,11 +283,19 @@ watch(() => props.projects.map(project => project.id).join('|'), () => {
     projectId.value = props.projects[0]?.id ?? ''
   }
 }, { immediate: true })
+watch(statusFilter, () => { currentPage.value = 1 })
 watch(projectId, () => {
+  currentPage.value = 1
   selectedRunId.value = ''
   detail.value = null
   history.value = []
   logs.value = []
+  logCursor.value = null
+  graphNodes.value = []
+  graphEdges.value = []
+  graphError.value = ''
+  cancelRequest.value = null
+  retryKeys.value = {}
   void reloadRuns()
 })
 </script>
@@ -260,7 +315,7 @@ watch(projectId, () => {
   <div class="panel table-panel">
     <div class="panel-heading">
       <div><h3>DAG Runs <span class="count-tag">{{ filteredRuns.length }}</span></h3><p>Fixed workflow revisions; CANCEL_REQUESTED is not the same as CANCELLED.</p></div>
-      <select v-model="projectId" aria-label="Project for workflow runs">
+      <select v-model="projectId" aria-label="Project for workflow runs" :disabled="busy || detailBusy">
         <option v-for="project in props.projects" :key="project.id" :value="project.id">{{ project.name }}</option>
       </select>
       <select v-model="statusFilter" aria-label="Filter workflow run status">
@@ -273,7 +328,7 @@ watch(projectId, () => {
     <table v-if="filteredRuns.length" class="projects-table">
       <thead><tr><th>Run</th><th>Revision</th><th>State</th><th>Duration</th><th>Updated</th><th></th></tr></thead>
       <tbody>
-        <tr v-for="run in filteredRuns" :key="run.id">
+        <tr v-for="run in pagedRuns" :key="run.id">
           <td><strong class="mono">{{ run.id }}</strong><small class="muted">{{ run.workflowId }}</small></td>
           <td>r{{ run.workflowRevision }}<small class="muted mono">{{ run.graphSha256.slice(0, 12) }}</small></td>
           <td><span class="pill-grey">{{ run.status }}</span></td>
@@ -284,7 +339,13 @@ watch(projectId, () => {
       </tbody>
     </table>
     <div v-else-if="!busy" class="empty-state">
-      <h3>No workflow runs yet</h3><p>Publish a workflow revision in the Workflows canvas and start a run from that fixed revision.</p>
+      <h3>{{ runs.length ? 'No Runs match this status' : 'No workflow runs yet' }}</h3>
+      <p>{{ runs.length ? 'Choose a different status filter.' : 'Publish a workflow revision in the Workflows canvas and start a run from that fixed revision.' }}</p>
+    </div>
+    <div v-if="filteredRuns.length" class="dag-run-pagination">
+      <small>Page {{ currentPage }} of {{ pageCount }}</small>
+      <button class="btn btn-outline" type="button" :disabled="currentPage <= 1" @click="currentPage--">Previous</button>
+      <button class="btn btn-outline" type="button" :disabled="currentPage >= pageCount" @click="currentPage++">Next</button>
     </div>
   </div>
 
@@ -292,7 +353,7 @@ watch(projectId, () => {
     <div class="dag-run-heading">
       <div><div class="eyebrow">RUN DETAILS</div><h2>{{ detail?.run.status ?? 'Loading...' }}</h2><p class="mono muted">{{ selectedRunId }}</p></div>
       <div class="dag-run-actions">
-        <button v-if="isAdmin && detail?.run.status === 'RUNNING'" class="btn btn-outline" type="button" :disabled="busy || detailBusy" @click="cancelSelectedRun">Request cancellation</button>
+        <button v-if="isAdmin && (detail?.run.status === 'RUNNING' || (cancelRequest && cancelRequest.runId === detail?.run.id))" class="btn btn-outline" type="button" :disabled="busy || detailBusy" @click="cancelSelectedRun">{{ cancelRequest ? 'Retry same cancellation request' : 'Request cancellation' }}</button>
         <span v-else-if="detail?.run.status === 'CANCEL_REQUESTED'" class="pill-grey">Cancellation in progress</span>
         <button class="btn btn-outline" type="button" :disabled="busy || detailBusy" @click="reloadDetail">Refresh details</button>
       </div>
@@ -307,12 +368,30 @@ watch(projectId, () => {
         <div class="dag-hash"><span>Graph SHA-256</span><code>{{ detail.run.graphSha256 }}</code></div>
       </div>
       <div class="dag-run-tabs" role="tablist" aria-label="Run detail sections">
+        <button type="button" role="tab" :aria-selected="activeTab === 'topology'" :class="{active:activeTab === 'topology'}" @click="activeTab = 'topology'">Immutable topology</button>
         <button type="button" role="tab" :aria-selected="activeTab === 'nodes'" :class="{active:activeTab === 'nodes'}" @click="activeTab = 'nodes'">Node attempts</button>
         <button type="button" role="tab" :aria-selected="activeTab === 'history'" :class="{active:activeTab === 'history'}" @click="activeTab = 'history'">Control history</button>
         <button type="button" role="tab" :aria-selected="activeTab === 'logs'" :class="{active:activeTab === 'logs'}" @click="activeTab = 'logs'; if (!logs.length && !logBusy) reloadLogs(true)">Execution logs</button>
       </div>
 
-      <section v-if="activeTab === 'nodes'">
+      <section v-if="activeTab === 'topology'">
+        <p v-if="graphError" class="notice error" role="alert">{{ graphError }}</p>
+        <div v-else-if="graphNodes.length" class="dag-topology">
+          <article v-for="node in graphNodes" :key="node.id" class="dag-topology-node">
+            <div><strong>{{ node.label ?? node.id }}</strong><small class="muted mono">{{ node.id }} · {{ node.type }}</small></div>
+            <span class="pill-grey">{{ latestNodes.find(item => item.nodeId === node.id)?.status ?? 'BLOCKED' }}</span>
+            <div class="dag-topology-edges">
+              <span v-for="edge in graphEdges.filter(item => item.source === node.id)" :key="edge.id">
+                {{ edge.branch }} → {{ edge.target }}
+              </span>
+              <small v-if="!graphEdges.some(item => item.source === node.id)">Terminal node</small>
+            </div>
+          </article>
+        </div>
+        <div v-else class="empty-state"><h3>Immutable topology unavailable</h3><p>The published revision could not be verified against the Run SHA-256.</p></div>
+      </section>
+
+      <section v-else-if="activeTab === 'nodes'">
         <table v-if="detail.nodes.length" class="projects-table">
           <thead><tr><th>Node</th><th>Type</th><th>Logical attempt</th><th>State</th><th>Condition</th><th>Updated</th><th></th></tr></thead>
           <tbody>
@@ -324,8 +403,8 @@ watch(projectId, () => {
               <td>{{ node.conditionDecision === null ? '—' : node.conditionDecision ? 'TRUE' : 'FALSE' }}</td>
               <td>{{ formatTime(node.updatedAt) }}</td>
               <td>
-                <button v-if="isAdmin && detail.run.status === 'FAILED' && node.status === 'FAILED' && node.logicalAttempt === latestAttemptNumber(node.nodeId) && node.logicalAttempt < 3"
-                  class="btn btn-outline" type="button" :disabled="busy || detailBusy" @click="retryNode(node)">Retry logical attempt</button>
+                <button v-if="isAdmin && ((detail.run.status === 'FAILED' && node.status === 'FAILED' && node.logicalAttempt === latestAttemptNumber(node.nodeId) && node.logicalAttempt < 3) || retryKeys[node.nodeId]?.runId === detail.run.id)"
+                  class="btn btn-outline" type="button" :disabled="busy || detailBusy" @click="retryNode(node)">{{ retryKeys[node.nodeId] ? 'Retry same request' : 'Retry logical attempt' }}</button>
               </td>
             </tr>
           </tbody>
@@ -380,5 +459,14 @@ watch(projectId, () => {
 .dag-log-message{max-width:380px;overflow-wrap:anywhere}
 .dag-log-fields{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:10px;max-width:320px}
 .dag-log-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:14px}
-@media(max-width:640px){.dag-run-detail{padding:12px}.dag-run-meta{grid-template-columns:1fr 1fr}.dag-hash{grid-column:1/-1}.dag-log-footer{align-items:stretch;flex-direction:column}}
+.dag-run-pagination{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:12px}
+.dag-run-pagination small{margin-right:auto;color:#8796a8;font-size:10px}
+.dag-topology{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.dag-topology-node{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start;min-width:0;padding:14px;border:1px solid #e7edf5;border-radius:10px;background:#fbfcff}
+.dag-topology-node strong{display:block;font-size:12px;overflow-wrap:anywhere}
+.dag-topology-node small{display:block;font-size:9px;margin-top:4px;overflow-wrap:anywhere}
+.dag-topology-edges{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px}
+.dag-topology-edges span{font-size:10px;color:#5d7395;background:#edf3ff;border:1px solid #dce7fa;border-radius:5px;padding:4px 6px}
+.dag-topology-edges small{font-size:10px;color:#9ba7b6}
+@media(max-width:640px){.dag-run-detail{padding:12px}.dag-run-meta{grid-template-columns:1fr 1fr}.dag-hash{grid-column:1/-1}.dag-log-footer{align-items:stretch;flex-direction:column}.dag-topology{grid-template-columns:1fr}.dag-run-pagination .btn{padding:8px 10px}}
 </style>
