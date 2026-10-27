@@ -95,7 +95,8 @@ public class DagRunController {
     public ResponseEntity<?> logs(Principal principal, @PathVariable String projectId,
             @PathVariable String runId, @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "100") int limit) {
-        if (!validId(projectId) || !validId(runId) || limit < 1 || limit > 100) return invalid();
+        if (!validId(projectId) || !validId(runId) || limit < 1 || limit > 100
+                || (cursor != null && cursor.length() > 512)) return invalid();
         DagRunDetailView detail = dag.detail(principal.getName(), projectId, runId);
         if (detail == null) return ResponseEntity.notFound().build();
         String[] nodeRunIds = detail.nodes() == null ? new String[0] : Arrays.stream(detail.nodes())
