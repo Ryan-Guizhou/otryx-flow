@@ -259,12 +259,13 @@ export interface DagRun {
   workflowId: string
   workflowRevision: number
   graphSha256: string
-  status: 'RUNNING' | 'SUCCEEDED' | 'FAILED'
+  status: 'RUNNING' | 'CANCEL_REQUESTED' | 'CANCELLED' | 'SUCCEEDED' | 'FAILED'
   createdAt: string
   updatedAt: string
+  runVersion: number
 }
 export type DagNodePhase = 'BLOCKED' | 'READY' | 'DISPATCHED' |
-  'SUCCEEDED' | 'FAILED' | 'SKIPPED'
+  'SUCCEEDED' | 'FAILED' | 'SKIPPED' | 'CANCEL_PENDING' | 'CANCELLED'
 export interface DagNode {
   id: string
   nodeId: string
@@ -272,6 +273,7 @@ export interface DagNode {
   status: DagNodePhase
   conditionDecision: boolean | null
   updatedAt: string
+  logicalAttempt: number
 }
 export interface DagRunDetail { run: DagRun; nodes: DagNode[] }
 export interface DagStartInput { workflowId: string; workflowRevision: number; inputJson: string }
@@ -290,4 +292,39 @@ export async function listDagRuns(projectId: string): Promise<DagRun[]> {
 }
 export async function getDagRun(projectId: string, runId: string): Promise<DagRunDetail> {
   return call(dagPath(projectId) + '/' + encodeURIComponent(runId))
+}
+
+/** FLOW-017: cancel intent and manual logical retry are separately idempotent operations. */
+export interface DagControlReply {
+  code: 'OK' | 'DUPLICATE'
+  run: DagRun
+  nodeRunId: string | null
+  duplicate: boolean
+}
+export interface DagControlAudit {
+  action: 'CANCEL' | 'RETRY'
+  nodeId: string | null
+  oldVersion: number
+  newVersion: number
+  nodeRunId: string | null
+  createdAt: string
+}
+export async function cancelDagRun(projectId: string, runId: string,
+  expectedRunVersion: number, requestKey: string): Promise<DagControlReply> {
+  return call(dagPath(projectId) + '/' + encodeURIComponent(runId) + '/cancel', {
+    method: 'POST', headers: { 'Idempotency-Key': requestKey },
+    body: JSON.stringify({ expectedRunVersion })
+  })
+}
+export async function retryDagNode(projectId: string, runId: string, nodeId: string,
+  expectedRunVersion: number, requestKey: string): Promise<DagControlReply> {
+  return call(dagPath(projectId) + '/' + encodeURIComponent(runId) +
+    '/nodes/' + encodeURIComponent(nodeId) + '/retry', {
+    method: 'POST', headers: { 'Idempotency-Key': requestKey },
+    body: JSON.stringify({ expectedRunVersion })
+  })
+}
+export async function listDagControlHistory(projectId: string,
+  runId: string): Promise<DagControlAudit[]> {
+  return call(dagPath(projectId) + '/' + encodeURIComponent(runId) + '/history')
 }

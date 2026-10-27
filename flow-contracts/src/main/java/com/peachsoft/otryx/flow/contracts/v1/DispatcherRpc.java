@@ -22,4 +22,8 @@ public interface DispatcherRpc {
 
     /** 仅当前且未到期的 lease 能提交结果；过期代际严禁覆盖。 */
     DispatchMutationReply complete(DispatchCompleteCommand command);
+    /** 幂等的 DAG 节点取消栅栏，阻止未来 enqueue 并 fencing 当前 Worker 租约。 */
+    @OtryxRpcIdempotent
+    DispatchCancelReply cancelDagTask(DispatchCancelCommand command);
 }
+

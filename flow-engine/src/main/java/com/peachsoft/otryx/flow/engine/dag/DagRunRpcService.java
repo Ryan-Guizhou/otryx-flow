@@ -4,6 +4,10 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.peachsoft.otryx.flow.contracts.v1.DagNodeView;
+import com.peachsoft.otryx.flow.contracts.v1.DagCancelCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DagRetryCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DagControlReply;
+import com.peachsoft.otryx.flow.contracts.v1.DagControlHistoryReply;
 import com.peachsoft.otryx.flow.contracts.v1.DagRpc;
 import com.peachsoft.otryx.flow.contracts.v1.DagRunDetailView;
 import com.peachsoft.otryx.flow.contracts.v1.DagRunListReply;
@@ -53,6 +57,8 @@ public class DagRunRpcService implements DagRpc {
 
     @OtryxRpcReference(version = "1.0.0")
     private WorkflowRpc workflows;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private DagControlService controls;
 
     /** 独立 Engine 本地事务；WorkflowRpc 的远程查询必须在事务开始前结束。 */
     public DagRunRpcService(JdbcTemplate jdbc, PlatformTransactionManager txManager,
@@ -152,16 +158,38 @@ public class DagRunRpcService implements DagRpc {
         DagRunView run = find(owner, project, id);
         if (run == null) return null;
         List<DagNodeView> nodes = jdbc.query(
-                "SELECT n.id,n.node_id,n.node_type,n.status,n.condition_decision,n.updated_at "
+                "SELECT n.id,n.node_id,n.node_type,n.status,n.condition_decision,n.updated_at,n.logical_attempt "
                         + "FROM flow_dag_node_run n JOIN flow_dag_run r ON n.dag_run_id = r.id "
                         + "WHERE r.id = ? AND r.owner_username = ? AND r.project_id = ? "
-                        + "ORDER BY n.node_id",
+                        + "ORDER BY n.node_id,n.logical_attempt",
                 (rs, row) -> new DagNodeView(rs.getString("id"), rs.getString("node_id"),
                         rs.getString("node_type"), rs.getString("status"),
                         (Boolean) rs.getObject("condition_decision"),
-                        rs.getTimestamp("updated_at").toInstant().toString()),
+                        rs.getTimestamp("updated_at").toInstant().toString(),
+                        rs.getInt("logical_attempt")),
                 id, owner, project);
         return new DagRunDetailView(run, nodes.toArray(DagNodeView[]::new));
+    }
+
+    /** 操作幂等及父 Run 行锁均由 Engine 控制面实现。 */
+    @Override
+    public DagControlReply cancel(DagCancelCommand command) {
+        if (controls == null) throw new IllegalStateException("DAG control service is unavailable");
+        return controls.cancel(command);
+    }
+
+    /** 重试采用新 NodeRun ID，不回写旧 Worker 终态。 */
+    @Override
+    public DagControlReply retry(DagRetryCommand command) {
+        if (controls == null) throw new IllegalStateException("DAG control service is unavailable");
+        return controls.retry(command);
+    }
+
+    /** 返回当前用户的取消/逻辑重试审计。 */
+    @Override
+    public DagControlHistoryReply history(String owner, String projectId, String runId) {
+        if (controls == null) throw new IllegalStateException("DAG control service is unavailable");
+        return controls.history(owner, projectId, runId);
     }
 
     private DagStartReply replay(String owner, String key, String fingerprint) {
@@ -196,7 +224,7 @@ public class DagRunRpcService implements DagRpc {
                 rs.getString("workflow_id"), rs.getInt("workflow_revision"),
                 rs.getString("graph_sha256"), rs.getString("status"),
                 rs.getTimestamp("created_at").toInstant().toString(),
-                rs.getTimestamp("updated_at").toInstant().toString());
+                rs.getTimestamp("updated_at").toInstant().toString(), rs.getLong("run_version"));
     }
 
     private static String validOwner(String value) {

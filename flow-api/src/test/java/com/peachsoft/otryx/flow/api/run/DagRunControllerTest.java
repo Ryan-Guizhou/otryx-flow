@@ -9,6 +9,10 @@ import static org.mockito.Mockito.when;
 import com.peachsoft.otryx.flow.contracts.v1.DagRpc;
 import com.peachsoft.otryx.flow.contracts.v1.DagRunView;
 import com.peachsoft.otryx.flow.contracts.v1.DagStartReply;
+import com.peachsoft.otryx.flow.contracts.v1.DagControlReply;
+import com.peachsoft.otryx.flow.contracts.v1.DagControlHistoryReply;
+import com.peachsoft.otryx.flow.contracts.v1.DagControlAuditView;
+import com.peachsoft.otryx.flow.contracts.v1.DagRunDetailView;
 import java.security.Principal;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -52,6 +56,43 @@ class DagRunControllerTest {
                 new DagRunController.StartBody(workflow, 1, "[1]")).getStatusCode());
         assertEquals(HttpStatus.BAD_REQUEST, controller.detail(principal, project, "bad").getStatusCode());
         verifyNoInteractions(rpc);
+    }
+
+
+    @Test
+    void cancelAndRetryStatusMappingsEnforceVersionAndIdempotencyKeys() {
+        when(rpc.cancel(any())).thenReturn(controlReply("OK"), controlReply("DUPLICATE"),
+                controlReply("CONFLICT"), controlReply("NOT_FOUND"));
+        var body = new DagRunController.ControlBody(3);
+        assertEquals(HttpStatus.OK, controller.cancel(principal, project, workflow, key, body).getStatusCode());
+        assertEquals(HttpStatus.OK, controller.cancel(principal, project, workflow, key, body).getStatusCode());
+        assertEquals(HttpStatus.CONFLICT, controller.cancel(principal, project, workflow, key, body).getStatusCode());
+        assertEquals(HttpStatus.NOT_FOUND, controller.cancel(principal, project, workflow, key, body).getStatusCode());
+        when(rpc.retry(any())).thenReturn(controlReply("OK"), controlReply("CONFLICT"));
+        assertEquals(HttpStatus.OK, controller.retryNode(principal, project, workflow, "A",
+                key, body).getStatusCode());
+        assertEquals(HttpStatus.CONFLICT, controller.retryNode(principal, project, workflow, "A",
+                key, body).getStatusCode());
+    }
+
+    @Test
+    void invalidControlInputCannotReachRpcAndForeignHistoryIsNotVisible() {
+        var invalid = new DagRunController.ControlBody(0);
+        assertEquals(HttpStatus.BAD_REQUEST, controller.cancel(principal, project, workflow,
+                key, invalid).getStatusCode());
+        assertEquals(HttpStatus.BAD_REQUEST, controller.retryNode(principal, project, workflow,
+                "A", "bad", new DagRunController.ControlBody(2)).getStatusCode());
+        assertEquals(HttpStatus.BAD_REQUEST, controller.history(principal, project, "bad").getStatusCode());
+        verifyNoInteractions(rpc);
+        assertEquals(HttpStatus.NOT_FOUND, controller.history(principal, project,
+                workflow).getStatusCode());
+    }
+
+    private DagControlReply controlReply(String code) {
+        return new DagControlReply(code, new DagRunView(UUID.randomUUID().toString(), project,
+                workflow, 1, "a".repeat(64), "CANCEL_REQUESTED",
+                "2026-10-27T00:00:00Z", "2026-10-27T00:00:00Z", 4),
+                null, "DUPLICATE".equals(code));
     }
 
     private DagStartReply reply(String code) {

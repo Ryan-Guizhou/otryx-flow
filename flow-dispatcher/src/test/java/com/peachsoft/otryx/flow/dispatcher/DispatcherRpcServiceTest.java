@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchCompleteCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchCancelCommand;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchEnqueueCommand;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchHeartbeatCommand;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchLeaseCommand;
@@ -156,6 +157,78 @@ class DispatcherRpcServiceTest {
         assertThrows(IllegalArgumentException.class, () -> service.heartbeat(
                 new DispatchHeartbeatCommand("bad", "invalid-id", 0, "invalid-id")));
         assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM flow_dispatch_task", Integer.class));
+    }
+
+
+    @Test
+    void cancellationBeforeEnqueueCreatesDurableTombstoneAndNeverLeases() {
+        var command = event(2);
+        var cancel = new DispatchCancelCommand(command.runId(), command.ownerUsername(),
+                command.projectId(), command.scheduleId(), command.jobId(), command.jobRevision());
+        assertEquals("CANCELLED", service.cancelDagTask(cancel).code());
+        assertEquals("CANCELLED", service.cancelDagTask(cancel).code());
+        assertEquals("CANCELLED", service.enqueue(command).code());
+        assertEquals(0, service.claim(new DispatchLeaseCommand("worker-zero","safe.echo",8)).leases().length);
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM flow_dispatch_task", Integer.class));
+        assertEquals("CANCELLED", jdbc.queryForObject(
+                "SELECT status FROM flow_dispatch_task WHERE engine_run_id=?", String.class, command.runId()));
+        assertEquals("CONFLICT", service.cancelDagTask(new DispatchCancelCommand(command.runId(),
+                "other-owner", PROJECT, SCHEDULE, JOB, 1)).code());
+    }
+
+    @Test
+    void leasedWorkerLosesEpochImmediatelyAfterCancellation() {
+        var command = event(2);
+        service.enqueue(command);
+        DispatchLeaseView lease = service.claim(new DispatchLeaseCommand(
+                "worker-one","safe.echo",1)).leases()[0];
+        var cancel = new DispatchCancelCommand(command.runId(), "admin", PROJECT, SCHEDULE, JOB, 1);
+        assertEquals("CANCELLED", service.cancelDagTask(cancel).taskStatus());
+        assertEquals("STALE", service.heartbeat(new DispatchHeartbeatCommand(
+                "worker-one", lease.taskId(), lease.leaseEpoch(), lease.leaseToken())).code());
+        assertEquals("STALE", service.complete(new DispatchCompleteCommand(
+                "worker-one", lease.taskId(), lease.leaseEpoch(), lease.leaseToken(), "SUCCEEDED")).code());
+        assertEquals("CANCELLED", jdbc.queryForObject(
+                "SELECT status FROM flow_dispatch_attempt WHERE task_id=? AND lease_epoch=?",
+                String.class, lease.taskId(), lease.leaseEpoch()));
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM flow_dispatch_outcome_outbox", Integer.class));
+    }
+
+    @Test
+    void terminalWorkerOutcomeAlwaysPrecedesLateCancellation() {
+        var command = event(1);
+        service.enqueue(command);
+        var lease = service.claim(new DispatchLeaseCommand("worker-done","safe.echo",1)).leases()[0];
+        assertEquals("SUCCEEDED", service.complete(new DispatchCompleteCommand(
+                "worker-done",lease.taskId(),lease.leaseEpoch(),lease.leaseToken(),"SUCCEEDED")).taskStatus());
+        var cancel = new DispatchCancelCommand(command.runId(), "admin", PROJECT, SCHEDULE, JOB, 1);
+        assertEquals("TERMINAL", service.cancelDagTask(cancel).code());
+        assertEquals("SUCCEEDED", service.cancelDagTask(cancel).taskStatus());
+        assertEquals("SUCCEEDED", jdbc.queryForObject(
+                "SELECT status FROM flow_dispatch_task WHERE engine_run_id=?", String.class, command.runId()));
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM flow_dispatch_outcome_outbox", Integer.class));
+    }
+
+    @Test
+    void enqueueCancelConcurrentRaceNeverLeavesClaimableTask() throws Exception {
+        for (int i = 0; i < 6; i++) {
+            var command = event(2);
+            var cancel = new DispatchCancelCommand(command.runId(), "admin", PROJECT, SCHEDULE, JOB, 1);
+            CountDownLatch start = new CountDownLatch(1);
+            try (var pool = Executors.newFixedThreadPool(2)) {
+                var enqueue = pool.submit(() -> { start.await(); return service.enqueue(command); });
+                var cancelled = pool.submit(() -> { start.await(); return service.cancelDagTask(cancel); });
+                start.countDown();
+                enqueue.get(10, TimeUnit.SECONDS);
+                assertEquals("CANCELLED", cancelled.get(10, TimeUnit.SECONDS).code());
+            }
+            assertEquals("CANCELLED", jdbc.queryForObject(
+                    "SELECT status FROM flow_dispatch_task WHERE engine_run_id=?",
+                    String.class, command.runId()));
+        }
+        assertEquals(0, service.claim(new DispatchLeaseCommand("worker-racer","safe.echo",8)).leases().length);
     }
 
     private static DispatchEnqueueCommand event(int max) {

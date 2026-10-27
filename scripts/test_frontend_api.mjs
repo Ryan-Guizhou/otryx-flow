@@ -270,3 +270,36 @@ test('M3 DAG run API pins published revision with stable idempotency and owner-s
     assert.ok(calls.every(c => c.credentials === 'same-origin'))
   } finally { globalThis.fetch = originalFetch }
 })
+
+test('FLOW-017 browser client preserves control idempotency and optimistic Run version', async () => {
+  const { cancelDagRun, retryDagNode, listDagControlHistory } =
+    await import('../flow-web/src/api.ts')
+  const project = '00000000-0000-4000-8000-000000000001'
+  const runId = '00000000-0000-4000-8000-000000000002'
+  const nodeId = 'my node/alpha'
+  const key = 'dag-control-idempotency-key-123'
+  const calls = []
+  globalThis.fetch = async (path, init = {}) => {
+    const request = { path: String(path), method: init.method || 'GET',
+      headers: new Headers(init.headers), body: init.body && JSON.parse(init.body),
+      credentials: init.credentials }
+    calls.push(request)
+    return json(request.method === 'GET' ? [
+      { action: 'RETRY', nodeId: 'A', oldVersion: 2, newVersion: 4 }] :
+      { code: 'OK', run: { id: runId, status: 'CANCEL_REQUESTED', runVersion: 4 },
+        nodeRunId: null, duplicate: false })
+  }
+  try {
+    assert.equal((await cancelDagRun(project, runId, 3, key)).run.runVersion, 4)
+    assert.equal((await retryDagNode(project, runId, nodeId, 3, key)).code, 'OK')
+    assert.equal((await listDagControlHistory(project, runId)).length, 1)
+    assert.equal(calls[0].path, '/api/v1/projects/' + project + '/workflow-runs/' + runId + '/cancel')
+    assert.equal(calls[1].path, '/api/v1/projects/' + project + '/workflow-runs/' + runId +
+      '/nodes/my%20node%2Falpha/retry')
+    assert.ok(calls.slice(0,2).every(c => c.headers.get('Idempotency-Key') === key))
+    assert.ok(calls.slice(0,2).every(c => c.headers.get('X-XSRF-TOKEN')))
+    assert.ok(calls.slice(0,2).every(c => c.body.expectedRunVersion === 3))
+    assert.ok(calls.every(c => c.credentials === 'same-origin'))
+    assert.equal(calls[2].method, 'GET')
+  } finally { globalThis.fetch = originalFetch }
+})

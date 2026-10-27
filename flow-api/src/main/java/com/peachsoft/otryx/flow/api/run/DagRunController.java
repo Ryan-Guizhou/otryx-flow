@@ -4,6 +4,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.peachsoft.otryx.flow.contracts.v1.DagRpc;
 import com.peachsoft.otryx.flow.contracts.v1.DagStartCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DagCancelCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DagRetryCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DagControlReply;
 import com.peachsoft.otryx.flow.contracts.v1.DagStartReply;
 import com.peachsoft.otryx.spring.annotation.OtryxRpcReference;
 import jakarta.validation.Valid;
@@ -78,6 +81,66 @@ public class DagRunController {
         var detail = dag.detail(principal.getName(), projectId, runId);
         return detail == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(detail);
     }
+
+
+    /** 取消之前客户端必须读取当前 runVersion；请求幂等键必须在重试时复用。 */
+    @PostMapping("/{runId}/cancel")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> cancel(Principal principal, @PathVariable String projectId,
+            @PathVariable String runId, @RequestHeader("Idempotency-Key") String requestKey,
+            @Valid @RequestBody ControlBody body) {
+        if (!validId(projectId) || !validId(runId) || !validKey(requestKey)
+                || body.expectedRunVersion() < 1) return invalid();
+        return control(dag.cancel(new DagCancelCommand(principal.getName(), projectId, runId,
+                body.expectedRunVersion(), requestKey)));
+    }
+
+    /** 只能对已收敛的 FAILED Run 生成新的逻辑 NodeRun；Worker 租约重试是另一层。 */
+    @PostMapping("/{runId}/nodes/{nodeId}/retry")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> retryNode(Principal principal, @PathVariable String projectId,
+            @PathVariable String runId, @PathVariable String nodeId,
+            @RequestHeader("Idempotency-Key") String requestKey,
+            @Valid @RequestBody ControlBody body) {
+        if (!validId(projectId) || !validId(runId) || nodeId == null || nodeId.isBlank()
+                || nodeId.length() > 128 || !validKey(requestKey) || body.expectedRunVersion() < 1) {
+            return invalid();
+        }
+        return control(dag.retry(new DagRetryCommand(principal.getName(), projectId,
+                runId, nodeId, body.expectedRunVersion(), requestKey)));
+    }
+
+    /** 审计记录受相同项目所有权保护，业务请求键和用户机密不泄露到浏览器。 */
+    @GetMapping("/{runId}/history")
+    public ResponseEntity<?> history(Principal principal, @PathVariable String projectId,
+            @PathVariable String runId) {
+        if (!validId(projectId) || !validId(runId)) return invalid();
+        if (dag.detail(principal.getName(), projectId, runId) == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(Arrays.asList(
+                dag.history(principal.getName(), projectId, runId).events()));
+    }
+
+    private static ResponseEntity<?> control(DagControlReply reply) {
+        return switch (reply.code()) {
+            case "OK", "DUPLICATE" -> ResponseEntity.ok(reply);
+            case "CONFLICT" -> ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("code", "DAG_CONTROL_CONFLICT"));
+            case "NOT_FOUND" -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("code", "DAG_RUN_NOT_FOUND"));
+            case "INVALID" -> invalid();
+            default -> ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                    .body(Map.of("code", "DAG_CONTROL_RPC_ERROR"));
+        };
+    }
+
+    private static boolean validKey(String value) {
+        return value != null && value.matches(KEY_PATTERN);
+    }
+
+    /** 用户观察到的 Engine 乐观版本。 */
+    public record ControlBody(@Min(1) long expectedRunVersion) { }
 
     private static boolean validId(String id) {
         if (id == null) return false;

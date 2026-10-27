@@ -2,6 +2,8 @@ package com.peachsoft.otryx.flow.engine.dag;
 
 import com.peachsoft.otryx.flow.contracts.v1.EngineOutcomeCommand;
 import com.peachsoft.otryx.flow.contracts.v1.EngineOutcomeReply;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.beans.factory.annotation.Autowired;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -26,6 +28,8 @@ public class DagNodeOutcomeService {
     private final JdbcTemplate jdbc;
     private final TransactionTemplate tx;
     private final DagRunCoordinator coordinator;
+    @Autowired(required = false)
+    private MeterRegistry meters;
 
     /** 只连接 Engine 私有 DataSource 和事务管理器。 */
     public DagNodeOutcomeService(JdbcTemplate jdbc, PlatformTransactionManager manager,
@@ -75,7 +79,8 @@ public class DagNodeOutcomeService {
                             && command.outcome().equals(old[2]);
                     return same ? new EngineOutcomeReply("DUPLICATE", nodeId, old[2]) : conflict();
                 }
-                if (!("READY".equals(statuses.getFirst()) || "DISPATCHED".equals(statuses.getFirst()))) {
+                if (!("READY".equals(statuses.getFirst()) || "DISPATCHED".equals(statuses.getFirst())
+                        || "CANCEL_PENDING".equals(statuses.getFirst()))) {
                     return conflict();
                 }
                 Integer staged = jdbc.queryForObject(
@@ -91,7 +96,7 @@ public class DagNodeOutcomeService {
                         fingerprint, now);
                 int updated = jdbc.update("UPDATE flow_dag_node_run "
                                 + "SET status = ?, updated_at = ? WHERE id = ? "
-                                + "AND status IN ('READY','DISPATCHED')",
+                                + "AND status IN ('READY','DISPATCHED','CANCEL_PENDING')",
                         command.outcome(), now, nodeId);
                 if (updated != 1) throw new IllegalStateException("NodeRun terminal CAS lost");
                 coordinator.advanceLocked(runId);
@@ -108,7 +113,8 @@ public class DagNodeOutcomeService {
         }
     }
 
-    private static EngineOutcomeReply conflict() {
+    private EngineOutcomeReply conflict() {
+        if (meters != null) meters.counter("flow.dag.outcome.stale.total").increment();
         return new EngineOutcomeReply("CONFLICT", null, null);
     }
 
