@@ -138,5 +138,17 @@ assert 'ArrayBlockingQueue<PendingLog>' in files['flow-worker-sdk/src/main/java/
 assert 'getDagRunLogs' in files['flow-web/src/api.ts']
 assert 'cancelDagRun' in files['flow-web/src/DagRunPanel.vue']
 assert 'flow-dispatcher/src/main/java/com/peachsoft/otryx/flow/dispatcher/DispatchLogRetentionTask.java' in files
-print(f'PASS: M1 static contracts ({len(files)} source/config files)')
+assert 'List<SanitizedLog> sanitized' in files['flow-dispatcher/src/main/java/com/peachsoft/otryx/flow/dispatcher/DispatcherRpcService.java']
+assert 'MAX_LOG_QUERY_NODES = 300' in files['flow-dispatcher/src/main/java/com/peachsoft/otryx/flow/dispatcher/DispatcherRpcService.java']
+assert 'cursor.length() > 512' in files['flow-dispatcher/src/main/java/com/peachsoft/otryx/flow/dispatcher/DispatcherRpcService.java']
+assert 'cursor.length() > 512' in files['flow-api/src/main/java/com/peachsoft/otryx/flow/api/run/DagRunController.java']
+assert 'invalidLogBatchIsRejectedBeforeAnyRecordIsWritten' in files['flow-dispatcher/src/test/java/com/peachsoft/otryx/flow/dispatcher/DispatcherRpcServiceTest.java']
+assert 'logsRequireRunOwnershipAndDelegateOnlyThatRunsNodeIds' in files['flow-api/src/test/java/com/peachsoft/otryx/flow/api/run/DagRunControllerTest.java']
+assert 'handlerLogsAreFlushedAsynchronouslyThroughTheBoundedQueue' in files['flow-worker-sdk/src/test/java/com/peachsoft/otryx/flow/worker/sdk/WorkerRuntimeTest.java']
+assert 'getWorkflowRevision' in files['flow-web/src/DagRunPanel.vue']
+assert 'pagedRuns' in files['flow-web/src/DagRunPanel.vue']
+assert 'Retry same request' in files['flow-web/src/DagRunPanel.vue']
+assert 'logs?limit=100' in (root/'scripts/test_m3_dag_e2e.sh').read_text(encoding='utf-8')
+assert 'Handler execution started' in (root/'scripts/test_m3_dag_e2e.sh').read_text(encoding='utf-8')
+print(f'PASS: M1/M2/M3 static contracts ({len(files)} source/config files)')
 print('NOTE: This does not run Maven, MySQL, network Nacos, OTRYX RPC, npm or a browser.')
