@@ -81,8 +81,8 @@ public final class EngineDatabaseMetrics {
      * 刷新权威数据库状态；查询失败时保留最近一次成功值，不向业务线程传播故障。
      */
     @Scheduled(
-            fixedDelayString = "\${flow.observability.refresh-ms:15000}",
-            initialDelayString = "\${flow.observability.initial-delay-ms:5000}")
+            fixedDelayString = "${flow.observability.refresh-ms:15000}",
+            initialDelayString = "${flow.observability.initial-delay-ms:5000}")
     public void refresh() {
         try {
             activeRuns.set(count(SQL_ACTIVE_RUNS, RUNNING));

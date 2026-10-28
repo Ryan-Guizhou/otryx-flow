@@ -81,8 +81,8 @@ public final class SchedulerDatabaseMetrics {
      * <p>连续失败只记录一次 WARN；查询恢复后会重新允许记录下一轮故障。</p>
      */
     @Scheduled(
-            fixedDelayString = "\${flow.observability.refresh-ms:15000}",
-            initialDelayString = "\${flow.observability.initial-delay-ms:5000}")
+            fixedDelayString = "${flow.observability.refresh-ms:15000}",
+            initialDelayString = "${flow.observability.initial-delay-ms:5000}")
     public void refresh() {
         try {
             enabledSchedules.set(count(SQL_ENABLED));

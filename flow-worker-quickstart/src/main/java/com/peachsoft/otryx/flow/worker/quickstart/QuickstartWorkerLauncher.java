@@ -51,7 +51,7 @@ public final class QuickstartWorkerLauncher {
     @OtryxRpcReference(version = "1.0.0")
     private DispatcherRpc dispatcher;
 
-    @Value("\${flow.worker.id:flow-worker-demo}")
+    @Value("${flow.worker.id:flow-worker-demo}")
     private String workerId;
 
     /**

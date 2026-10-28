@@ -76,8 +76,8 @@ public final class DispatcherDatabaseMetrics {
      * 周期刷新队列快照；连续查询失败只记录一次 WARN，并保留最近一次成功值。
      */
     @Scheduled(
-            fixedDelayString = "\${flow.observability.refresh-ms:15000}",
-            initialDelayString = "\${flow.observability.initial-delay-ms:5000}")
+            fixedDelayString = "${flow.observability.refresh-ms:15000}",
+            initialDelayString = "${flow.observability.initial-delay-ms:5000}")
     public void refresh() {
         try {
             readyTasks.set(count(SQL_READY, READY));

@@ -27,6 +27,6 @@
 ## 2026-10-28 可观测性集成基线
 
 - OTRYX RPC 仍使用 `1.0.0-SNAPSHOT`、JDK 21 和 Spring Boot 3.5.4。
-- Flow 的构建与 Compose 验收固定到 OTRYX RPC commit `3e570ed6975414efed090848b02a2fd7b6be2751`，该提交包含 Issue #180 的 OpenTelemetry 自动配置顺序修复；不能仅根据依赖存在就宣称跨 JVM Trace 已通过。
+- Flow 的构建与 Compose 验收固定到 OTRYX RPC commit `0addd7df17c5ba4a0b77e2d30e4c7c75d7ac31f2`，该提交包含 Issue #180 的 OpenTelemetry 自动配置顺序修复；不能仅根据依赖存在就宣称跨 JVM Trace 已通过。
 - 运行验收必须确认同一调用的 RPC client/server Span 具有相同 Trace ID，并且 server Span 的 Parent Span ID 等于 client Span ID。证据来自精确 PR Head 的 Collector 输出和 CI 日志。
-- 该 SHA 当前为待合并的上游 PR #181 代码基线；只有上游 PR 合并后，才可将 Flow PR #31 合并到 main。
+- 该 SHA 对应已合并的上游 OTRYX RPC PR #181；Flow PR #31 仍须通过真实双 JVM Trace 验收后才能合并。
