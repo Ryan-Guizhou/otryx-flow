@@ -94,6 +94,26 @@ public final class Example {
         rules = {str(item["rule"]) for item in inspect_source(self.source, require_type_metadata=True)}
         self.assertIn("invalid-type-metadata", rules)
 
+    def test_nested_types_do_not_require_top_level_metadata(self) -> None:
+        self.source.write_text(
+            """package example;
+
+/**
+ * 示例服务。
+ *
+ * @Author Flow Maintainers
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/10/27 10:30
+ */
+public final class Example {
+    private static final class NestedFixture {
+    }
+}
+""",
+            encoding="utf-8",
+        )
+        self.assertEqual([], inspect_source(self.source, require_type_metadata=True))
+
     def test_audit_mode_does_not_require_legacy_metadata(self) -> None:
         self.source.write_text(
             """package example;

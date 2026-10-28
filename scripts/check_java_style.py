@@ -67,6 +67,65 @@ def _type_javadoc(lines: list[str], declaration_index: int) -> tuple[str | None,
     return None, None
 
 
+def _brace_depths(lines: list[str]) -> list[int]:
+    """Return Java brace depth at the beginning of each line, ignoring comments and literals."""
+    depths: list[int] = []
+    depth = 0
+    state = "normal"
+    for line in lines:
+        depths.append(depth)
+        index = 0
+        escaped = False
+        while index < len(line):
+            if state == "block_comment":
+                if line.startswith("*/", index):
+                    state = "normal"
+                    index += 2
+                else:
+                    index += 1
+                continue
+            if state == "text_block":
+                if line.startswith('"""', index):
+                    state = "normal"
+                    index += 3
+                else:
+                    index += 1
+                continue
+            if state in {"string", "character"}:
+                current = line[index]
+                if escaped:
+                    escaped = False
+                elif current == "\\\\":
+                    escaped = True
+                elif (state == "string" and current == '"') or (state == "character" and current == "'"):
+                    state = "normal"
+                index += 1
+                continue
+            if line.startswith("//", index):
+                break
+            if line.startswith("/*", index):
+                state = "block_comment"
+                index += 2
+                continue
+            if line.startswith('"""', index):
+                state = "text_block"
+                index += 3
+                continue
+            current = line[index]
+            if current == '"':
+                state = "string"
+            elif current == "'":
+                state = "character"
+            elif current == "{":
+                depth += 1
+            elif current == "}":
+                depth = max(0, depth - 1)
+            index += 1
+        if state in {"string", "character"}:
+            state = "normal"
+    return depths
+
+
 def inspect_source(path: Path, require_type_metadata: bool = False) -> list[dict[str, object]]:
     findings: list[dict[str, object]] = []
     try:
@@ -107,8 +166,9 @@ def inspect_source(path: Path, require_type_metadata: bool = False) -> list[dict
         if WILDCARD_IMPORT.match(line):
             findings.append({"path": relative, "line": line_number, "rule": "wildcard-import", "message": "Use explicit imports."})
 
+    type_depths = _brace_depths(lines)
     for index, line in enumerate(lines):
-        if not TYPE_DECLARATION.match(line):
+        if type_depths[index] != 0 or not TYPE_DECLARATION.match(line):
             continue
         javadoc, javadoc_start = _type_javadoc(lines, index)
         if javadoc is None:
