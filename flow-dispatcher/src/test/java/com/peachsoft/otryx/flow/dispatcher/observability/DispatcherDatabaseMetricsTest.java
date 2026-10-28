@@ -10,7 +10,13 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-/** Dispatcher 队列与租约指标测试。 */
+/**
+ * Dispatcher 队列与租约指标测试。
+ *
+ * @Author Ryan
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/10/27 18:38
+ */
 class DispatcherDatabaseMetricsTest {
     @Test
     void refreshesQueueAndLeaseMetrics() {

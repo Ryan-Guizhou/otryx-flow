@@ -11,7 +11,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-/** Scheduler 持久化指标和遥测故障隔离测试。 */
+/**
+ * Scheduler 持久化指标和遥测故障隔离测试。
+ *
+ * @Author Ryan
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/10/27 18:38
+ */
 class SchedulerDatabaseMetricsTest {
     @Test
     void refreshesPersistedScheduleMetrics() {
