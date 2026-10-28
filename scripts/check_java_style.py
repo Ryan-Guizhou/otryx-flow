@@ -95,7 +95,7 @@ def _brace_depths(lines: list[str]) -> list[int]:
                 current = line[index]
                 if escaped:
                     escaped = False
-                elif current == "\\\\":
+                elif current == "\\":
                     escaped = True
                 elif (state == "string" and current == '"') or (state == "character" and current == "'"):
                     state = "normal"
