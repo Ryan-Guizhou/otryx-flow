@@ -1,4 +1,4 @@
-> **GitHub execution status (2026-10-27):** M1/M2 and FLOW-015/016/017/018/019 are merged; FLOW-019 passed the real Compose gate in [PR #28](https://github.com/Ryan-Guizhou/otryx-flow/pull/28). FLOW-020 is tracked by [Issue #29](https://github.com/Ryan-Guizhou/otryx-flow/issues/29); FLOW-021 observability is tracked by [Issue #30](https://github.com/Ryan-Guizhou/otryx-flow/issues/30).
+> **GitHub execution status (2026-10-28):** M1/M2 and FLOW-015/016/017/018/019 are merged; FLOW-019 passed the real Compose gate in [PR #28](https://github.com/Ryan-Guizhou/otryx-flow/pull/28). FLOW-020 is tracked by [Issue #29](https://github.com/Ryan-Guizhou/otryx-flow/issues/29). FLOW-021 [Issue #30](https://github.com/Ryan-Guizhou/otryx-flow/issues/30) is receiving its first observability slice in PR #31; follow-up scope includes HTTP security metrics, RPC metric semantics, and telemetry/database failure injection.
 
 # GitHub Issue 计划索引（部分已创建）
 

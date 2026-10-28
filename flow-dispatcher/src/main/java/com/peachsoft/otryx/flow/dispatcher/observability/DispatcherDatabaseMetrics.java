@@ -80,10 +80,15 @@ public final class DispatcherDatabaseMetrics {
             initialDelayString = "${flow.observability.initial-delay-ms:5000}")
     public void refresh() {
         try {
-            readyTasks.set(count(SQL_READY, READY));
-            activeLeases.set(count(SQL_ACTIVE_LEASES, LEASED));
-            expiredLeases.set(count(SQL_EXPIRED_LEASES, LEASED));
-            pendingOutbox.set(count(SQL_PENDING_OUTBOX, PENDING));
+            long nextReadyTasks = count(SQL_READY, READY);
+            long nextActiveLeases = count(SQL_ACTIVE_LEASES, LEASED);
+            long nextExpiredLeases = count(SQL_EXPIRED_LEASES, LEASED);
+            long nextPendingOutbox = count(SQL_PENDING_OUTBOX, PENDING);
+
+            readyTasks.set(nextReadyTasks);
+            activeLeases.set(nextActiveLeases);
+            expiredLeases.set(nextExpiredLeases);
+            pendingOutbox.set(nextPendingOutbox);
             failureReported.set(false);
         } catch (DataAccessException failure) {
             if (failureReported.compareAndSet(false, true)) {

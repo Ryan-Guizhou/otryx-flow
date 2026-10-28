@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en-US.md)
 
-> **Verified: M1/M2 and M3 FLOW-015/016/017/018/019. M4 production security and observability are in progress.** Production mTLS and public HTTPS remain unimplemented.
+> **Verified: M1/M2 and M3 FLOW-015/016/017/018/019.** PR #31 delivers the first FLOW-021 observability slice; HTTP security metrics and telemetry/database failure-injection checks remain follow-up work. FLOW-020 production security and public HTTPS are not complete.
 
 <!-- doc-section:overview -->
 ## Overview
@@ -54,7 +54,7 @@ M1 merged in [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2), and the
 
 FLOW-018 / [PR #26](https://github.com/Ryan-Guizhou/otryx-flow/pull/26) passed all five gates and real Compose acceptance, delivering the Vue Flow DAG editor, draft CAS, immutable revisions, and pinned-version Run entry.
 
-FLOW-019 / [Issue #27](https://github.com/Ryan-Guizhou/otryx-flow/issues/27) merged in [PR #28](https://github.com/Ryan-Guizhou/otryx-flow/pull/28), delivering DAG Run details, Attempt history, and bounded redacted logs. FLOW-020 / [Issue #29](https://github.com/Ryan-Guizhou/otryx-flow/issues/29) tracks production RPC/Nacos TLS security; FLOW-021 / [Issue #30](https://github.com/Ryan-Guizhou/otryx-flow/issues/30) tracks OpenTelemetry, business metrics, and alerts.
+FLOW-019 / [Issue #27](https://github.com/Ryan-Guizhou/otryx-flow/issues/27) merged in [PR #28](https://github.com/Ryan-Guizhou/otryx-flow/pull/28), delivering DAG Run details, Attempt history, and bounded redacted logs. FLOW-021 / [Issue #30](https://github.com/Ryan-Guizhou/otryx-flow/issues/30) receives its first observability slice in PR #31: RPC Trace, core business metrics, and local dashboards. RPC metric semantics, HTTP security-event counters, and failure-injection coverage remain follow-up work. FLOW-020 / [Issue #29](https://github.com/Ryan-Guizhou/otryx-flow/issues/29) tracks production RPC/Nacos TLS security.
 
 **Boundary:** the current environment is isolated development with Nacos 3.2.4. Production mTLS/HTTPS, the full Playwright browser matrix, and external side-effect compensation remain future work.
 

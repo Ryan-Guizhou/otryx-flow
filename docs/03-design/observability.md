@@ -2,9 +2,9 @@
 
 ## 当前状态
 
-FLOW-021 / [Issue #30](https://github.com/Ryan-Guizhou/otryx-flow/issues/30) 实施中。当前分支为第一阶段集成：引入 OTRYX RPC 的 Micrometer/OpenTelemetry Adapter、Prometheus registry、内部 Actuator 端口，以及本地 Prometheus/Grafana/OTLP Collector 配置。业务级调度/Run/租约指标、Trace 的真实双 JVM 证据与告警故障注入仍需在本 Issue 后续完成，不能仅凭依赖和配置宣称已验收。
+FLOW-021 / [Issue #30](https://github.com/Ryan-Guizhou/otryx-flow/issues/30) 仍在推进。PR #31 交付第一阶段：接入 OTRYX RPC Micrometer/OpenTelemetry Adapter、内部 Actuator 端口、本地 Prometheus/Grafana/OTLP Collector、Scheduler/Engine/Dispatcher 持久化指标快照、Worker 运行时指标，以及严格的 RPC Trace 证据校验器。完整跨 JVM 验收以 PR 最新 Head 的 Compose 门禁结果为准；不能仅凭依赖或配置宣称传播正确。
 
-OTRYX RPC 固定基线：706b6506e49e1ade70de9c6c64c844fdd4631e17。注册中心继续使用 Nacos 3.2.4；生产 mTLS/Nacos TLS 由 [FLOW-020 / Issue #29](https://github.com/Ryan-Guizhou/otryx-flow/issues/29) 与上游 [OTRYX RPC #179](https://github.com/Ryan-Guizhou/otryx-rpc/issues/179) 处理。
+OTRYX RPC 固定基线：0addd7df17c5ba4a0b77e2d30e4c7c75d7ac31f2（已合并的 OpenTelemetry 自动配置顺序修复）。注册中心继续使用 Nacos 3.2.4；生产 mTLS/Nacos TLS 由 [FLOW-020 / Issue #29](https://github.com/Ryan-Guizhou/otryx-flow/issues/29) 与上游 [OTRYX RPC #179](https://github.com/Ryan-Guizhou/otryx-rpc/issues/179) 处理。
 
 ## 本地启动
 
@@ -41,11 +41,12 @@ docker compose -f compose.yaml -f compose.observability.yaml down
 4. 从 DAG Run 页面查看 Run → Node → Attempt，再关联 Worker 日志；日志不作为任务终态权威来源。
 5. 遥测导出失败不得改变 RPC 返回值、Worker 心跳、完成 ACK 或业务状态。
 
-## 待完成验收
+## 后续待完成验收
 
-- [ ] 真实 Compose 下确认 Prometheus targets、规则加载和 RPC 指标可查询。
-- [ ] 真实跨 JVM Trace Context 验收。
-- [x] 为 Scheduler、Engine、Dispatcher、Worker 增加权威业务指标的第一批有界快照/运行时指标。
-- [ ] 通过真实 Compose 验证 Worker OTLP 指标、RPC Trace Context 和遥测出口故障隔离。
-- [ ] 验证遥测出口失败不阻塞任务心跳/完成。
-- [ ] 生产 mTLS/Nacos TLS 与公开 HTTPS 仍是独立后续工作。
+- [x] 为 Scheduler、Engine、Dispatcher、Worker 增加权威数据库快照或有界运行时指标。
+- [x] 在真实 Compose 中验证 Prometheus 抓取、关键业务指标查询、规则加载与 Collector 收集 Trace。
+- [x] 为 OTRYX RPC Trace 增加单元测试，并在真实验收中检查跨服务 client/server Span 的 Trace ID、Parent Span ID 与 method ID 关系。
+- [ ] 查询并核验 RPC logical-call/network-attempt/retry 指标语义及低基数标签。
+- [ ] 补充 HTTP/API 认证与授权拒绝计数，并验证敏感字段不会进入指标标签或 Trace 属性。
+- [ ] 增加数据库不可用与遥测出口故障告警规则，以及出口故障时 RPC、Worker heartbeat 和完成 ACK 不受影响的故障注入测试。
+- [ ] 生产 mTLS/Nacos TLS 与公开 HTTPS 仍由独立安全工作项负责。

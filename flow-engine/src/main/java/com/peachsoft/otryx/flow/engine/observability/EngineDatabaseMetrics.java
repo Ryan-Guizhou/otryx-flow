@@ -85,11 +85,16 @@ public final class EngineDatabaseMetrics {
             initialDelayString = "${flow.observability.initial-delay-ms:5000}")
     public void refresh() {
         try {
-            activeRuns.set(count(SQL_ACTIVE_RUNS, RUNNING));
-            blockedNodes.set(count(SQL_BLOCKED_NODES, BLOCKED));
-            pendingOutbox.set(count(SQL_PENDING_OUTBOX, PENDING));
-            outboxOldestMillis.set(
-                    Math.max(0L, Math.round(decimal(SQL_OUTBOX_OLDEST, PENDING) * MILLIS_PER_SECOND)));
+            long nextActiveRuns = count(SQL_ACTIVE_RUNS, RUNNING);
+            long nextBlockedNodes = count(SQL_BLOCKED_NODES, BLOCKED);
+            long nextPendingOutbox = count(SQL_PENDING_OUTBOX, PENDING);
+            long nextOutboxOldestMillis =
+                    Math.max(0L, Math.round(decimal(SQL_OUTBOX_OLDEST, PENDING) * MILLIS_PER_SECOND));
+
+            activeRuns.set(nextActiveRuns);
+            blockedNodes.set(nextBlockedNodes);
+            pendingOutbox.set(nextPendingOutbox);
+            outboxOldestMillis.set(nextOutboxOldestMillis);
             failureReported.set(false);
         } catch (DataAccessException failure) {
             if (failureReported.compareAndSet(false, true)) {

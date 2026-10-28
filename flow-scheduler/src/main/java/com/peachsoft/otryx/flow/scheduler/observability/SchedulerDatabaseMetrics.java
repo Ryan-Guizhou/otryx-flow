@@ -85,10 +85,16 @@ public final class SchedulerDatabaseMetrics {
             initialDelayString = "${flow.observability.initial-delay-ms:5000}")
     public void refresh() {
         try {
-            enabledSchedules.set(count(SQL_ENABLED));
-            pendingTriggers.set(count(SQL_PENDING_TRIGGERS, PENDING_ENGINE));
-            pendingOutbox.set(count(SQL_PENDING_OUTBOX, PENDING));
-            dueLagMillis.set(Math.max(0L, Math.round(decimal(SQL_DUE_LAG) * MILLIS_PER_SECOND)));
+            long nextEnabledSchedules = count(SQL_ENABLED);
+            long nextPendingTriggers = count(SQL_PENDING_TRIGGERS, PENDING_ENGINE);
+            long nextPendingOutbox = count(SQL_PENDING_OUTBOX, PENDING);
+            long nextDueLagMillis =
+                    Math.max(0L, Math.round(decimal(SQL_DUE_LAG) * MILLIS_PER_SECOND));
+
+            enabledSchedules.set(nextEnabledSchedules);
+            pendingTriggers.set(nextPendingTriggers);
+            pendingOutbox.set(nextPendingOutbox);
+            dueLagMillis.set(nextDueLagMillis);
             failureReported.set(false);
         } catch (DataAccessException failure) {
             if (failureReported.compareAndSet(false, true)) {

@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en-US.md)
 
-> **已验收：M1/M2 与 M3 FLOW-015/016/017/018/019；FLOW-020（生产安全）与 FLOW-021（可观测性）正在推进。** 生产 mTLS 与公网 HTTPS 尚未完成。
+> **已验收：M1/M2 与 M3 FLOW-015/016/017/018/019。** FLOW-021 的第一阶段可观测性由 PR #31 交付；HTTP 安全事件指标与遥测/数据库故障注入仍在后续计划中。FLOW-020 生产安全及公网 HTTPS 尚未完成。
 
 <!-- doc-section:overview -->
 ## 简介
@@ -54,7 +54,7 @@ M1 合并于 [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2)，M2 完
 
 FLOW-018 / [PR #26](https://github.com/Ryan-Guizhou/otryx-flow/pull/26) 已通过五项门禁与真实 Compose 验收并合并，提供 Vue Flow DAG 编辑、草稿 CAS、不可变发布版本和固定 Revision 运行入口。
 
-FLOW-019 / [Issue #27](https://github.com/Ryan-Guizhou/otryx-flow/issues/27) 已在 [PR #28](https://github.com/Ryan-Guizhou/otryx-flow/pull/28) 合并，交付 DAG Run 详情、Attempt 历史与有界脱敏日志。当前 FLOW-020 / [Issue #29](https://github.com/Ryan-Guizhou/otryx-flow/issues/29) 负责生产 RPC mTLS/Nacos TLS，FLOW-021 / [Issue #30](https://github.com/Ryan-Guizhou/otryx-flow/issues/30) 负责 OpenTelemetry、业务指标和告警。
+FLOW-019 / [Issue #27](https://github.com/Ryan-Guizhou/otryx-flow/issues/27) 已在 [PR #28](https://github.com/Ryan-Guizhou/otryx-flow/pull/28) 合并，交付 DAG Run 详情、Attempt 历史与有界脱敏日志。FLOW-021 / [Issue #30](https://github.com/Ryan-Guizhou/otryx-flow/issues/30) 的第一阶段在 PR #31 中交付 RPC Trace、核心业务指标和本地告警面板；RPC 指标语义、HTTP 安全事件计数与故障注入仍需补齐。FLOW-020 / [Issue #29](https://github.com/Ryan-Guizhou/otryx-flow/issues/29) 继续负责生产 RPC mTLS/Nacos TLS。
 
 **边界：** 当前为 Nacos 3.2.4 的隔离开发环境；生产 mTLS/HTTPS、完整 Playwright 浏览器矩阵与外部副作用补偿仍是后续阶段。
 

@@ -76,12 +76,17 @@ public final class WorkerRuntime implements AutoCloseable {
      *
      * @param dispatcher 通过 OTRYX RPC 获得的真实 Dispatcher 契约
      * @param settings 有界 Worker 参数
-     * @param handlers 预先构造的可信 Java Handler 表
+     * @param handlers 预先构造的可信 Java Handler 表，最多允许 MAX_HANDLER_REGISTRATIONS 项
+     * @throws NullPointerException 任一必需参数为空
+     * @throws IllegalArgumentException Handler 表为空、超出上限或包含不合法注册项
      */
-    public WorkerRuntime(DispatcherRpc dispatcher, WorkerSettings settings, Map<String, WorkerHandler> handlers) {
-        this.dispatcher = Objects.requireNonNull(dispatcher);
-        this.settings = Objects.requireNonNull(settings);
-        Objects.requireNonNull(handlers);
+    public WorkerRuntime(
+            DispatcherRpc dispatcher,
+            WorkerSettings settings,
+            Map<String, WorkerHandler> handlers) {
+        this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
+        this.settings = Objects.requireNonNull(settings, "settings");
+        Objects.requireNonNull(handlers, "handlers");
         if (handlers.isEmpty() || handlers.size() > MAX_HANDLER_REGISTRATIONS) {
             throw new IllegalArgumentException("Worker handler allowlist must be bounded and nonempty");
         }
@@ -212,7 +217,7 @@ public final class WorkerRuntime implements AutoCloseable {
                     task.leaseDeadline = Instant.now().plusSeconds(LEASE_SECONDS);
                 }
             } catch (RuntimeException uncertain) {
-                // Unknown RPC response does not renew our local lease certainty.
+                // RPC 回执未知时不延长本地对租约有效性的判断。
                 LOGGER.warn("Worker heartbeat uncertain: taskId={}, errorType={}",
                         task.lease.taskId(), uncertain.getClass().getSimpleName());
             }
@@ -307,7 +312,7 @@ public final class WorkerRuntime implements AutoCloseable {
                         task.lease.taskId(), task.lease.leaseEpoch(), outcome);
             }
         } catch (RuntimeException uncertain) {
-            // Lost acknowledgement leaves an at-least-once ambiguity. Never fabricate success.
+            // 完成回执丢失会产生至少一次执行歧义；不能将未知结果伪装为成功。
             LOGGER.warn(
                     "Worker completion unknown, awaiting lease recovery: taskId={}, epoch={}, outcome={}, errorType={}",
                     task.lease.taskId(),
