@@ -90,7 +90,7 @@ class AuthControllerTest {
         verifyNoInteractions(repository);
         assertNull(SecurityContextHolder.getContext().getAuthentication());
         assertEquals(1.0, meterRegistry.get("flow.security.login.failures").counter().count());
-        assertEquals(0, meterRegistry.get("flow.security.login.failures").tags().size());
+        assertEquals(0, meterRegistry.get("flow.security.login.failures").counter().getId().getTags().size());
     }
 
     @Test
