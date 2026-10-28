@@ -20,6 +20,7 @@ import com.peachsoft.otryx.flow.contracts.v1.DispatchLogEntry;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchLogPageView;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchMutationReply;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchTaskListReply;
+import com.peachsoft.otryx.flow.contracts.v1.DispatcherRpc;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
