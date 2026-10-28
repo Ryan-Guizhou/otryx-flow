@@ -16,6 +16,8 @@ on:
       - 'deploy/**'
       - 'compose.yaml'
       - 'scripts/check_m1_source.py'
+      - 'scripts/check_observability_evidence.py'
+      - 'scripts/test_check_observability_evidence.py'
       - 'scripts/test_m1_e2e.sh'
       - 'scripts/test_m2_job_e2e.sh'
       - 'scripts/test_m2_scheduler_e2e.sh'
@@ -40,6 +42,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 scripts/check_m1_source.py
+      - name: Test strict OTRYX RPC trace evidence validator
+        run: python3 scripts/test_check_observability_evidence.py
   backend:
     runs-on: ubuntu-latest
     steps:
