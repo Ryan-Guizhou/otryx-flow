@@ -1,0 +1,10 @@
+apiVersion: 1
+providers:
+  - name: OTRYX Flow
+    orgId: 1
+    folder: OTRYX Flow
+    type: file
+    disableDeletion: true
+    editable: false
+    options:
+      path: /var/lib/grafana/dashboards

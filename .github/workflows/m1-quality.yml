@@ -16,6 +16,8 @@ on:
       - 'deploy/**'
       - 'compose.yaml'
       - 'scripts/check_m1_source.py'
+      - 'scripts/check_observability_evidence.py'
+      - 'scripts/test_check_observability_evidence.py'
       - 'scripts/test_m1_e2e.sh'
       - 'scripts/test_m2_job_e2e.sh'
       - 'scripts/test_m2_scheduler_e2e.sh'
@@ -40,6 +42,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 scripts/check_m1_source.py
+      - name: Test strict OTRYX RPC trace evidence validator
+        run: python3 scripts/test_check_observability_evidence.py
   backend:
     runs-on: ubuntu-latest
     steps:
@@ -54,16 +58,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository/com/peachsoft/otryx
-          key: otryx-rpc-706b6506e49e1ade70de9c6c64c844fdd4631e17-jdk21-nacos-v2
+          key: otryx-rpc-0addd7df17c5ba4a0b77e2d30e4c7c75d7ac31f2-jdk21-nacos-v2
       - name: Build pinned OTRYX RPC locally
         if: steps.rpc-artifacts.outputs.cache-hit != 'true'
         shell: bash
         run: |
           git clone https://github.com/Ryan-Guizhou/otryx-rpc.git /tmp/otryx-rpc
           cd /tmp/otryx-rpc
-          git checkout 706b6506e49e1ade70de9c6c64c844fdd4631e17
-          test "$(git rev-parse HEAD)" = 706b6506e49e1ade70de9c6c64c844fdd4631e17
-          ./mvnw -B -ntp -pl :otryx-codegen,:otryx-spring-boot-starter,:otryx-registry-nacos -am -DskipTests install
+          git checkout 0addd7df17c5ba4a0b77e2d30e4c7c75d7ac31f2
+          test "$(git rev-parse HEAD)" = 0addd7df17c5ba4a0b77e2d30e4c7c75d7ac31f2
+          ./mvnw -B -ntp -pl :otryx-codegen,:otryx-spring-boot-starter,:otryx-registry-nacos,:otryx-observability-micrometer,:otryx-observability-opentelemetry -am -DskipTests install
       - run: mvn -B -ntp clean verify
   frontend:
     runs-on: ubuntu-latest

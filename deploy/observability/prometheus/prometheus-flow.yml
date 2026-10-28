@@ -1,0 +1,29 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+rule_files:
+  - /etc/prometheus/flow-alerts.yml
+scrape_configs:
+  - job_name: flow-api
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: [flow-api:9091]
+  - job_name: flow-metadata
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: [flow-metadata:9091]
+  - job_name: flow-scheduler
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: [flow-scheduler:9091, flow-scheduler-replica:9091]
+  - job_name: flow-engine
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: [flow-engine:9091]
+  - job_name: flow-dispatcher
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: [flow-dispatcher:9091, flow-dispatcher-replica:9091]
+  - job_name: otel-collector
+    static_configs:
+      - targets: [otel-collector:9464]
