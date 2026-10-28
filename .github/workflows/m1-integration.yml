@@ -49,7 +49,7 @@ jobs:
           FLOW_DB_PASSWORD=$(openssl rand -hex 24)
           FLOW_ADMIN_USERNAME=admin
           FLOW_ADMIN_PASSWORD=$(openssl rand -hex 24)
-          OTRYX_RPC_SHA=706b6506e49e1ade70de9c6c64c844fdd4631e17
+          OTRYX_RPC_SHA=3e570ed6975414efed090848b02a2fd7b6be2751
           FLOW_DISPATCH_E2E_PROFILE=e2e
           FLOW_NACOS_AUTH_TOKEN=$(openssl rand -base64 48)
           FLOW_NACOS_IDENTITY_VALUE=$(openssl rand -hex 24)

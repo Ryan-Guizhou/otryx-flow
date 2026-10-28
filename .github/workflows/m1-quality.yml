@@ -54,15 +54,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository/com/peachsoft/otryx
-          key: otryx-rpc-706b6506e49e1ade70de9c6c64c844fdd4631e17-jdk21-nacos-v2
+          key: otryx-rpc-3e570ed6975414efed090848b02a2fd7b6be2751-jdk21-nacos-v2
       - name: Build pinned OTRYX RPC locally
         if: steps.rpc-artifacts.outputs.cache-hit != 'true'
         shell: bash
         run: |
           git clone https://github.com/Ryan-Guizhou/otryx-rpc.git /tmp/otryx-rpc
           cd /tmp/otryx-rpc
-          git checkout 706b6506e49e1ade70de9c6c64c844fdd4631e17
-          test "$(git rev-parse HEAD)" = 706b6506e49e1ade70de9c6c64c844fdd4631e17
+          git checkout 3e570ed6975414efed090848b02a2fd7b6be2751
+          test "$(git rev-parse HEAD)" = 3e570ed6975414efed090848b02a2fd7b6be2751
           ./mvnw -B -ntp -pl :otryx-codegen,:otryx-spring-boot-starter,:otryx-registry-nacos,:otryx-observability-micrometer,:otryx-observability-opentelemetry -am -DskipTests install
       - run: mvn -B -ntp clean verify
   frontend:

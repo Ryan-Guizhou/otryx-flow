@@ -1,6 +1,6 @@
 # 已验证来源、设计假设与实施前核对
 
-**检查日期：2026-10-23**。以下“Current”是从公开 GitHub 现有仓库文件取得的事实；不是 OTRYX Flow 已实现的能力。仓库后来可能变化，M1 必须记录精确 Git SHA 而不是只用 `main`。
+**检查日期：2026-10-28**。以下“Current”是从公开 GitHub 现有仓库文件取得的事实；不是 OTRYX Flow 已实现的能力。仓库后来可能变化，M1 必须记录精确 Git SHA 而不是只用 `main`。
 
 | 类型 | 项目事实 | 来源 |
 |---|---|---|
@@ -22,3 +22,11 @@
 
 ## 命名规则
 `Proposed` 表示设计决策或将来实现；`Current` 表示来源仓库已读事实；`Evidence` 表示带 Commit/工具版本和原始日志的执行证明。不可用 GitHub CI smoke 替代正式固定硬件性能证据。
+
+
+## 2026-10-28 可观测性集成基线
+
+- OTRYX RPC 仍使用 `1.0.0-SNAPSHOT`、JDK 21 和 Spring Boot 3.5.4。
+- Flow 的构建与 Compose 验收固定到 OTRYX RPC commit `3e570ed6975414efed090848b02a2fd7b6be2751`，该提交包含 Issue #180 的 OpenTelemetry 自动配置顺序修复；不能仅根据依赖存在就宣称跨 JVM Trace 已通过。
+- 运行验收必须确认同一调用的 RPC client/server Span 具有相同 Trace ID，并且 server Span 的 Parent Span ID 等于 client Span ID。证据来自精确 PR Head 的 Collector 输出和 CI 日志。
+- 该 SHA 当前为待合并的上游 PR #181 代码基线；只有上游 PR 合并后，才可将 Flow PR #31 合并到 main。
