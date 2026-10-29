@@ -2,8 +2,10 @@ package com.peachsoft.otryx.flow.api.security;
 
 import com.peachsoft.otryx.flow.api.observability.FlowHttpMetricsFilter;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
@@ -16,7 +18,6 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
@@ -40,10 +41,8 @@ public class FlowSecurityConfiguration {
     @Bean
     public SecurityFilterChain filterChain(
             HttpSecurity http,
-            SecurityContextRepository contexts,
-            MeterRegistry meterRegistry) throws Exception {
+            SecurityContextRepository contexts) throws Exception {
         return http
-                .addFilterBefore(new FlowHttpMetricsFilter(meterRegistry), SecurityContextHolderFilter.class)
                 .exceptionHandling(e -> e.authenticationEntryPoint(
                         new HttpStatusEntryPoint(org.springframework.http.HttpStatus.UNAUTHORIZED)))
                 .authorizeHttpRequests(a -> a
@@ -60,6 +59,23 @@ public class FlowSecurityConfiguration {
                 .httpBasic(b -> b.disable())
                 .logout(l -> l.disable())
                 .build();
+    }
+
+    /**
+     * 在整个 Servlet 过滤链外层统计最终响应状态，包括 Spring Security 提前拒绝的请求。
+     *
+     * <p>只覆盖 /api/*，不触及 Actuator 或公开管理端口；不访问请求参数或认证凭据。</p>
+     *
+     * @param meterRegistry 当前应用的指标注册器
+     * @return 外层有界 HTTP 响应指标过滤器注册信息
+     */
+    @Bean
+    public FilterRegistrationBean<FlowHttpMetricsFilter> flowHttpMetricsFilter(MeterRegistry meterRegistry) {
+        FilterRegistrationBean<FlowHttpMetricsFilter> registration = new FilterRegistrationBean<>();
+        registration.setFilter(new FlowHttpMetricsFilter(meterRegistry));
+        registration.addUrlPatterns("/api/*");
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
+        return registration;
     }
 
     /** 使用 HTTP Session 保存 REST 登录身份。 */
