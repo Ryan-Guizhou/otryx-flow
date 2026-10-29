@@ -28,6 +28,7 @@ on:
       - "scripts/check_rpc_metric_evidence.py"
       - "scripts/test_check_rpc_metric_evidence.py"
       - "scripts/test_rpc_metric_semantics.sh"
+      - "scripts/test_telemetry_failure_isolation.sh"
       - ".github/workflows/m1-integration.yml"
 permissions:
   contents: read
@@ -131,6 +132,14 @@ jobs:
           source .env
           set +a
           bash scripts/test_rpc_metric_semantics.sh
+      - name: Verify real Worker heartbeat and terminal state with Collector offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source .env
+          set +a
+          bash scripts/test_telemetry_failure_isolation.sh
       - name: Collect bounded failure diagnostics
         if: failure()
         run: |
