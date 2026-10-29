@@ -23,7 +23,15 @@ import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 
-/** 同源 Session 认证和 CSRF 防护配置。 */
+/**
+ * 配置同源会话认证、CSRF 防护及 HTTP 安全事件指标。
+ *
+ * <p>只允许明确开放的认证端点匿名访问；安全事件指标在认证链内按固定结果类别计数。</p>
+ *
+ * @Author Ryan
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/10/26 14:25
+ */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
@@ -36,9 +44,12 @@ public class FlowSecurityConfiguration {
             MeterRegistry meterRegistry) throws Exception {
         return http
                 .addFilterBefore(new FlowHttpMetricsFilter(meterRegistry), SecurityContextHolderFilter.class)
-                .exceptionHandling(e -> e.authenticationEntryPoint(new HttpStatusEntryPoint(org.springframework.http.HttpStatus.UNAUTHORIZED)))
+                .exceptionHandling(e -> e.authenticationEntryPoint(
+                        new HttpStatusEntryPoint(org.springframework.http.HttpStatus.UNAUTHORIZED)))
                 .authorizeHttpRequests(a -> a
-                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf", "/actuator/health", "/actuator/info").permitAll()
+                        .requestMatchers(
+                                HttpMethod.GET, "/api/v1/auth/csrf", "/actuator/health", "/actuator/info")
+                        .permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
                         .anyRequest().authenticated())
                 .csrf(c -> c.csrfTokenRepository(new CookieCsrfTokenRepository())

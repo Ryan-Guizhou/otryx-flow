@@ -7,8 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.servlet.ServletException;
 import java.util.Set;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
@@ -21,10 +21,16 @@ import org.springframework.mock.web.MockHttpServletResponse;
  */
 class FlowHttpMetricsFilterTest {
 
+    private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
+    private final FlowHttpMetricsFilter filter = new FlowHttpMetricsFilter(registry);
+
+    @AfterEach
+    void closeRegistry() {
+        registry.close();
+    }
+
     @Test
     void countsSuccessAuthenticationFailureAuthorizationDenialAndServerError() throws Exception {
-        try (SimpleMeterRegistry registry = new SimpleMeterRegistry()) {
-            FlowHttpMetricsFilter filter = new FlowHttpMetricsFilter(registry);
             invoke(filter, 200);
             invoke(filter, 401);
             invoke(filter, 403);
@@ -38,13 +44,10 @@ class FlowHttpMetricsFilterTest {
                     "status_class", "4xx", "security_event", "authorization_denied").count());
             assertEquals(1.0, registry.counter("flow.http.responses",
                     "status_class", "5xx", "security_event", "none").count());
-        }
     }
 
     @Test
     void neverUsesRequestMetadataForMeterTags() throws Exception {
-        try (SimpleMeterRegistry registry = new SimpleMeterRegistry()) {
-            FlowHttpMetricsFilter filter = new FlowHttpMetricsFilter(registry);
             for (int i = 0; i < 100; i++) {
                 MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/projects/" + i);
                 request.addHeader("Authorization", "Bearer secret-" + i);
@@ -62,20 +65,16 @@ class FlowHttpMetricsFilterTest {
                             .collect(java.util.stream.Collectors.toSet()));
             assertTrue(registry.getMeters().stream().noneMatch(
                     meter -> meter.getId().toString().contains("secret-")));
-        }
     }
 
     @Test
     void propagatesOriginalServletErrorAndCountsFailure() {
-        try (SimpleMeterRegistry registry = new SimpleMeterRegistry()) {
-            FlowHttpMetricsFilter filter = new FlowHttpMetricsFilter(registry);
             assertThrows(ServletException.class, () -> filter.doFilter(
                     new MockHttpServletRequest(),
                     new MockHttpServletResponse(),
                     (req, res) -> { throw new ServletException("internal sensitive detail"); }));
             assertEquals(1.0, registry.counter("flow.http.responses",
                     "status_class", "5xx", "security_event", "none").count());
-        }
     }
 
     private void invoke(FlowHttpMetricsFilter filter, int status) throws Exception {
