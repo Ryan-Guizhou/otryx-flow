@@ -20,10 +20,21 @@ flow:
     admin-username: ${FLOW_ADMIN_USERNAME:admin}
     admin-password: ${FLOW_ADMIN_PASSWORD:}
 management:
+  server:
+    port: ${FLOW_MANAGEMENT_PORT:9091}
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: never
+  tracing:
+    sampling:
+      probability: ${FLOW_TRACE_SAMPLING_PROBABILITY:0.0}
+  otlp:
+    tracing:
+      endpoint: ${MANAGEMENT_OTLP_TRACING_ENDPOINT:http://127.0.0.1:4318/v1/traces}
 otryx:
   rpc:
     security-profile: TRUSTED_DEVELOPMENT # Developer-only isolated Compose network.

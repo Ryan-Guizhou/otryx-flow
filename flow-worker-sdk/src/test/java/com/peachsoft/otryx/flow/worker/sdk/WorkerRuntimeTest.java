@@ -1,8 +1,26 @@
 package com.peachsoft.otryx.flow.worker.sdk;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.peachsoft.otryx.flow.contracts.v1.*;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchCancelCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchCancelReply;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchCompleteCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchEnqueueCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchEnqueueReply;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchHeartbeatCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchLeaseCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchLeaseReply;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchLeaseView;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchLogBatchCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchLogBatchReply;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchLogEntry;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchLogPageView;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchMutationReply;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchTaskListReply;
+import com.peachsoft.otryx.flow.contracts.v1.DispatcherRpc;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
@@ -14,7 +32,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
-/** 验证真实 SDK 的领取、显式 Handler、心跳、超时、并发上限与优雅关闭。 */
+/**
+ * 验证 Worker SDK 的领取、固定 Handler、心跳、超时、并发上限和有界日志交付。
+ *
+ * @Author Ryan
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/10/26 18:20
+ */
 class WorkerRuntimeTest {
     private static final String WORKER = "sdk-test-worker";
 
@@ -35,6 +59,11 @@ class WorkerRuntimeTest {
             assertEquals(rpc.taskId, seenTask.get());
             assertFalse(cancelled.get());
             assertTrue(await(Duration.ofSeconds(3), () -> runtime.activeCount() == 0));
+            assertEquals(1L, runtime.completedTaskCount());
+            assertEquals(0L, runtime.failedTaskCount());
+            assertEquals(0L, runtime.cancelledTaskCount());
+            assertTrue(runtime.totalExecutionNanos() >= 0L);
+            assertEquals(2, runtime.availableSlots());
         }
     }
 
@@ -69,6 +98,8 @@ class WorkerRuntimeTest {
             assertTrue(rpc.completed.await(7, TimeUnit.SECONDS));
             assertEquals("FAILED", rpc.outcome.get());
             assertTrue(await(Duration.ofSeconds(3), () -> runtime.activeCount() == 0));
+            assertEquals(1L, runtime.cancelledTaskCount());
+            assertEquals(0L, runtime.completedTaskCount());
         }
     }
 
@@ -145,7 +176,9 @@ class WorkerRuntimeTest {
                 Duration.ofSeconds(timeoutSeconds), Duration.ofSeconds(2));
     }
 
-    private static boolean await(Duration timeout, java.util.function.BooleanSupplier ready) throws InterruptedException {
+    private static boolean await(
+            Duration timeout,
+            java.util.function.BooleanSupplier ready) throws InterruptedException {
         long until = System.nanoTime() + timeout.toNanos();
         while (System.nanoTime() < until) {
             if (ready.getAsBoolean()) return true;
@@ -154,6 +187,11 @@ class WorkerRuntimeTest {
         return ready.getAsBoolean();
     }
 
+    /**
+     * 为 Worker SDK 生命周期测试提供确定性的内存 Dispatcher。
+     *
+     * <p>该替身只验证客户端调用契约，不替代真实 Nacos/Dispatcher Compose 验收。</p>
+     */
     private static final class FakeDispatcher implements DispatcherRpc {
         final String taskId = UUID.randomUUID().toString();
         final AtomicInteger claims = new AtomicInteger();
@@ -164,12 +202,18 @@ class WorkerRuntimeTest {
         final AtomicReference<String> outcome = new AtomicReference<>();
         final AtomicBoolean staleHeartbeat = new AtomicBoolean();
         final CountDownLatch completed = new CountDownLatch(1);
-        @Override public DispatchEnqueueReply enqueue(DispatchEnqueueCommand unused) { throw new UnsupportedOperationException(); }
+        @Override
+        public DispatchEnqueueReply enqueue(DispatchEnqueueCommand unused) {
+            throw new UnsupportedOperationException();
+        }
         @Override public com.peachsoft.otryx.flow.contracts.v1.DispatchCancelReply cancelDagTask(
                 com.peachsoft.otryx.flow.contracts.v1.DispatchCancelCommand unused) {
             throw new UnsupportedOperationException();
         }
-        @Override public DispatchTaskListReply list(String owner, String project) { throw new UnsupportedOperationException(); }
+        @Override
+        public DispatchTaskListReply list(String owner, String project) {
+            throw new UnsupportedOperationException();
+        }
         @Override public DispatchLogBatchReply appendLogs(DispatchLogBatchCommand command) {
             logged.addAndGet(command.entries().length);
             logMessages.updateAndGet(old -> old + " " + java.util.Arrays.stream(command.entries())

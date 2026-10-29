@@ -1,0 +1,99 @@
+groups:
+  - name: otryx-flow-availability
+    rules:
+      - alert: FlowMetricsTargetDown
+        expr: up{job=~"flow-.*"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "A Flow management metrics target is unavailable"
+          description: "The internal management endpoint has been unreachable for more than two minutes."
+      - alert: OtryxRpcClientTimeoutsIncreasing
+        expr: sum(rate(otryx_rpc_client_timeouts_total[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "OTRYX RPC client timeouts are occurring"
+          description: "Inspect RPC latency, retries, provider saturation and Registry health."
+      - alert: OtryxRpcRegistryFailuresIncreasing
+        expr: sum(rate(otryx_rpc_registry_failures_total[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "OTRYX RPC Registry failures are occurring"
+          description: "Inspect Nacos availability and effective registry security configuration."
+      - alert: FlowSchedulerDueLagHigh
+        expr: max(flow_schedule_due_lag_seconds) > 60
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Scheduler is behind its due-time cursor"
+          description: "One or more enabled schedules have a due lag above the template threshold; tune this threshold for the target environment."
+      - alert: FlowScheduleOutboxBacklog
+        expr: sum(flow_schedule_outbox_pending) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Schedule Outbox has pending events"
+          description: "Inspect the scheduler relay, Engine availability and delivery retry state."
+      - alert: FlowDagOutboxBacklog
+        expr: max(flow_dag_outbox_oldest_seconds) > 60
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DAG dispatch Outbox has old pending events"
+          description: "Inspect the Engine relay and Dispatcher enqueue path; tune the template threshold for the target environment."
+      - alert: FlowDispatcherLeaseExpired
+        expr: sum(flow_dispatch_lease_expired) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Dispatcher has expired active leases"
+          description: "Inspect Worker heartbeats, task duration, lease renewal and worker saturation."
+      - alert: FlowDispatcherOutboxBacklog
+        expr: sum(flow_dispatch_outbox_pending) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Dispatcher outcome Outbox has pending events"
+          description: "Inspect Engine availability and the outcome delivery relay."
+      - alert: FlowWorkerNoAvailableSlots
+        expr: min(flow_worker_available_slots) == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Worker execution capacity is exhausted"
+          description: "The demo Worker reports no available execution slots; inspect active handlers, lease deadlines and shutdown state."
+      - alert: FlowWorkerTaskFailures
+        expr: sum(rate(flow_worker_tasks_failed_total[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Worker handler failures are occurring"
+          description: "Inspect redacted task logs and the terminal outcome path."
+      - alert: FlowWorkerDroppedLogs
+        expr: sum(increase(flow_worker_logs_dropped_total[5m])) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Worker execution logs are being dropped"
+          description: "Inspect log batching, Dispatcher availability and bounded queue pressure."
+      - alert: OtryxRpcRetryAmplification
+        expr: (sum(rate(otryx_rpc_client_attempts_seconds_count[5m])) / clamp_min(sum(rate(otryx_rpc_client_calls_seconds_count[5m])), 0.001)) > 1.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "OTRYX RPC retry amplification is elevated"
+          description: "Network attempts are significantly higher than logical calls. Validate metric names and tune this threshold for the target environment."
