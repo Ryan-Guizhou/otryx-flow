@@ -79,6 +79,18 @@ jobs:
           docker compose exec -T prometheus promtool check config /etc/prometheus/prometheus.yml
           docker compose exec -T prometheus promtool check rules /etc/prometheus/flow-alerts.yml
           docker compose run --rm --no-deps otel-collector validate --config=/etc/otelcol-contrib/config.yaml
+      - name: Prove early anonymous 401 is captured by HTTP security metrics
+        shell: bash
+        run: |
+          set -euo pipefail
+          code="$(curl --silent --show-error --max-time 15 -o /dev/null -w '%{http_code}' \
+            http://127.0.0.1:8088/api/v1/projects)"
+          [ "$code" = 401 ] || { echo "Expected HTTP 401, got $code"; exit 1; }
+          # Read the internal management endpoint directly to avoid scrape timing races.
+          docker compose --profile observability-test run --rm --no-deps \
+            --entrypoint sh observability-probe -ec \
+            'curl -fsS --max-time 10 http://flow-api:9091/actuator/prometheus \
+              | grep -E "^flow_http_responses_total\\{.*security_event=\\\"authentication_failure\\\""'
       - name: Run real RPC business path, restart recovery, and optional M2 jobs
         shell: bash
         env:
