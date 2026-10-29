@@ -50,3 +50,40 @@ docker compose -f compose.yaml -f compose.observability.yaml down
 - [ ] 补充 HTTP/API 认证与授权拒绝计数，并验证敏感字段不会进入指标标签或 Trace 属性。
 - [ ] 增加数据库不可用与遥测出口故障告警规则，以及出口故障时 RPC、Worker heartbeat 和完成 ACK 不受影响的故障注入测试。
 - [ ] 生产 mTLS/Nacos TLS 与公开 HTTPS 仍由独立安全工作项负责。
+
+## FLOW-021 后续验证：HTTP 安全、数据库刷新与遥测隔离
+
+PR #35（Issue #34）新增低基数 HTTP 响应指标 `flow_http_responses_total`。只使用
+`status_class`（1xx/2xx/3xx/4xx/5xx/unknown）与
+`security_event`（none/authentication_failure/authorization_denied）两类固定标签。
+403 也可能来自 CSRF 校验，因此此安全事件计数是拒绝类别，不可直接推断具体用户越权。
+
+Scheduler、Engine、Dispatcher 的 `flow_database_metrics_refresh_state` Gauge 不包含业务 ID 标签。
+0 表示尚未完成首次采样，1 表示最近一次数据库指标刷新成功，2 表示最近一次刷新失败。
+故障时旧业务 Gauge 保留上次成功的快照；必须结合刷新状态使用，不能把旧值当成实时状态。
+数据库恢复后成功刷新会将状态从 2 改为 1。告警阈值是环境模板，不代表正式生产 SLO。
+
+`FlowTelemetryCollectorUnavailable` 使用内部 Prometheus 的 `up{job="otel-collector"}`
+确认 Collector 抓取端点不可用。**这不是所有 SDK OTLP 数据导出失败的直接计数**；
+Collector 在线而实际 exporter 失败的完整证据仍需专门注入，不能根据此告警宣称已验证。
+
+固定 OTRYX RPC Micrometer Observer 的真实指标契约如下：
+
+- `otryx_rpc_client_calls_seconds_count`：logical call 的 Micrometer Timer 次数。
+- `otryx_rpc_client_attempts_seconds_count`：网络 attempt 的 Micrometer Timer 次数。
+- `otryx_rpc_client_retries_total`：已安排的 retry 事件次数。
+- `otryx_rpc_client_timeouts_total`：逻辑调用 DEADLINE_EXCEEDED 次数。
+
+计数不能混用：调用在发起网络 attempt 前失败时，logical call 与 attempt 可不相同。
+`scripts/test_rpc_metric_semantics.sh` 在真实 Nacos 与 MySQL 环境中执行 REST→OTRYX RPC 调用，
+比较调用前后的 Actuator 样本，并检查 RPC Meter 不含项目、Run、Trace、用户名等高基数标签。
+正常成功流量可能没有 retry/timeout；因此零计数**不等于**完整验证了它们的失败语义。
+
+`scripts/test_telemetry_failure_isolation.sh` 仅在隔离 Compose 中运行：
+关闭 Collector 后，创建固定 12 秒的可信 `safe.delay` 任务，验证真实 Worker 心跳延长
+Dispatcher 持久化租约、Dispatcher 与 Engine 最终成功、Outcome Outbox 为 DELIVERED，
+同时从 Prometheus 证实 Collector 不可用，结束后恢复 Collector。
+`safe.delay` 仅在 `FLOW_E2E_DELAY_HANDLER=true` 时注册；普通 Worker 不开放该 Handler。
+测试不得把遥测错误伪装成业务成功，也不承诺外部副作用 exactly-once。
+
+以上是 PR #35 已提交的验收实现；仍须以最新提交的完整 Compose CI 结果作为完成证据。
