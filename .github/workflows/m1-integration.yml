@@ -62,6 +62,7 @@ jobs:
           FLOW_GRAFANA_ADMIN_USER=admin
           FLOW_GRAFANA_ADMIN_PASSWORD=$(openssl rand -hex 24)
           FLOW_OTLP_METRICS_STEP=5s
+          FLOW_E2E_DELAY_HANDLER=true
           EOF_ENV
       - name: Validate Compose configuration
         run: docker compose config --quiet
@@ -113,6 +114,9 @@ jobs:
           query_metric 'flow_dag_run_active'
           query_metric 'flow_dispatch_queue_ready'
           query_metric 'flow_worker_available_slots'
+          query_metric 'flow_database_metrics_refresh_state'
+          query_metric 'flow_http_responses_total{security_event="authentication_failure"}'
+          query_metric 'flow_http_responses_total{security_event="authorization_denied"}'
       - name: Verify cross-JVM trace correlation
         shell: bash
         run: |

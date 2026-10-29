@@ -1,6 +1,7 @@
 package com.peachsoft.otryx.flow.worker.quickstart;
 
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import io.micrometer.core.instrument.FunctionCounter;
@@ -14,6 +15,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import jakarta.annotation.PreDestroy;
 import com.peachsoft.otryx.flow.contracts.v1.DispatcherRpc;
+import com.peachsoft.otryx.flow.worker.sdk.WorkerHandler;
 import com.peachsoft.otryx.flow.worker.sdk.WorkerRuntime;
 import com.peachsoft.otryx.flow.worker.sdk.WorkerSettings;
 import com.peachsoft.otryx.spring.annotation.OtryxRpcReference;
@@ -21,7 +23,8 @@ import com.peachsoft.otryx.spring.annotation.OtryxRpcReference;
 /**
  * 启动受限的 Quickstart Worker，并发布运行时指标。
  *
- * <p>仅注册 safe.echo 与 safe.fail 两个固定 Handler；用户参数不会被解释为代码、脚本或类名。</p>
+ * <p>默认仅注册 safe.echo 与 safe.fail；隔离 CI 可开启固定时长的 safe.delay，以验证心跳故障隔离。</p>
+ * <p>所有 Handler 都是可信实现；用户参数不会被解释为代码、脚本或类名。</p>
  *
  * @Author Ryan
  * @Version 0.1.0-SNAPSHOT
@@ -34,6 +37,9 @@ public final class QuickstartWorkerLauncher {
 
     private static final String HANDLER_SAFE_ECHO = "safe.echo";
     private static final String HANDLER_SAFE_FAIL = "safe.fail";
+    private static final String HANDLER_SAFE_DELAY = "safe.delay";
+    private static final int DELAY_HANDLER_TICKS = 12;
+    private static final long DELAY_HANDLER_TICK_MILLIS = 1_000L;
     private static final String LOG_LEVEL_INFO = "INFO";
     private static final String LOG_LEVEL_WARN = "WARN";
 
@@ -53,6 +59,9 @@ public final class QuickstartWorkerLauncher {
 
     @Value("${flow.worker.id:flow-worker-demo}")
     private String workerId;
+
+    @Value("${FLOW_E2E_DELAY_HANDLER:false}")
+    private boolean e2eDelayHandlerEnabled;
 
     /**
      * 注入进程级指标注册器。
@@ -74,10 +83,7 @@ public final class QuickstartWorkerLauncher {
             return;
         }
 
-        runtime = new WorkerRuntime(
-                dispatcher,
-                WorkerSettings.development(workerId),
-                Map.of(
+        Map<String, WorkerHandler> handlers = new LinkedHashMap<>(Map.of(
                         HANDLER_SAFE_ECHO,
                         (parameters, context) -> {
                             context.checkCancelled();
@@ -103,6 +109,16 @@ public final class QuickstartWorkerLauncher {
                                     Map.of("errorType", IllegalStateException.class.getSimpleName()));
                             throw new IllegalStateException("intentional test failure");
                         }));
+        if (e2eDelayHandlerEnabled) {
+            // 仅供隔离 CI 验收；固定 12 秒且每秒响应协作取消，不解析业务参数。
+            handlers.put(HANDLER_SAFE_DELAY, (parameters, context) -> {
+                for (int tick = 0; tick < DELAY_HANDLER_TICKS; tick++) {
+                    context.checkCancelled();
+                    Thread.sleep(DELAY_HANDLER_TICK_MILLIS);
+                }
+            });
+        }
+        runtime = new WorkerRuntime(dispatcher, WorkerSettings.development(workerId), Map.copyOf(handlers));
 
         runtime.start();
         Gauge.builder(METRIC_AVAILABLE_SLOTS, runtime, value -> value.availableSlots())

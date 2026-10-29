@@ -178,6 +178,7 @@ services:
     environment:
       OTRYX_REGISTRY_ENDPOINTS: nacos:8848
       FLOW_WORKER_ID: flow-worker-demo
+      FLOW_E2E_DELAY_HANDLER: ${FLOW_E2E_DELAY_HANDLER:-false}
       FLOW_RPC_ADVERTISED_HOST: flow-worker-demo
     depends_on:
       nacos-bootstrap: {condition: service_completed_successfully}
