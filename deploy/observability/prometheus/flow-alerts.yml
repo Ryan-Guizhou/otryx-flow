@@ -1,6 +1,26 @@
 groups:
   - name: otryx-flow-availability
     rules:
+      - alert: FlowDatabaseMetricsRefreshFailed
+        expr: flow_database_metrics_refresh_state == 2
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Flow database metrics refresh is failing"
+          description: >-
+            Metrics refresh is isolated from business transactions and retains
+            previous good snapshots; investigate database connectivity.
+      - alert: FlowTelemetryCollectorUnavailable
+        expr: up{job="otel-collector"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Flow's internal OTLP Collector scrape endpoint is unavailable"
+          description: >-
+            The Collector scrape endpoint is down. This confirms unavailability,
+            but not the outcome of every individual SDK export.
       - alert: FlowMetricsTargetDown
         expr: up{job=~"flow-.*"} == 0
         for: 2m

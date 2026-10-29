@@ -1,6 +1,7 @@
 package com.peachsoft.otryx.flow.engine.observability;
 
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -24,6 +25,9 @@ import org.springframework.stereotype.Component;
 public final class EngineDatabaseMetrics {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(EngineDatabaseMetrics.class);
+    private static final String DATABASE_REFRESH_STATE = "flow.database.metrics.refresh.state";
+    private static final int REFRESH_HEALTHY = 1;
+    private static final int REFRESH_FAILED = 2;
 
     private static final String ACTIVE_RUNS = "flow.dag.run.active";
     private static final String BLOCKED_NODES = "flow.dag.node.blocked";
@@ -51,6 +55,7 @@ public final class EngineDatabaseMetrics {
     private final AtomicLong pendingOutbox = new AtomicLong();
     private final AtomicLong outboxOldestMillis = new AtomicLong();
     private final AtomicBoolean failureReported = new AtomicBoolean();
+    private final AtomicInteger refreshState = new AtomicInteger();
 
     /**
      * 注册 Engine 状态 Gauge，并绑定 Engine 自有数据库查询。
@@ -60,6 +65,9 @@ public final class EngineDatabaseMetrics {
      */
     public EngineDatabaseMetrics(JdbcTemplate jdbc, MeterRegistry registry) {
         this.jdbc = jdbc;
+        Gauge.builder(DATABASE_REFRESH_STATE, refreshState, AtomicInteger::get)
+                .description("Database metrics refresh: 0=unknown, 1=healthy, 2=failed")
+                .register(registry);
         Gauge.builder(ACTIVE_RUNS, activeRuns, AtomicLong::doubleValue)
                 .description("Number of persisted DAG runs in RUNNING state")
                 .register(registry);
@@ -95,8 +103,10 @@ public final class EngineDatabaseMetrics {
             blockedNodes.set(nextBlockedNodes);
             pendingOutbox.set(nextPendingOutbox);
             outboxOldestMillis.set(nextOutboxOldestMillis);
+            refreshState.set(REFRESH_HEALTHY);
             failureReported.set(false);
         } catch (DataAccessException failure) {
+            refreshState.set(REFRESH_FAILED);
             if (failureReported.compareAndSet(false, true)) {
                 LOGGER.warn(
                         "Engine metrics refresh failed: errorType={}",

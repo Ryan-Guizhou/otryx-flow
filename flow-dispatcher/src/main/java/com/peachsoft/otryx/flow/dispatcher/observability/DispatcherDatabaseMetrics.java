@@ -1,6 +1,7 @@
 package com.peachsoft.otryx.flow.dispatcher.observability;
 
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -24,6 +25,9 @@ import org.springframework.stereotype.Component;
 public final class DispatcherDatabaseMetrics {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DispatcherDatabaseMetrics.class);
+    private static final String DATABASE_REFRESH_STATE = "flow.database.metrics.refresh.state";
+    private static final int REFRESH_HEALTHY = 1;
+    private static final int REFRESH_FAILED = 2;
 
     private static final String READY_TASKS = "flow.dispatch.queue.ready";
     private static final String ACTIVE_LEASES = "flow.dispatch.lease.active";
@@ -49,6 +53,7 @@ public final class DispatcherDatabaseMetrics {
     private final AtomicLong expiredLeases = new AtomicLong();
     private final AtomicLong pendingOutbox = new AtomicLong();
     private final AtomicBoolean failureReported = new AtomicBoolean();
+    private final AtomicInteger refreshState = new AtomicInteger();
 
     /**
      * 注册 Dispatcher 队列 Gauge，并绑定 Dispatcher 自有数据库查询。
@@ -58,6 +63,9 @@ public final class DispatcherDatabaseMetrics {
      */
     public DispatcherDatabaseMetrics(JdbcTemplate jdbc, MeterRegistry registry) {
         this.jdbc = jdbc;
+        Gauge.builder(DATABASE_REFRESH_STATE, refreshState, AtomicInteger::get)
+                .description("Database metrics refresh: 0=unknown, 1=healthy, 2=failed")
+                .register(registry);
         Gauge.builder(READY_TASKS, readyTasks, AtomicLong::doubleValue)
                 .description("Number of dispatch tasks ready to be claimed")
                 .register(registry);
@@ -89,8 +97,10 @@ public final class DispatcherDatabaseMetrics {
             activeLeases.set(nextActiveLeases);
             expiredLeases.set(nextExpiredLeases);
             pendingOutbox.set(nextPendingOutbox);
+            refreshState.set(REFRESH_HEALTHY);
             failureReported.set(false);
         } catch (DataAccessException failure) {
+            refreshState.set(REFRESH_FAILED);
             if (failureReported.compareAndSet(false, true)) {
                 LOGGER.warn(
                         "Dispatcher metrics refresh failed: errorType={}",
