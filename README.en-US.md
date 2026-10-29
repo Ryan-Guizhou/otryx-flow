@@ -61,7 +61,7 @@ FLOW-019 / [Issue #27](https://github.com/Ryan-Guizhou/otryx-flow/issues/27) mer
 
 <!-- doc-section:contribute -->
 ## Engineering
-[AGENTS.md](AGENTS.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Issue backlog](docs/08-roadmap/issue-backlog.md). Repository documentation is the canonical design source.
+[AGENTS.md](AGENTS.md) · [Contributing](CONTRIBUTING.md) · [Java engineering standard](docs/engineering/java-coding-standard.md) · [Security](SECURITY.md) · [Issue backlog](docs/08-roadmap/issue-backlog.md). Repository documentation is the canonical design source.
 
 <!-- doc-section:license -->
 ## License

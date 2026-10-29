@@ -13,6 +13,7 @@
 | 交付质量 | [验收计划](06-testing/acceptance-plan.md) / [测试用例](06-testing/test-cases.md) / [性能基线](06-testing/performance-plan.md) | 如何产生可核查测试证据 |
 | 如何部署 | [部署拓扑](02-architecture/deployment-architecture.md) / [公网部署](07-operations/production-deployment.md) | 安全边界、CI/CD、上线和回滚 |
 | 开发任务 | [里程碑](08-roadmap/milestones.md) / [Issue 清单](08-roadmap/issue-backlog.md) | 工作顺序和 DoD |
+| 工程规范 | [Java 编码规范](engineering/java-coding-standard.md) / [贡献指南](../CONTRIBUTING.md) | Javadoc、日志安全、格式与静态审计 |
 | 核对来源 | [基线与证据](09-references/source-evidence.md) | 哪些是已验证的 RPC 事实，哪些仍待开发 |
 
 **文档版本规定：** 所有新设计在具体文档中标注 Proposed；上线后将“已实现”证据链接到 Commit、CI、实际请求与截图，不逆向宣称计划就是事实。

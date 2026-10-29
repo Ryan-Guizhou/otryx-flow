@@ -61,7 +61,7 @@ FLOW-019 / [Issue #27](https://github.com/Ryan-Guizhou/otryx-flow/issues/27) 已
 
 <!-- doc-section:contribute -->
 ## 工程协作
-[AGENTS.md](AGENTS.md) · [贡献指南](CONTRIBUTING.md) · [安全策略](SECURITY.md) · [开发任务清单](docs/08-roadmap/issue-backlog.md)。业务设计讨论以本仓库文档为单一事实源。
+[AGENTS.md](AGENTS.md) · [贡献指南](CONTRIBUTING.md) · [Java 工程编码规范](docs/engineering/java-coding-standard.md) · [安全策略](SECURITY.md) · [开发任务清单](docs/08-roadmap/issue-backlog.md)。业务设计讨论以本仓库文档为单一事实源。
 
 <!-- doc-section:license -->
 ## License
