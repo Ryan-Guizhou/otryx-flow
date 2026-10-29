@@ -56,10 +56,17 @@ public final class FlowHttpMetricsFilter extends OncePerRequestFilter {
             HttpServletRequest request,
             HttpServletResponse response,
             FilterChain filterChain) throws ServletException, IOException {
+        boolean unhandledFailure = false;
         try {
             filterChain.doFilter(request, response);
+        } catch (IOException | ServletException | RuntimeException failure) {
+            unhandledFailure = true;
+            throw failure;
         } finally {
             int status = response.getStatus();
+            if (unhandledFailure && status < 400) {
+                status = HttpServletResponse.SC_INTERNAL_SERVER_ERROR;
+            }
             String statusClass = status >= 100 && status <= 599 ? (status / 100) + "xx" : "unknown";
             String securityEvent = switch (status) {
                 case HttpServletResponse.SC_UNAUTHORIZED -> AUTHENTICATION_FAILURE;
