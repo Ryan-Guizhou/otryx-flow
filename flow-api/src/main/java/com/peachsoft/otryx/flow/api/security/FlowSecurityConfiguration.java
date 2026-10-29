@@ -2,6 +2,7 @@ package com.peachsoft.otryx.flow.api.security;
 
 import com.peachsoft.otryx.flow.api.observability.FlowHttpMetricsFilter;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -18,6 +19,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
@@ -41,7 +43,8 @@ public class FlowSecurityConfiguration {
     @Bean
     public SecurityFilterChain filterChain(
             HttpSecurity http,
-            SecurityContextRepository contexts) throws Exception {
+            SecurityContextRepository contexts,
+            @Value("${management.server.port:9091}") int managementPort) throws Exception {
         return http
                 .exceptionHandling(e -> e.authenticationEntryPoint(
                         new HttpStatusEntryPoint(org.springframework.http.HttpStatus.UNAUTHORIZED)))
@@ -50,6 +53,7 @@ public class FlowSecurityConfiguration {
                                 HttpMethod.GET, "/api/v1/auth/csrf", "/actuator/health", "/actuator/info")
                         .permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
+                        .requestMatchers(internalPrometheusOnly(managementPort)).permitAll()
                         .anyRequest().authenticated())
                 .csrf(c -> c.csrfTokenRepository(new CookieCsrfTokenRepository())
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
@@ -76,6 +80,22 @@ public class FlowSecurityConfiguration {
         registration.addUrlPatterns("/api/*");
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
         return registration;
+    }
+
+    /**
+     * 仅当请求命中受隔离的内部管理监听端口时允许读取 Prometheus。
+     *
+     * <p>请求本身的 Host、Forwarded Header 不可信，必须检查连接的真实本地端口。
+     * 业务端口上的同名路径始终不能因此获得匿名访问权限。</p>
+     *
+     * @param managementPort 实际管理 HTTP 监听端口
+     * @return 仅匹配管理端口上 GET /actuator/prometheus 的安全匹配器
+     */
+    static RequestMatcher internalPrometheusOnly(int managementPort) {
+        return request -> managementPort > 0
+                && request.getLocalPort() == managementPort
+                && HttpMethod.GET.matches(request.getMethod())
+                && "/actuator/prometheus".equals(request.getServletPath());
     }
 
     /** 使用 HTTP Session 保存 REST 登录身份。 */
