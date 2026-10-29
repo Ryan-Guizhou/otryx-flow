@@ -1,5 +1,7 @@
 package com.peachsoft.otryx.flow.api.security;
 
+import com.peachsoft.otryx.flow.api.observability.FlowHttpMetricsFilter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -14,6 +16,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
@@ -27,8 +30,12 @@ import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 public class FlowSecurityConfiguration {
     /** 配置业务接口认证、匿名请求 401 响应和 CSRF 验证。 */
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, SecurityContextRepository contexts) throws Exception {
+    public SecurityFilterChain filterChain(
+            HttpSecurity http,
+            SecurityContextRepository contexts,
+            MeterRegistry meterRegistry) throws Exception {
         return http
+                .addFilterBefore(new FlowHttpMetricsFilter(meterRegistry), SecurityContextHolderFilter.class)
                 .exceptionHandling(e -> e.authenticationEntryPoint(new HttpStatusEntryPoint(org.springframework.http.HttpStatus.UNAUTHORIZED)))
                 .authorizeHttpRequests(a -> a
                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf", "/actuator/health", "/actuator/info").permitAll()
