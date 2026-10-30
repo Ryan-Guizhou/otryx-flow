@@ -29,6 +29,7 @@ on:
       - "scripts/test_check_rpc_metric_evidence.py"
       - "scripts/test_rpc_metric_semantics.sh"
       - "scripts/test_rpc_timeout_fault.sh"
+      - "scripts/test_rpc_retry_fault.sh"
       - "scripts/test_telemetry_failure_isolation.sh"
       - ".github/workflows/m1-integration.yml"
 permissions:
@@ -66,6 +67,7 @@ jobs:
           FLOW_OTLP_METRICS_STEP=5s
           FLOW_E2E_DELAY_HANDLER=true
           FLOW_E2E_RPC_TIMEOUT_FAULT=1
+          FLOW_E2E_RPC_RETRY_FAULT=1
           EOF_ENV
       - name: Validate Compose configuration
         run: docker compose config --quiet
@@ -162,6 +164,14 @@ jobs:
           source .env
           set +a
           bash scripts/test_telemetry_failure_isolation.sh
+      - name: Verify real bounded RPC retry on abrupt Provider loss and recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source .env
+          set +a
+          bash scripts/test_rpc_retry_fault.sh
       - name: Collect bounded failure diagnostics
         if: failure()
         run: |

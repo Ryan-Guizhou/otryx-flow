@@ -22,6 +22,7 @@ on:
       - 'scripts/test_check_rpc_metric_evidence.py'
       - 'scripts/test_rpc_metric_semantics.sh'
       - 'scripts/test_rpc_timeout_fault.sh'
+      - 'scripts/test_rpc_retry_fault.sh'
       - 'scripts/test_telemetry_failure_isolation.sh'
       - 'scripts/test_m1_e2e.sh'
       - 'scripts/test_m2_job_e2e.sh'
@@ -52,7 +53,7 @@ jobs:
       - name: Test RPC metrics accounting and label evidence validator
         run: python3 scripts/test_check_rpc_metric_evidence.py
       - name: Syntax-check isolated telemetry acceptance scripts
-        run: bash -n scripts/test_rpc_metric_semantics.sh scripts/test_rpc_timeout_fault.sh scripts/test_telemetry_failure_isolation.sh
+        run: bash -n scripts/test_rpc_metric_semantics.sh scripts/test_rpc_timeout_fault.sh scripts/test_rpc_retry_fault.sh scripts/test_telemetry_failure_isolation.sh
   backend:
     runs-on: ubuntu-latest
     steps:

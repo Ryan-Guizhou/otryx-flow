@@ -107,3 +107,11 @@ CI 使用同一 `prom/prometheus:v3.7.3` 运行 `promtool test rules`，
 API 必须在既定超时预算内返回失败，`otryx_rpc_client_timeouts_total` 应随真实调用增加；
 脚本无论成功或失败都尝试向 JVM 发送 SIGCONT，恢复后再次验证业务 RPC 返回 200。
 **不允许在生产服务使用 SIGSTOP 注入，也不把本测试等同于自动重试覆盖证明。**
+
+## 受控 RPC Retry 真实故障注入
+
+`scripts/test_rpc_retry_fault.sh` 仅在显式设置 `FLOW_E2E_RPC_RETRY_FAULT=1` 的隔离 CI 中执行。
+它对健康 Metadata Provider 进行一次受控 SIGKILL，随后通过已鉴权 API 发起真实幂等
+`ProjectRpc.listByOwner` 调用，并校验 `otryx_rpc_client_retries_total` 增长。
+脚本使用 `trap` 在异常退出时恢复对应 Provider，最终必须看到重新注册后的 HTTP 200。
+此次注入不依赖生产配置、不篡改任务业务数据，不能据此声称所有错误类型都会重试。
