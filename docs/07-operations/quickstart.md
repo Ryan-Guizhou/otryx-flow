@@ -28,4 +28,4 @@ Prometheus、Grafana 和 OpenTelemetry Collector 不属于启动主链路，默�
 docker compose -f compose.yaml -f compose.observability.yaml --profile worker-demo up -d
 ```
 
-详细注册中心行为见 [Nacos bootstrap](nacos-registry.md)；Compose 网络、安全边界和排错见[开发部署说明](m1-developer-compose.md)。生产 mTLS、互联网部署和完整浏览器验收尚未完成，此开发配置不得暴露到不可信网络。
+备份、显式恢复和只读对账见[数据恢复指南](backup-restore.md)。注册中心行为见 [Nacos bootstrap](nacos-registry.md)；Compose 网络、安全边界和排错见[开发部署说明](m1-developer-compose.md)。生产 mTLS、互联网部署和完整浏览器验收尚未完成，此开发配置不得暴露到不可信网络。
