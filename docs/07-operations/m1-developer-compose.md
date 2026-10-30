@@ -6,7 +6,7 @@
 
 - Docker Engine + Compose V2、Bash、OpenSSL，以及可访问 GitHub、Maven 和 npm 源的网络。
 - Java 21 与 Node 22 构建环境在 Docker 镜像内准备；宿主机无需单独安装 JDK 或 Node.js。
-- 当前固定 OTRYX RPC 源码版本为 `0addd7df17c5ba4a0b77e2d30e4c7c75d7ac31f2`，尚未发布到 Maven Central。
+- 当前固定 OTRYX RPC 源码版本为 `502117d3301d78ea76a8d02b36e62585059d9902`，尚未发布到 Maven Central。
 
 ## 一键启动
 

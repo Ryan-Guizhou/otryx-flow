@@ -4,7 +4,7 @@
 
 ## 关键事实
 
-- OTRYX RPC 固定源码 SHA：`0addd7df17c5ba4a0b77e2d30e4c7c75d7ac31f2`。Adapter：`otryx-registry-nacos`；Server：`nacos/nacos-server:v3.2.4`。
+- OTRYX RPC 固定源码 SHA：`502117d3301d78ea76a8d02b36e62585059d9902`。Adapter：`otryx-registry-nacos`；Server：`nacos/nacos-server:v3.2.4`。
 - 统一 `namespace=public`、`nacos.group=OTRYX_RPC`、`nacos.cluster=DEFAULT`，Nacos 端点为 `nacos:8848`（容器内）或 `127.0.0.1:8848`（本地），**不含 URL 协议**。
 - 按 **ApplicationKey + Instance** 注册而非接口级注册。SDK Naming 与 Config 协同实现应用成员、Manifest 和 Mapping。Nacos gRPC 9848 在私有容器网络内自动可达，不发布到公网。
 - 固定 **8 个 Config Mapping 分片**。必须在业务 Provider/Consumer 写入前，用独立 JVM 完成 `NacosV2MetadataBootstrap`；它是部署阶段，不是应用生命周期回调。
@@ -44,4 +44,4 @@ java -Dloader.main=com.peachsoft.otryx.registry.nacos.NacosV2MetadataBootstrap
 
 开发 Compose 将 `NACOS_AUTH_ENABLE=false`，且 OTRYX RPC 使用 `TRUSTED_DEVELOPMENT`，只运行在 `internal` 容器网络；**没有主机 Nacos HTTP/gRPC/Console 端口映射**。当前固定 Nacos Adapter 尚未实现完整 Naming/Config/login TLS/mTLS，`NETWORK_MTLS` 被明确拒绝。因此本配置不可公网、Staging/生产上线，必须在独立安全 Issue 中完成 TLS、身份、ACL 和跨进程验收。将 Nacos 放在 HTTPS 反代后面不能替代全链路支持。
 
-依据：[OTRYX RPC Nacos V2 设计](https://github.com/Ryan-Guizhou/otryx-rpc/blob/0addd7df17c5ba4a0b77e2d30e4c7c75d7ac31f2/docs/reference/registry-nacos-v2.md) 和 [Nacos 官方部署文档](https://www.nacos.io/docs/latest/manual/admin/deployment/deployment-standalone/)。
+依据：[OTRYX RPC Nacos V2 设计](https://github.com/Ryan-Guizhou/otryx-rpc/blob/502117d3301d78ea76a8d02b36e62585059d9902/docs/reference/registry-nacos-v2.md) 和 [Nacos 官方部署文档](https://www.nacos.io/docs/latest/manual/admin/deployment/deployment-standalone/)。

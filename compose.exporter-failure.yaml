@@ -1,0 +1,8 @@
+# CI-only overlay: Collector still listens and exports Worker metrics, but its trace backend fails.
+services:
+  otel-collector:
+    volumes:
+      - type: bind
+        source: ./deploy/observability/otel-collector-exporter-fault.yml
+        target: /etc/otelcol-contrib/config.yaml
+        read_only: true

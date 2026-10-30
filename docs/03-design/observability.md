@@ -4,7 +4,7 @@
 
 FLOW-021 / [Issue #30](https://github.com/Ryan-Guizhou/otryx-flow/issues/30) 仍在推进。PR #31 交付第一阶段：接入 OTRYX RPC Micrometer/OpenTelemetry Adapter、内部 Actuator 端口、本地 Prometheus/Grafana/OTLP Collector、Scheduler/Engine/Dispatcher 持久化指标快照、Worker 运行时指标，以及严格的 RPC Trace 证据校验器。完整跨 JVM 验收以 PR 最新 Head 的 Compose 门禁结果为准；不能仅凭依赖或配置宣称传播正确。
 
-OTRYX RPC 固定基线：0addd7df17c5ba4a0b77e2d30e4c7c75d7ac31f2（已合并的 OpenTelemetry 自动配置顺序修复）。注册中心继续使用 Nacos 3.2.4；生产 mTLS/Nacos TLS 由 [FLOW-020 / Issue #29](https://github.com/Ryan-Guizhou/otryx-flow/issues/29) 与上游 [OTRYX RPC #179](https://github.com/Ryan-Guizhou/otryx-rpc/issues/179) 处理。
+OTRYX RPC 固定基线：502117d3301d78ea76a8d02b36e62585059d9902（已合并的 OpenTelemetry 自动配置顺序修复）。注册中心继续使用 Nacos 3.2.4；生产 mTLS/Nacos TLS 由 [FLOW-020 / Issue #29](https://github.com/Ryan-Guizhou/otryx-flow/issues/29) 与上游 [OTRYX RPC #179](https://github.com/Ryan-Guizhou/otryx-rpc/issues/179) 处理。
 
 ## 本地启动
 
@@ -46,7 +46,103 @@ docker compose -f compose.yaml -f compose.observability.yaml down
 - [x] 为 Scheduler、Engine、Dispatcher、Worker 增加权威数据库快照或有界运行时指标。
 - [x] 在真实 Compose 中验证 Prometheus 抓取、关键业务指标查询、规则加载与 Collector 收集 Trace。
 - [x] 为 OTRYX RPC Trace 增加单元测试，并在真实验收中检查跨服务 client/server Span 的 Trace ID、Parent Span ID 与 method ID 关系。
-- [ ] 查询并核验 RPC logical-call/network-attempt/retry 指标语义及低基数标签。
-- [ ] 补充 HTTP/API 认证与授权拒绝计数，并验证敏感字段不会进入指标标签或 Trace 属性。
-- [ ] 增加数据库不可用与遥测出口故障告警规则，以及出口故障时 RPC、Worker heartbeat 和完成 ACK 不受影响的故障注入测试。
+- [x] 真实 RPC 成功调用的 logical-call/network-attempt 计数及低基数标签校验（PR #35 CI）。
+- [ ] 真实故障路径的 retry/timeout 计数语义仍需专项可重复触发证据。
+- [x] HTTP/API 401、403 安全响应计数与敏感字段 Meter 标签边界。
+- [x] 数据库指标刷新错误状态与恢复单测；Collector 断连时 Worker Heartbeat、complete、Dispatcher/Engine 终态的真实 Compose 故障注入。
+- [x] Prometheus 数据库刷新故障与 Collector 不可用告警表达式及 promtool 触发/恢复测试。
+- [ ] Collector 在线但下游 exporter 失败的直接可观测信号及故障测试，尚不宣称验证所有出口故障。
 - [ ] 生产 mTLS/Nacos TLS 与公开 HTTPS 仍由独立安全工作项负责。
+
+## FLOW-021 后续验证：HTTP 安全、数据库刷新与遥测隔离
+
+PR #35（Issue #34）新增低基数 HTTP 响应指标 `flow_http_responses_total`。只使用
+`status_class`（1xx/2xx/3xx/4xx/5xx/unknown）与
+`security_event`（none/authentication_failure/authorization_denied）两类固定标签。
+403 也可能来自 CSRF 校验，因此此安全事件计数是拒绝类别，不可直接推断具体用户越权。
+
+Scheduler、Engine、Dispatcher 的 `flow_database_metrics_refresh_state` Gauge 不包含业务 ID 标签。
+0 表示尚未完成首次采样，1 表示最近一次数据库指标刷新成功，2 表示最近一次刷新失败。
+故障时旧业务 Gauge 保留上次成功的快照；必须结合刷新状态使用，不能把旧值当成实时状态。
+数据库恢复后成功刷新会将状态从 2 改为 1。告警阈值是环境模板，不代表正式生产 SLO。
+
+`FlowTelemetryCollectorUnavailable` 使用内部 Prometheus 的 `up{job="otel-collector"}`
+确认 Collector 抓取端点不可用。**这不是所有 SDK OTLP 数据导出失败的直接计数**；
+Collector 在线而实际 exporter 失败的完整证据仍需专门注入，不能根据此告警宣称已验证。
+
+固定 OTRYX RPC Micrometer Observer 的真实指标契约如下：
+
+- `otryx_rpc_client_calls_seconds_count`：logical call 的 Micrometer Timer 次数。
+- `otryx_rpc_client_attempts_seconds_count`：网络 attempt 的 Micrometer Timer 次数。
+- `otryx_rpc_client_retries_total`：已安排的 retry 事件次数。
+- `otryx_rpc_client_timeouts_total`：逻辑调用 DEADLINE_EXCEEDED 次数。
+
+计数不能混用：调用在发起网络 attempt 前失败时，logical call 与 attempt 可不相同。
+`scripts/test_rpc_metric_semantics.sh` 在真实 Nacos 与 MySQL 环境中执行 REST→OTRYX RPC 调用，
+比较调用前后的 Actuator 样本，并检查 RPC Meter 不含项目、Run、Trace、用户名等高基数标签。
+正常成功流量可能没有 retry/timeout；因此零计数**不等于**完整验证了它们的失败语义。
+
+`scripts/test_telemetry_failure_isolation.sh` 仅在隔离 Compose 中运行：
+关闭 Collector 后，创建固定 12 秒的可信 `safe.delay` 任务，验证真实 Worker 心跳延长
+Dispatcher 持久化租约、Dispatcher 与 Engine 最终成功、Outcome Outbox 为 DELIVERED，
+同时从 Prometheus 证实 Collector 不可用，结束后恢复 Collector。
+`safe.delay` 仅在 `FLOW_E2E_DELAY_HANDLER=true` 时注册；普通 Worker 不开放该 Handler。
+测试不得把遥测错误伪装成业务成功，也不承诺外部副作用 exactly-once。
+
+以上是 PR #35 已提交的验收实现；仍须以最新提交的完整 Compose CI 结果作为完成证据。
+
+## 可重复告警触发验收
+
+`deploy/observability/prometheus/flow-alert-tests.yml` 是确定性 Prometheus rule evaluation 回归样例，
+将 Scheduler 的 `flow_database_metrics_refresh_state` 从 1 改为 2，Collector 的 `up` 从 1 改为 0：
+持续两分钟后规则应该发出 warning，恢复到正常状态后应清除。
+CI 使用同一 `prom/prometheus:v3.7.3` 运行 `promtool test rules`，
+避免仅通过 `promtool check rules` 的语法校验就误称告警可以触发。
+此测试属于**规则行为验证**，区别于实际 Collector 停机后的 `scripts/test_telemetry_failure_isolation.sh`。
+
+## 受控 RPC Deadline 真实故障注入
+
+`scripts/test_rpc_timeout_fault.sh` 使用 `FLOW_E2E_RPC_TIMEOUT_FAULT=1` 作为强制护栏，
+只在隔离 Compose 中短暂暂停 Metadata Provider 的 JVM PID 1，不关闭 TCP 连接或模拟虚假 RPC 数据。
+API 必须在既定超时预算内返回失败，`otryx_rpc_client_timeouts_total` 应随真实调用增加；
+脚本无论成功或失败都尝试向 JVM 发送 SIGCONT，恢复后再次验证业务 RPC 返回 200。
+**不允许在生产服务使用 SIGSTOP 注入，也不把本测试等同于自动重试覆盖证明。**
+
+## 受控 RPC Retry 真实故障注入
+
+`scripts/test_rpc_retry_fault.sh` 仅在显式设置 `FLOW_E2E_RPC_RETRY_FAULT=1` 的隔离 CI 中执行。
+它对健康 Metadata Provider 进行一次受控 SIGKILL，随后通过已鉴权 API 发起真实幂等
+`ProjectRpc.listByOwner` 调用，并校验 `otryx_rpc_client_retries_total` 增长。
+脚本使用 `trap` 在异常退出时恢复对应 Provider，最终必须看到重新注册后的 HTTP 200。
+此次注入不依赖生产配置、不篡改任务业务数据，不能据此声称所有错误类型都会重试。
+
+## 上游 Micrometer 自动配置已合并
+
+OTRYX RPC [PR #185](https://github.com/Ryan-Guizhou/otryx-rpc/pull/185) 修复了 Spring Boot
+指标注册器与 RPC Observer 的自动配置顺序，固定 SHA 为 `502117d3301d78ea76a8d02b36e62585059d9902`。
+Flow 移除特定的 `FlowRpcMetricsConfiguration` Bean Workaround，
+以真实 RPC metric evidence gate 验证框架自带 Observer 是否自动生效。
+升级不得改变应用级 Nacos 注册模型与独立安全 profile。
+
+## 数据库真实中断与恢复
+
+`scripts/test_database_refresh_failure_isolation.sh` 仅在
+`FLOW_E2E_DATABASE_REFRESH_FAULT=1` 的隔离 Compose 中临时停止 MySQL。
+校验 Scheduler 实际从刷新状态 1 转为 2、保留上一轮业务快照，且服务 JVM 持续存活；
+恢复数据库后状态回到 1，既有已认证 API 业务调用恢复 200。
+该验收不是宣称数据库中断期间依赖 SQL 的业务操作仍能成功。
+
+## Collector 存活但下游导出失败
+
+在现有 Collector 不可用告警基础上，Collector 内部遥测端口 8888 仅向隔离的
+Docker 内部网络开放，并由 Prometheus 抓取 `otel-collector-internal`。
+`FlowOtlpExporterSendFailures` 基于
+`otelcol_exporter_send_failed_spans_total` 的真实累计发送失败计数，
+而不是用 `up == 0` 假装下游 exporter 失败。规则包含 promtool 触发与清除回归。
+
+测试配置 `compose.exporter-failure.yaml` 仅供隔离 CI 使用：
+`scripts/test_collector_exporter_failure.sh` 在 Collector 仍接受 OTLP 请求时，
+使测试专用 `otlphttp/failure` 下游端点不可达，
+发送固定测试 Span 并验证内部失败计数增加，检查真实登录 API → RPC 仍可用，
+结束后通过 trap 还原默认 Collector 配置。
+生产部署不启用故障 exporter，也不宣称发送失败必然代表数据永久丢失。

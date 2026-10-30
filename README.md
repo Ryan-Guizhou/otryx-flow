@@ -14,7 +14,7 @@ OTRYX Flow 是以 **OTRYX RPC** 作为内部同步远程调用框架的分布式
 
 <!-- doc-section:architecture -->
 ## 技术基线与架构
-- **OTRYX RPC 当前依据**：`1.0.0-SNAPSHOT` / JDK 21 / Spring Boot 3.5.4，唯一 Starter `com.peachsoft.otryx:otryx-spring-boot-starter`，固定提交 `0addd7df17c5ba4a0b77e2d30e4c7c75d7ac31f2`，**尚未发布到 Maven Central**；参考 [依赖事实与外部证据](docs/09-references/source-evidence.md)。
+- **OTRYX RPC 当前依据**：`1.0.0-SNAPSHOT` / JDK 21 / Spring Boot 3.5.4，唯一 Starter `com.peachsoft.otryx:otryx-spring-boot-starter`，固定提交 `502117d3301d78ea76a8d02b36e62585059d9902`，**尚未发布到 Maven Central**；参考 [依赖事实与外部证据](docs/09-references/source-evidence.md)。
 - **拟议业务栈**：Java 21 / Vue 3 + TypeScript / MySQL 8.4 LTS / Flyway / Nacos 3.2.4 / Docker Compose；Redis、RocketMQ、Kubernetes 不作为 M1 的强制前置条件。
 - **拟议应用**：`flow-api`、`flow-metadata`、`flow-scheduler`、`flow-engine`、`flow-dispatcher`、`flow-worker`、`flow-web`。应用通过 OTRYX RPC 接口契约交互；任务交付依赖业务状态与 Outbox。
 

@@ -1,6 +1,7 @@
 package com.peachsoft.otryx.flow.scheduler.observability;
 
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -24,6 +25,9 @@ import org.springframework.stereotype.Component;
 public final class SchedulerDatabaseMetrics {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SchedulerDatabaseMetrics.class);
+    private static final String DATABASE_REFRESH_STATE = "flow.database.metrics.refresh.state";
+    private static final int REFRESH_HEALTHY = 1;
+    private static final int REFRESH_FAILED = 2;
 
     private static final String ENABLED_SCHEDULES = "flow.schedule.enabled";
     private static final String PENDING_TRIGGERS = "flow.schedule.trigger.pending";
@@ -52,6 +56,7 @@ public final class SchedulerDatabaseMetrics {
     private final AtomicLong pendingOutbox = new AtomicLong();
     private final AtomicLong dueLagMillis = new AtomicLong();
     private final AtomicBoolean failureReported = new AtomicBoolean();
+    private final AtomicInteger refreshState = new AtomicInteger();
 
     /**
      * 注册低基数 Gauge，并绑定 Scheduler 自有数据库的查询入口。
@@ -61,6 +66,9 @@ public final class SchedulerDatabaseMetrics {
      */
     public SchedulerDatabaseMetrics(JdbcTemplate jdbc, MeterRegistry registry) {
         this.jdbc = jdbc;
+        Gauge.builder(DATABASE_REFRESH_STATE, refreshState, AtomicInteger::get)
+                .description("Database metrics refresh: 0=unknown, 1=healthy, 2=failed")
+                .register(registry);
         Gauge.builder(ENABLED_SCHEDULES, enabledSchedules, AtomicLong::doubleValue)
                 .description("Number of enabled schedule definitions")
                 .register(registry);
@@ -95,8 +103,10 @@ public final class SchedulerDatabaseMetrics {
             pendingTriggers.set(nextPendingTriggers);
             pendingOutbox.set(nextPendingOutbox);
             dueLagMillis.set(nextDueLagMillis);
+            refreshState.set(REFRESH_HEALTHY);
             failureReported.set(false);
         } catch (DataAccessException failure) {
+            refreshState.set(REFRESH_FAILED);
             if (failureReported.compareAndSet(false, true)) {
                 LOGGER.warn(
                         "Scheduler metrics refresh failed: errorType={}",

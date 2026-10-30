@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
@@ -27,10 +28,24 @@ class DispatcherDatabaseMetricsTest {
         DispatcherDatabaseMetrics metrics = new DispatcherDatabaseMetrics(jdbc, registry);
 
         metrics.refresh();
+        assertEquals(1.0, registry.find("flow.database.metrics.refresh.state").gauge().value());
 
         assertEquals(11.0, registry.find("flow.dispatch.queue.ready").gauge().value());
         assertEquals(4.0, registry.find("flow.dispatch.lease.active").gauge().value());
         assertEquals(1.0, registry.find("flow.dispatch.lease.expired").gauge().value());
         assertEquals(6.0, registry.find("flow.dispatch.outbox.pending").gauge().value());
+    }
+    @Test
+    void preservesPreviousDatabaseSnapshotOnRefreshFailure() {
+        JdbcTemplate jdbc = org.mockito.Mockito.mock(JdbcTemplate.class);
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        when(jdbc.queryForObject(anyString(), eq(Long.class), any(Object[].class)))
+                .thenReturn(11L, 4L, 1L, 6L).thenThrow(new DataAccessResourceFailureException("offline"));
+        DispatcherDatabaseMetrics metrics = new DispatcherDatabaseMetrics(jdbc, registry);
+        metrics.refresh();
+        assertEquals(1.0, registry.find("flow.database.metrics.refresh.state").gauge().value());
+        metrics.refresh();
+        assertEquals(2.0, registry.find("flow.database.metrics.refresh.state").gauge().value());
+        assertEquals(11.0, registry.find("flow.dispatch.queue.ready").gauge().value());
     }
 }
