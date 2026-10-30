@@ -16,6 +16,8 @@ on:
       - 'deploy/**'
       - 'compose.yaml'
       - 'scripts/check_m1_source.py'
+      - 'scripts/dev.sh'
+      - 'scripts/test_dev_quickstart.sh'
       - 'scripts/check_observability_evidence.py'
       - 'scripts/test_check_observability_evidence.py'
       - 'scripts/check_rpc_metric_evidence.py'
@@ -24,6 +26,8 @@ on:
       - 'scripts/test_rpc_timeout_fault.sh'
       - 'scripts/test_rpc_retry_fault.sh'
       - 'scripts/test_database_refresh_failure_isolation.sh'
+      - 'scripts/prometheus_metric_value.py'
+      - 'scripts/test_prometheus_metric_value.py'
       - 'scripts/test_collector_exporter_failure.sh'
       - 'scripts/test_telemetry_failure_isolation.sh'
       - 'scripts/test_m1_e2e.sh'
@@ -52,8 +56,12 @@ jobs:
       - run: python3 scripts/check_m1_source.py
       - name: Test strict OTRYX RPC trace evidence validator
         run: python3 scripts/test_check_observability_evidence.py
+      - name: Test local quickstart and credential handling
+        run: bash scripts/test_dev_quickstart.sh
       - name: Test RPC metrics accounting and label evidence validator
         run: python3 scripts/test_check_rpc_metric_evidence.py
+      - name: Test Prometheus metric value normalization
+        run: python3 scripts/test_prometheus_metric_value.py
       - name: Syntax-check isolated telemetry acceptance scripts
         run: bash -n scripts/test_rpc_metric_semantics.sh scripts/test_rpc_timeout_fault.sh scripts/test_rpc_retry_fault.sh scripts/test_database_refresh_failure_isolation.sh scripts/test_collector_exporter_failure.sh scripts/test_telemetry_failure_isolation.sh
   backend:

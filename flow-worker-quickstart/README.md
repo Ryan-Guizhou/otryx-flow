@@ -4,12 +4,10 @@ Java 21 + Spring Boot 3.5.4 + OTRYX RPC `1.0.0-SNAPSHOT`, using Nacos 3.2.4 for 
 
 ## Running in the isolated development Compose network
 
-From repository root, configure `.env`, build the pinned RPC source and start the normal services. The worker is **not** started automatically, to keep the Dispatcher fencing E2E deterministic:
+From repository root, run the developer startup script. It builds the pinned RPC source, starts the normal services, and starts the allowlisted demo Worker:
 
 ```bash
-docker compose build
-bash scripts/start_dev_compose.sh
-docker compose --profile worker-demo up -d flow-worker-demo
+./scripts/dev.sh up
 docker compose --profile worker-demo logs --tail=100 flow-worker-demo
 ```
 
@@ -19,4 +17,4 @@ Registered handlers are `safe.echo` (no side effects) and `safe.fail` (intention
 
 Use `WorkerRuntime(dispatcherRpc, WorkerSettings.development("my-worker-1"), Map.of("safe.echo", handler))` after obtaining a Spring `@OtryxRpcReference` to `DispatcherRpc`. Handlers should use `WorkerContext.checkCancelled()` during blocking work, and must implement idempotency for any external side effect. Shutdown via `WorkerRuntime.close()` to stop new leases and drain in-flight tasks.
 
-**This is a developer-only demo.** Current Nacos Adapter accepts only `TRUSTED_DEVELOPMENT`; do not expose it on untrusted networks. Engine terminal reconciliation is implemented only in Issue #9 and is not supplied by this Worker module alone. Full DAG execution and public HTTPS are not part of this example.
+**This is a developer-only demo.** Current Nacos Adapter accepts only `TRUSTED_DEVELOPMENT`; do not expose it on untrusted networks. Full DAG execution, cancellation, retry, and terminal reconciliation are implemented across the Flow services. Production mTLS and public HTTPS remain future work.

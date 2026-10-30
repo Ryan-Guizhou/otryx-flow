@@ -7,6 +7,7 @@ set -euo pipefail
 : "${FLOW_ADMIN_USERNAME:?Missing admin username}"
 : "${FLOW_ADMIN_PASSWORD:?Missing admin password}"
 BASE="${FLOW_BASE_URL:-http://127.0.0.1:8088}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK="$(mktemp -d)"
 MYSQL_STOPPED=0
 
@@ -27,10 +28,11 @@ snapshot() {
 
 metric() {
   local metric_name="$1"
-  python3 - "$WORK/metrics.prom" "$metric_name" <<'PY'
+  PYTHONPATH="$SCRIPT_DIR" python3 - "$WORK/metrics.prom" "$metric_name" <<'PY'
 import re
 import sys
 from pathlib import Path
+from prometheus_metric_value import normalize_metric_value
 
 exposition = Path(sys.argv[1]).read_text(encoding="utf-8")
 name = re.escape(sys.argv[2])
@@ -38,7 +40,7 @@ pattern = rf"^{name}(?:\{{[^}}]+\}})?\s+([0-9]+(?:\.[0-9]+)?)\s*$"
 match = re.search(pattern, exposition, re.MULTILINE)
 if not match:
     raise SystemExit(1)
-print(match.group(1))
+print(normalize_metric_value(match.group(1)))
 PY
 }
 
