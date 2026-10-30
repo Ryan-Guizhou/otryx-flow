@@ -1,6 +1,15 @@
 name: Flow full Compose integration
 on:
   workflow_dispatch:
+  pull_request:
+    types: [opened, reopened, synchronize]
+    paths:
+      - 'scripts/flow-ops.sh'
+      - 'scripts/test_flow_ops.sh'
+      - 'scripts/test_flow_ops_compose.sh'
+      - 'deploy/mysql/**'
+      - 'compose.yaml'
+      - '.github/workflows/m1-integration.yml'
 permissions:
   contents: read
 concurrency:
@@ -8,7 +17,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   compose-integration:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -159,6 +168,11 @@ jobs:
           source .env
           set +a
           bash scripts/test_collector_exporter_failure.sh
+      - name: Verify five-schema backup, restore, reconciliation, and service recovery
+        shell: bash
+        env:
+          FLOW_E2E_BACKUP_RESTORE: '1'
+        run: bash scripts/test_flow_ops_compose.sh
       - name: Collect bounded failure diagnostics
         if: failure()
         run: |

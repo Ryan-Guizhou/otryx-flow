@@ -1,20 +1,44 @@
-# 数据备份、恢复与对账（Proposed）
+# Local MySQL backup, restore, and reconciliation
 
-## 权威源
-各服务自己的 MySQL Schema 是任务元数据、触发、Engine 运行和 Dispatcher 租约的持久事实源。Etcd 存储 OTRYX RPC 应用发现/元数据，恢复后必须重新验证实际 Provider/Consumer 注册并触发应用发现刷新。Redis 如引入仅做非权威缓存。
+The local Compose profile stores the Flow source-of-truth data in five MySQL schemas: identity, metadata, scheduler, engine, and dispatcher. `scripts/flow-ops.sh` provides a logical backup, integrity verification, explicitly confirmed restore, and read-only reconciliation report for this isolated development stack.
 
-## 备份策略
-- MySQL：一致性快照与增量日志策略，根据恢复目标设置频率、保留与加密；数据库账号最小权限，备份加密材料独立保存。
-- Etcd：安全快照、恢复前后成员校验；Registry 恢复不能随意清空有活跃业务的服务映射。
-- 应用版本：保留不可变 WorkflowRevision/Handler版本、镜像 digest、Flyway 迁移历史。
+These commands do not claim a production RPO/RTO, binary-log point-in-time recovery, or atomic consistency with Nacos. Keep schema migrations paused while taking a backup. Nacos application registrations are rebuilt by the existing bootstrap/start sequence; they are not part of the MySQL artifact.
 
-## 恢复序列
-1. 隔离外部入口与新的 Cron 触发，冻结误执行风险，记录事故恢复窗口。
-2. 恢复 MySQL/Etcd 到同一已声明的时间点或记录其差异，不伪装精确原子跨库快照。
-3. 检查 Flyway 与代码兼容；先启动核心数据服务和单节点 Scheduler/Engine/Dispatcher。
-4. 扫描未交付 Outbox、非终态 Run、过期 Lease；逐项对账并记录 `reconcileId`。
-5. 对不可确定的非幂等副作用进入 `UNKNOWN_RECOVERY`，不得盲目重试。
-6. 启动 Worker、逐步打开新调度与公网入口，检查指标、审计与告警。
+## Create and verify a backup
 
-## 验收记录
-记录备份时间、恢复开始/完成时间、RPO/RTO 实测值、恢复版本、丢失/重复任务清单、人工处理单、数据库校验摘要。M0 尚不能提供已测量的 RPO/RTO 目标。
+Run from the repository root with the Compose stack and MySQL healthy:
+
+```bash
+FLOW_BACKUP_DIR=/path/outside/the/repository ./scripts/flow-ops.sh backup
+FLOW_BACKUP_DIR=/path/outside/the/repository ./scripts/flow-ops.sh verify /path/outside/the/repository/flow-<timestamp>-<pid>
+```
+
+The backup is a compressed `mysqldump --single-transaction` of all five Flow schemas. Each artifact directory contains the dump, `SHA256SUMS`, and a JSON manifest with UTC creation time, repository SHA, schema list, format, and digest. The directory is private (`0700`); files are private (`0600`). The script does not print database credentials. Store production backups in an encrypted, access-controlled location separate from the application host; this local helper does not encrypt artifacts.
+
+The default output is `backups/` under the checkout, which is ignored by Git. Set `FLOW_BACKUP_DIR` to another directory for normal use. A dump or manifest that fails validation is rejected before restore begins.
+
+## Restore a verified artifact
+
+Restore overwrites all five schemas. The explicit confirmation flag is mandatory. The command stops the web/API, metadata, scheduler, engine, dispatcher, and demo Worker writers; creates a pre-restore snapshot; imports the verified artifact; and leaves application services stopped.
+
+```bash
+FLOW_BACKUP_DIR=/path/outside/the/repository \
+  ./scripts/flow-ops.sh restore /path/to/backup/flow-<timestamp>-<pid> --confirm-overwrite
+./scripts/flow-ops.sh reconcile /path/to/recovery-reconcile.txt
+```
+
+Review the reconciliation output and service logs before starting the stack with `./scripts/dev.sh up`. Starting the scheduler can process due triggers. If the import fails, services remain stopped and the command reports the location of the pre-restore snapshot. Do not restart writers until the data state has been reviewed.
+
+## Read-only reconciliation
+
+```bash
+./scripts/flow-ops.sh reconcile
+```
+
+The report has a unique `reconcileId` and reads one MySQL consistent snapshot. It summarizes unresolved Scheduler/Engine/Dispatcher outboxes, nonterminal Runs/tasks, expired leases, and cross-schema missing-record signals. It performs no RPC, replay, lease mutation, or delete. Rows indicate conditions requiring operator review; they are not automatic repair instructions. In particular, do not blindly retry work whose external side effects are unknown.
+
+## Retention and current limits
+
+Dispatcher execution logs are deleted in bounded batches of at most 10,000 rows after 14 days. Run, NodeRun, Attempt, definitions, Inbox, and Outbox records are retained. Per-project history retention and archival are not implemented; automatic deletion of execution state is intentionally absent until referential and in-progress-run guarantees are designed and tested.
+
+This helper covers the single MySQL instance in the isolated Compose stack. It does not back up Nacos state, credentials, Docker images, or external Worker side effects, and it does not provide incremental/PITR recovery. Record backup time, restore duration, application SHA, migration state, and any manually resolved items when conducting a recovery exercise.

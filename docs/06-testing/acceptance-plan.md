@@ -1,6 +1,6 @@
 # OTRYX Flow 验收计划与需求追踪矩阵（Proposed）
 
-**状态：全部 `NOT_RUN`，当前是 M0 设计基线，不是验收结果。** 验收必须记录 Commit SHA、构建环境、测试命令、原始输出、截图/Trace/日志和审核人；不可凭 README 描述或绿色徽章替代实际业务证据。
+**状态：除已有明确证据的验收外均为 `NOT_RUN`；FLOW-023 已增加本地回归与 Compose 验收脚本，AT-15 真实备份恢复演练仍待执行。** 验收必须记录 Commit SHA、构建环境、测试命令、原始输出、截图/Trace/日志和审核人；不可凭 README 描述或绿色徽章替代实际业务证据。
 
 ## 进入验收前提
 测试硬件、系统时间同步、MySQL/Etcd/证书版本、Worker Handler 负载类型、OTRYX RPC 锁定 SHA、数据种子和初始迁移状态必须先记录。`Local` 用于开发快捷验证，`Staging` 用于真实网络安全和并发/故障验收。发布前禁止仍使用 `TRUSTED_DEVELOPMENT` 的公网业务进程。
@@ -22,7 +22,7 @@
 | AT-12 | FR-019, FR-020, FR-021, FR-022, FR-023, FR-028, NFR-004, NFR-005, NFR-010 | 日志、Trace、指标、告警、审计按 Run 串联且无敏感数据 | NOT_RUN |
 | AT-13 | FR-008, FR-015, FR-016, FR-017, NFR-003, NFR-007 | 固定机器下吞吐/积压/p99/内存有真实可重复记录，过载有界 | NOT_RUN |
 | AT-14 | FR-004, FR-011, FR-025, NFR-006, NFR-008 | API/SDK/RPC 两版本滚动组合与回滚通过 | NOT_RUN |
-| AT-15 | FR-026, FR-027, NFR-006 | 备份恢复和迁移重建定义/运行状态，恢复后可对账 | NOT_RUN |
+| AT-15 | FR-026, FR-027, NFR-006 | 备份恢复和迁移重建定义/运行状态，恢复后可对账 | IN_PROGRESS |
 | AT-16 | FR-001, FR-024, NFR-001, NFR-006 | HTTPS 站点可打开；受限访客安全演示，无任意代码入口 | NOT_RUN |
 | AT-17 | FR-021, FR-023, FR-028, NFR-004 | Outbox 延迟、积压、Worker 失联/证书过期等告警能真实触发恢复 | NOT_RUN |
 

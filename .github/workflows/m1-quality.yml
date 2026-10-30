@@ -18,6 +18,10 @@ on:
       - 'scripts/check_m1_source.py'
       - 'scripts/dev.sh'
       - 'scripts/test_dev_quickstart.sh'
+      - 'scripts/flow-ops.sh'
+      - 'scripts/test_flow_ops.sh'
+      - 'scripts/test_flow_ops_compose.sh'
+      - 'docs/07-operations/backup-restore.md'
       - 'scripts/check_observability_evidence.py'
       - 'scripts/test_check_observability_evidence.py'
       - 'scripts/check_rpc_metric_evidence.py'
@@ -58,12 +62,14 @@ jobs:
         run: python3 scripts/test_check_observability_evidence.py
       - name: Test local quickstart and credential handling
         run: bash scripts/test_dev_quickstart.sh
+      - name: Test backup, restore guardrails, and read-only reconciliation
+        run: bash scripts/test_flow_ops.sh
       - name: Test RPC metrics accounting and label evidence validator
         run: python3 scripts/test_check_rpc_metric_evidence.py
       - name: Test Prometheus metric value normalization
         run: python3 scripts/test_prometheus_metric_value.py
       - name: Syntax-check isolated telemetry acceptance scripts
-        run: bash -n scripts/test_rpc_metric_semantics.sh scripts/test_rpc_timeout_fault.sh scripts/test_rpc_retry_fault.sh scripts/test_database_refresh_failure_isolation.sh scripts/test_collector_exporter_failure.sh scripts/test_telemetry_failure_isolation.sh
+        run: bash -n scripts/flow-ops.sh scripts/test_flow_ops.sh scripts/test_flow_ops_compose.sh scripts/test_rpc_metric_semantics.sh scripts/test_rpc_timeout_fault.sh scripts/test_rpc_retry_fault.sh scripts/test_database_refresh_failure_isolation.sh scripts/test_collector_exporter_failure.sh scripts/test_telemetry_failure_isolation.sh
   backend:
     runs-on: ubuntu-latest
     steps:
