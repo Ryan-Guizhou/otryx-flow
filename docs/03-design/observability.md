@@ -99,3 +99,11 @@ Dispatcher 持久化租约、Dispatcher 与 Engine 最终成功、Outcome Outbox
 CI 使用同一 `prom/prometheus:v3.7.3` 运行 `promtool test rules`，
 避免仅通过 `promtool check rules` 的语法校验就误称告警可以触发。
 此测试属于**规则行为验证**，区别于实际 Collector 停机后的 `scripts/test_telemetry_failure_isolation.sh`。
+
+## 受控 RPC Deadline 真实故障注入
+
+`scripts/test_rpc_timeout_fault.sh` 使用 `FLOW_E2E_RPC_TIMEOUT_FAULT=1` 作为强制护栏，
+只在隔离 Compose 中短暂暂停 Metadata Provider 的 JVM PID 1，不关闭 TCP 连接或模拟虚假 RPC 数据。
+API 必须在既定超时预算内返回失败，`otryx_rpc_client_timeouts_total` 应随真实调用增加；
+脚本无论成功或失败都尝试向 JVM 发送 SIGCONT，恢复后再次验证业务 RPC 返回 200。
+**不允许在生产服务使用 SIGSTOP 注入，也不把本测试等同于自动重试覆盖证明。**
