@@ -44,7 +44,8 @@ public class FlowSecurityConfiguration {
     public SecurityFilterChain filterChain(
             HttpSecurity http,
             SecurityContextRepository contexts,
-            @Value("${management.server.port:9091}") int managementPort) throws Exception {
+            @Value("${management.server.port:9091}") int managementPort,
+            @Value("${server.port:8080}") int serverPort) throws Exception {
         return http
                 .exceptionHandling(e -> e.authenticationEntryPoint(
                         new HttpStatusEntryPoint(org.springframework.http.HttpStatus.UNAUTHORIZED)))
@@ -53,7 +54,7 @@ public class FlowSecurityConfiguration {
                                 HttpMethod.GET, "/api/v1/auth/csrf", "/actuator/health", "/actuator/info")
                         .permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
-                        .requestMatchers(internalPrometheusOnly(managementPort)).permitAll()
+                        .requestMatchers(internalPrometheusOnly(managementPort, serverPort)).permitAll()
                         .anyRequest().authenticated())
                 .csrf(c -> c.csrfTokenRepository(new CookieCsrfTokenRepository())
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
@@ -89,10 +90,13 @@ public class FlowSecurityConfiguration {
      * 业务端口上的同名路径始终不能因此获得匿名访问权限。</p>
      *
      * @param managementPort 实际管理 HTTP 监听端口
+     * @param serverPort 业务 HTTP 监听端口
      * @return 仅匹配管理端口上 GET /actuator/prometheus 的安全匹配器
      */
-    static RequestMatcher internalPrometheusOnly(int managementPort) {
+    static RequestMatcher internalPrometheusOnly(int managementPort, int serverPort) {
         return request -> managementPort > 0
+                && serverPort > 0
+                && managementPort != serverPort
                 && request.getLocalPort() == managementPort
                 && HttpMethod.GET.matches(request.getMethod())
                 && "/actuator/prometheus".equals(request.getServletPath());

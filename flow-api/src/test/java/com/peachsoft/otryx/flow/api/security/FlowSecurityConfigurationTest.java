@@ -18,7 +18,7 @@ class FlowSecurityConfigurationTest {
 
     @Test
     void allowsOnlyGetOnTheInternalManagementPort() {
-        RequestMatcher matcher = FlowSecurityConfiguration.internalPrometheusOnly(9091);
+        RequestMatcher matcher = FlowSecurityConfiguration.internalPrometheusOnly(9091, 8080);
 
         MockHttpServletRequest allowed = request("GET", "/actuator/prometheus", 9091);
         assertTrue(matcher.matches(allowed));
@@ -26,7 +26,9 @@ class FlowSecurityConfigurationTest {
         assertFalse(matcher.matches(request("POST", "/actuator/prometheus", 9091)));
         assertFalse(matcher.matches(request("GET", "/actuator/env", 9091)));
         assertFalse(matcher.matches(request("GET", "/actuator/prometheus", 9092)));
-        assertFalse(FlowSecurityConfiguration.internalPrometheusOnly(-1).matches(allowed));
+        assertFalse(FlowSecurityConfiguration.internalPrometheusOnly(-1, 8080).matches(allowed));
+        assertFalse(FlowSecurityConfiguration.internalPrometheusOnly(9091, 9091)
+                .matches(request("GET", "/actuator/prometheus", 9091)));
     }
 
     private static MockHttpServletRequest request(String method, String path, int port) {

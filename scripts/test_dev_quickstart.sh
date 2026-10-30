@@ -43,7 +43,7 @@ test -f "$TMP/generated/.env"
 FILE_MODE="$(stat -c '%a' "$TMP/generated/.env" 2>/dev/null || stat -f '%Lp' "$TMP/generated/.env")"
 test "$FILE_MODE" = 600
 ! grep -q 'REPLACE_WITH' "$TMP/generated/.env"
-grep -q '^OTRYX_RPC_SHA=0addd7df17c5ba4a0b77e2d30e4c7c75d7ac31f2$' "$TMP/generated/.env"
+grep -q '^OTRYX_RPC_SHA=502117d3301d78ea76a8d02b36e62585059d9902$' "$TMP/generated/.env"
 grep -q 'compose build' "$TMP/docker-calls"
 grep -q 'compose --profile worker-demo up -d flow-worker-demo' "$TMP/docker-calls"
 ! grep -Eq 'prometheus|grafana|otel-collector' "$TMP/docker-calls"

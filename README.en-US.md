@@ -14,7 +14,7 @@ Run `./scripts/dev.sh up` to generate local credentials, build, and start the ap
 
 <!-- doc-section:architecture -->
 ## Architecture and baseline
-- **Verified OTRYX RPC baseline**: `1.0.0-SNAPSHOT` / JDK 21 / Spring Boot 3.5.4; sole starter `com.peachsoft.otryx:otryx-spring-boot-starter` pinned to commit `0addd7df17c5ba4a0b77e2d30e4c7c75d7ac31f2`, **not published on Maven Central**; see [source evidence](docs/09-references/source-evidence.md).
+- **Verified OTRYX RPC baseline**: `1.0.0-SNAPSHOT` / JDK 21 / Spring Boot 3.5.4; sole starter `com.peachsoft.otryx:otryx-spring-boot-starter` pinned to commit `502117d3301d78ea76a8d02b36e62585059d9902`, **not published on Maven Central**; see [source evidence](docs/09-references/source-evidence.md).
 - **Proposed app stack**: Java 21 / Vue 3 + TypeScript / MySQL 8.4 LTS / Flyway / Nacos 3.2.4 / Docker Compose. Redis, RocketMQ, and Kubernetes are not mandatory dependencies for M1.
 - **Proposed applications**: `flow-api`, `flow-metadata`, `flow-scheduler`, `flow-engine`, `flow-dispatcher`, `flow-worker`, `flow-web`. OTRYX RPC handles bounded control calls; a business outbox and durable state handle reliable delivery.
 
