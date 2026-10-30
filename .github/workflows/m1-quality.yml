@@ -23,6 +23,8 @@ on:
       - 'scripts/test_rpc_metric_semantics.sh'
       - 'scripts/test_rpc_timeout_fault.sh'
       - 'scripts/test_rpc_retry_fault.sh'
+      - 'scripts/test_database_refresh_failure_isolation.sh'
+      - 'scripts/test_collector_exporter_failure.sh'
       - 'scripts/test_telemetry_failure_isolation.sh'
       - 'scripts/test_m1_e2e.sh'
       - 'scripts/test_m2_job_e2e.sh'
@@ -53,7 +55,7 @@ jobs:
       - name: Test RPC metrics accounting and label evidence validator
         run: python3 scripts/test_check_rpc_metric_evidence.py
       - name: Syntax-check isolated telemetry acceptance scripts
-        run: bash -n scripts/test_rpc_metric_semantics.sh scripts/test_rpc_timeout_fault.sh scripts/test_rpc_retry_fault.sh scripts/test_telemetry_failure_isolation.sh
+        run: bash -n scripts/test_rpc_metric_semantics.sh scripts/test_rpc_timeout_fault.sh scripts/test_rpc_retry_fault.sh scripts/test_database_refresh_failure_isolation.sh scripts/test_collector_exporter_failure.sh scripts/test_telemetry_failure_isolation.sh
   backend:
     runs-on: ubuntu-latest
     steps:
@@ -68,15 +70,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository/com/peachsoft/otryx
-          key: otryx-rpc-0addd7df17c5ba4a0b77e2d30e4c7c75d7ac31f2-jdk21-nacos-v2
+          key: otryx-rpc-502117d3301d78ea76a8d02b36e62585059d9902-jdk21-nacos-v2
       - name: Build pinned OTRYX RPC locally
         if: steps.rpc-artifacts.outputs.cache-hit != 'true'
         shell: bash
         run: |
           git clone https://github.com/Ryan-Guizhou/otryx-rpc.git /tmp/otryx-rpc
           cd /tmp/otryx-rpc
-          git checkout 0addd7df17c5ba4a0b77e2d30e4c7c75d7ac31f2
-          test "$(git rev-parse HEAD)" = 0addd7df17c5ba4a0b77e2d30e4c7c75d7ac31f2
+          git checkout 502117d3301d78ea76a8d02b36e62585059d9902
+          test "$(git rev-parse HEAD)" = 502117d3301d78ea76a8d02b36e62585059d9902
           ./mvnw -B -ntp -pl :otryx-codegen,:otryx-spring-boot-starter,:otryx-registry-nacos,:otryx-observability-micrometer,:otryx-observability-opentelemetry -am -DskipTests install
       - run: mvn -B -ntp clean verify
   frontend:

@@ -4,7 +4,7 @@
 
 FLOW-021 / [Issue #30](https://github.com/Ryan-Guizhou/otryx-flow/issues/30) 仍在推进。PR #31 交付第一阶段：接入 OTRYX RPC Micrometer/OpenTelemetry Adapter、内部 Actuator 端口、本地 Prometheus/Grafana/OTLP Collector、Scheduler/Engine/Dispatcher 持久化指标快照、Worker 运行时指标，以及严格的 RPC Trace 证据校验器。完整跨 JVM 验收以 PR 最新 Head 的 Compose 门禁结果为准；不能仅凭依赖或配置宣称传播正确。
 
-OTRYX RPC 固定基线：0addd7df17c5ba4a0b77e2d30e4c7c75d7ac31f2（已合并的 OpenTelemetry 自动配置顺序修复）。注册中心继续使用 Nacos 3.2.4；生产 mTLS/Nacos TLS 由 [FLOW-020 / Issue #29](https://github.com/Ryan-Guizhou/otryx-flow/issues/29) 与上游 [OTRYX RPC #179](https://github.com/Ryan-Guizhou/otryx-rpc/issues/179) 处理。
+OTRYX RPC 固定基线：502117d3301d78ea76a8d02b36e62585059d9902（已合并的 OpenTelemetry 自动配置顺序修复）。注册中心继续使用 Nacos 3.2.4；生产 mTLS/Nacos TLS 由 [FLOW-020 / Issue #29](https://github.com/Ryan-Guizhou/otryx-flow/issues/29) 与上游 [OTRYX RPC #179](https://github.com/Ryan-Guizhou/otryx-rpc/issues/179) 处理。
 
 ## 本地启动
 
@@ -115,3 +115,34 @@ API 必须在既定超时预算内返回失败，`otryx_rpc_client_timeouts_tota
 `ProjectRpc.listByOwner` 调用，并校验 `otryx_rpc_client_retries_total` 增长。
 脚本使用 `trap` 在异常退出时恢复对应 Provider，最终必须看到重新注册后的 HTTP 200。
 此次注入不依赖生产配置、不篡改任务业务数据，不能据此声称所有错误类型都会重试。
+
+## 上游 Micrometer 自动配置已合并
+
+OTRYX RPC [PR #185](https://github.com/Ryan-Guizhou/otryx-rpc/pull/185) 修复了 Spring Boot
+指标注册器与 RPC Observer 的自动配置顺序，固定 SHA 为 `502117d3301d78ea76a8d02b36e62585059d9902`。
+Flow 移除特定的 `FlowRpcMetricsConfiguration` Bean Workaround，
+以真实 RPC metric evidence gate 验证框架自带 Observer 是否自动生效。
+升级不得改变应用级 Nacos 注册模型与独立安全 profile。
+
+## 数据库真实中断与恢复
+
+`scripts/test_database_refresh_failure_isolation.sh` 仅在
+`FLOW_E2E_DATABASE_REFRESH_FAULT=1` 的隔离 Compose 中临时停止 MySQL。
+校验 Scheduler 实际从刷新状态 1 转为 2、保留上一轮业务快照，且服务 JVM 持续存活；
+恢复数据库后状态回到 1，既有已认证 API 业务调用恢复 200。
+该验收不是宣称数据库中断期间依赖 SQL 的业务操作仍能成功。
+
+## Collector 存活但下游导出失败
+
+在现有 Collector 不可用告警基础上，Collector 内部遥测端口 8888 仅向隔离的
+Docker 内部网络开放，并由 Prometheus 抓取 `otel-collector-internal`。
+`FlowOtlpExporterSendFailures` 基于
+`otelcol_exporter_send_failed_spans_total` 的真实累计发送失败计数，
+而不是用 `up == 0` 假装下游 exporter 失败。规则包含 promtool 触发与清除回归。
+
+测试配置 `compose.exporter-failure.yaml` 仅供隔离 CI 使用：
+`scripts/test_collector_exporter_failure.sh` 在 Collector 仍接受 OTLP 请求时，
+使测试专用 `otlphttp/failure` 下游端点不可达，
+发送固定测试 Span 并验证内部失败计数增加，检查真实登录 API → RPC 仍可用，
+结束后通过 trap 还原默认 Collector 配置。
+生产部署不启用故障 exporter，也不宣称发送失败必然代表数据永久丢失。

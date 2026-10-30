@@ -18,6 +18,7 @@ on:
       - "deploy/**"
       - "compose.yaml"
       - "compose.observability.yaml"
+      - "compose.exporter-failure.yaml"
       - ".env.example"
       - "scripts/start_dev_compose.sh"
       - "scripts/test_m1_e2e.sh"
@@ -30,6 +31,8 @@ on:
       - "scripts/test_rpc_metric_semantics.sh"
       - "scripts/test_rpc_timeout_fault.sh"
       - "scripts/test_rpc_retry_fault.sh"
+      - "scripts/test_database_refresh_failure_isolation.sh"
+      - "scripts/test_collector_exporter_failure.sh"
       - "scripts/test_telemetry_failure_isolation.sh"
       - ".github/workflows/m1-integration.yml"
 permissions:
@@ -58,7 +61,7 @@ jobs:
           FLOW_DB_PASSWORD=$(openssl rand -hex 24)
           FLOW_ADMIN_USERNAME=admin
           FLOW_ADMIN_PASSWORD=$(openssl rand -hex 24)
-          OTRYX_RPC_SHA=0addd7df17c5ba4a0b77e2d30e4c7c75d7ac31f2
+          OTRYX_RPC_SHA=502117d3301d78ea76a8d02b36e62585059d9902
           FLOW_DISPATCH_E2E_PROFILE=e2e
           FLOW_NACOS_AUTH_TOKEN=$(openssl rand -base64 48)
           FLOW_NACOS_IDENTITY_VALUE=$(openssl rand -hex 24)
@@ -68,6 +71,8 @@ jobs:
           FLOW_E2E_DELAY_HANDLER=true
           FLOW_E2E_RPC_TIMEOUT_FAULT=1
           FLOW_E2E_RPC_RETRY_FAULT=1
+          FLOW_E2E_DATABASE_REFRESH_FAULT=1
+          FLOW_E2E_COLLECTOR_EXPORTER_FAULT=1
           EOF_ENV
       - name: Validate Compose configuration
         run: docker compose config --quiet
@@ -172,6 +177,22 @@ jobs:
           source .env
           set +a
           bash scripts/test_rpc_retry_fault.sh
+      - name: Verify real MySQL metrics refresh failure and controlled recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source .env
+          set +a
+          bash scripts/test_database_refresh_failure_isolation.sh
+      - name: Verify Collector remains online while downstream exporter fails
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source .env
+          set +a
+          bash scripts/test_collector_exporter_failure.sh
       - name: Collect bounded failure diagnostics
         if: failure()
         run: |

@@ -46,3 +46,27 @@ tests:
       - eval_time: 5m
         alertname: FlowTelemetryCollectorUnavailable
         exp_alerts: []
+
+  - interval: 1m
+    input_series:
+      - series: 'otelcol_exporter_send_failed_spans_total{exporter="otlphttp/failure"}'
+        values: '0 1 1 1 1 1 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: FlowOtlpExporterSendFailures
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: FlowOtlpExporterSendFailures
+        exp_alerts:
+          - exp_labels:
+              exporter: otlphttp/failure
+              severity: warning
+            exp_annotations:
+              summary: "OTLP Collector downstream trace exporter is failing"
+              description: >-
+                Collector remains reachable but its destination exporter has
+                failed to send spans. Inspect downstream connectivity, retries
+                and bounded exporter queues; failure does not imply data loss.
+      - eval_time: 9m
+        alertname: FlowOtlpExporterSendFailures
+        exp_alerts: []

@@ -6,6 +6,7 @@ on:
       - ".github/workflows/observability.yml"
       - "compose.yaml"
       - "compose.observability.yaml"
+      - "compose.exporter-failure.yaml"
       - "deploy/observability/**"
       - "flow-api/pom.xml"
       - "flow-api/src/main/resources/application.yml"
@@ -39,7 +40,7 @@ jobs:
           FLOW_DB_PASSWORD=$(openssl rand -hex 24)
           FLOW_ADMIN_USERNAME=admin
           FLOW_ADMIN_PASSWORD=$(openssl rand -hex 24)
-          OTRYX_RPC_SHA=706b6506e49e1ade70de9c6c64c844fdd4631e17
+          OTRYX_RPC_SHA=502117d3301d78ea76a8d02b36e62585059d9902
           FLOW_DISPATCH_E2E_PROFILE=e2e
           FLOW_NACOS_AUTH_TOKEN=$(openssl rand -base64 48)
           FLOW_NACOS_IDENTITY_VALUE=$(openssl rand -hex 24)
@@ -59,5 +60,10 @@ jobs:
           docker compose -f compose.yaml -f compose.observability.yaml run --rm --no-deps --entrypoint promtool prometheus test rules /etc/prometheus/flow-alert-tests.yml
       - name: Validate OpenTelemetry Collector configuration
         run: docker compose -f compose.yaml -f compose.observability.yaml run --rm --no-deps otel-collector validate --config=/etc/otelcol-contrib/config.yaml
+      - name: Validate isolated exporter-failure overlay and Collector configuration
+        run: |
+          set -euo pipefail
+          docker compose -f compose.yaml -f compose.observability.yaml -f compose.exporter-failure.yaml config --quiet
+          docker compose -f compose.yaml -f compose.observability.yaml -f compose.exporter-failure.yaml run --rm --no-deps otel-collector validate --config=/etc/otelcol-contrib/config.yaml
       - name: Validate Grafana dashboard JSON
         run: python3 -m json.tool deploy/observability/grafana/dashboards/otryx-flow-overview.json >/dev/null
