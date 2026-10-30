@@ -1,0 +1,48 @@
+# promtool regression: alerts must fire only after sustained failure and clear on recovery.
+rule_files:
+  - /etc/prometheus/flow-alerts.yml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'flow_database_metrics_refresh_state{job="flow-scheduler",instance="flow-scheduler:9091"}'
+        values: '1 2 2 2 1 1'
+      - series: 'up{job="otel-collector",instance="otel-collector:9464"}'
+        values: '1 0 0 0 1 1'
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: FlowDatabaseMetricsRefreshFailed
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: FlowDatabaseMetricsRefreshFailed
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: flow-scheduler
+              instance: flow-scheduler:9091
+            exp_annotations:
+              summary: "Flow database metrics refresh is failing"
+              description: >-
+                Metrics refresh is isolated from business transactions and retains
+                previous good snapshots; investigate database connectivity.
+      - eval_time: 5m
+        alertname: FlowDatabaseMetricsRefreshFailed
+        exp_alerts: []
+      - eval_time: 0m
+        alertname: FlowTelemetryCollectorUnavailable
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: FlowTelemetryCollectorUnavailable
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              job: otel-collector
+              instance: otel-collector:9464
+            exp_annotations:
+              summary: "Flow's internal OTLP Collector scrape endpoint is unavailable"
+              description: >-
+                The Collector scrape endpoint is down. This confirms unavailability,
+                but not the outcome of every individual SDK export.
+      - eval_time: 5m
+        alertname: FlowTelemetryCollectorUnavailable
+        exp_alerts: []

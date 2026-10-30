@@ -53,6 +53,10 @@ jobs:
           set -euo pipefail
           docker compose -f compose.yaml -f compose.observability.yaml run --rm --no-deps --entrypoint promtool prometheus check config /etc/prometheus/prometheus.yml
           docker compose -f compose.yaml -f compose.observability.yaml run --rm --no-deps --entrypoint promtool prometheus check rules /etc/prometheus/flow-alerts.yml
+      - name: Prove database and Collector alerts fire and clear on sustained faults
+        run: |
+          set -euo pipefail
+          docker compose -f compose.yaml -f compose.observability.yaml run --rm --no-deps --entrypoint promtool prometheus test rules /etc/prometheus/flow-alert-tests.yml
       - name: Validate OpenTelemetry Collector configuration
         run: docker compose -f compose.yaml -f compose.observability.yaml run --rm --no-deps otel-collector validate --config=/etc/otelcol-contrib/config.yaml
       - name: Validate Grafana dashboard JSON

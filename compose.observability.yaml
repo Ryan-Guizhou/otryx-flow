@@ -65,6 +65,7 @@ services:
     volumes:
       - ./deploy/observability/prometheus/prometheus-flow.yml:/etc/prometheus/prometheus.yml:ro
       - ./deploy/observability/prometheus/flow-alerts.yml:/etc/prometheus/flow-alerts.yml:ro
+      - ./deploy/observability/prometheus/flow-alert-tests.yml:/etc/prometheus/flow-alert-tests.yml:ro
       - prometheus_data:/prometheus
     depends_on:
       - flow-api

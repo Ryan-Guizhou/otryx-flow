@@ -46,9 +46,12 @@ docker compose -f compose.yaml -f compose.observability.yaml down
 - [x] 为 Scheduler、Engine、Dispatcher、Worker 增加权威数据库快照或有界运行时指标。
 - [x] 在真实 Compose 中验证 Prometheus 抓取、关键业务指标查询、规则加载与 Collector 收集 Trace。
 - [x] 为 OTRYX RPC Trace 增加单元测试，并在真实验收中检查跨服务 client/server Span 的 Trace ID、Parent Span ID 与 method ID 关系。
-- [ ] 查询并核验 RPC logical-call/network-attempt/retry 指标语义及低基数标签。
-- [ ] 补充 HTTP/API 认证与授权拒绝计数，并验证敏感字段不会进入指标标签或 Trace 属性。
-- [ ] 增加数据库不可用与遥测出口故障告警规则，以及出口故障时 RPC、Worker heartbeat 和完成 ACK 不受影响的故障注入测试。
+- [x] 真实 RPC 成功调用的 logical-call/network-attempt 计数及低基数标签校验（PR #35 CI）。
+- [ ] 真实故障路径的 retry/timeout 计数语义仍需专项可重复触发证据。
+- [x] HTTP/API 401、403 安全响应计数与敏感字段 Meter 标签边界。
+- [x] 数据库指标刷新错误状态与恢复单测；Collector 断连时 Worker Heartbeat、complete、Dispatcher/Engine 终态的真实 Compose 故障注入。
+- [x] Prometheus 数据库刷新故障与 Collector 不可用告警表达式及 promtool 触发/恢复测试。
+- [ ] Collector 在线但下游 exporter 失败的直接可观测信号及故障测试，尚不宣称验证所有出口故障。
 - [ ] 生产 mTLS/Nacos TLS 与公开 HTTPS 仍由独立安全工作项负责。
 
 ## FLOW-021 后续验证：HTTP 安全、数据库刷新与遥测隔离
@@ -87,3 +90,12 @@ Dispatcher 持久化租约、Dispatcher 与 Engine 最终成功、Outcome Outbox
 测试不得把遥测错误伪装成业务成功，也不承诺外部副作用 exactly-once。
 
 以上是 PR #35 已提交的验收实现；仍须以最新提交的完整 Compose CI 结果作为完成证据。
+
+## 可重复告警触发验收
+
+`deploy/observability/prometheus/flow-alert-tests.yml` 是确定性 Prometheus rule evaluation 回归样例，
+将 Scheduler 的 `flow_database_metrics_refresh_state` 从 1 改为 2，Collector 的 `up` 从 1 改为 0：
+持续两分钟后规则应该发出 warning，恢复到正常状态后应清除。
+CI 使用同一 `prom/prometheus:v3.7.3` 运行 `promtool test rules`，
+避免仅通过 `promtool check rules` 的语法校验就误称告警可以触发。
+此测试属于**规则行为验证**，区别于实际 Collector 停机后的 `scripts/test_telemetry_failure_isolation.sh`。
