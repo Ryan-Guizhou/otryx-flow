@@ -2,17 +2,19 @@
 
 [简体中文](README.md) | [English](README.en-US.md)
 
-> **Verified: M1/M2 and M3 FLOW-015/016/017/018/019.** PR #31 delivers the first FLOW-021 observability slice; HTTP security metrics and telemetry/database failure-injection checks remain follow-up work. FLOW-020 production security and public HTTPS are not complete.
+> **Core business path implemented:** M1/M2 and M3 FLOW-015/016/017/018/019 are merged. Use the [one-command local quickstart](docs/07-operations/quickstart.md) to run the UI, scheduler services, and demo Worker. Metrics are optional; production mTLS, quotas/backpressure, backup/restore, and public HTTPS remain future work.
 
 <!-- doc-section:overview -->
 ## Overview
-OTRYX Flow is a proposed distributed job scheduler and DAG workflow platform, using **OTRYX RPC** as the sole synchronous inter-service RPC stack. Intended deliveries include a Java Worker SDK, a Vue 3 administration site, independent services, recovery mechanisms, Docker images, a controlled HTTPS demo site, and auditable acceptance results.
+OTRYX Flow is a distributed job scheduler and DAG workflow platform, using **OTRYX RPC** as the sole synchronous inter-service RPC stack. It includes a Java Worker SDK, a Vue 3 administration site, and independent services. The core scheduler and workflow path runs in an isolated development environment; security hardening, cluster operations, and a public demo remain on the roadmap.
 
 The first release emphasizes trusted Java handlers, durable triggers, at-least-once task execution, leases, and fencing. It cannot offer general exactly-once side effects and must not expose arbitrary code execution on the public demo.
 
+Run `./scripts/dev.sh up` to generate local credentials, build, and start the application. Prometheus, Grafana, and the OpenTelemetry Collector are not started by default.
+
 <!-- doc-section:architecture -->
 ## Architecture and baseline
-- **Verified OTRYX RPC baseline**: `1.0.0-SNAPSHOT` / JDK 21 / Spring Boot 3.5.4; sole starter `com.peachsoft.otryx:otryx-spring-boot-starter`, **not published on Maven Central**. Pin a tested Git revision before implementing; see [source evidence](docs/09-references/source-evidence.md).
+- **Verified OTRYX RPC baseline**: `1.0.0-SNAPSHOT` / JDK 21 / Spring Boot 3.5.4; sole starter `com.peachsoft.otryx:otryx-spring-boot-starter` pinned to commit `0addd7df17c5ba4a0b77e2d30e4c7c75d7ac31f2`, **not published on Maven Central**; see [source evidence](docs/09-references/source-evidence.md).
 - **Proposed app stack**: Java 21 / Vue 3 + TypeScript / MySQL 8.4 LTS / Flyway / Nacos 3.2.4 / Docker Compose. Redis, RocketMQ, and Kubernetes are not mandatory dependencies for M1.
 - **Proposed applications**: `flow-api`, `flow-metadata`, `flow-scheduler`, `flow-engine`, `flow-dispatcher`, `flow-worker`, `flow-web`. OTRYX RPC handles bounded control calls; a business outbox and durable state handle reliable delivery.
 

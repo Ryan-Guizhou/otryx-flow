@@ -2,17 +2,19 @@
 
 [简体中文](README.md) | [English](README.en-US.md)
 
-> **已验收：M1/M2 与 M3 FLOW-015/016/017/018/019。** FLOW-021 的第一阶段可观测性由 PR #31 交付；HTTP 安全事件指标与遥测/数据库故障注入仍在后续计划中。FLOW-020 生产安全及公网 HTTPS 尚未完成。
+> **核心业务主链路已实现：** M1/M2 与 M3 FLOW-015/016/017/018/019 已合并。可用 [一键本地启动](docs/07-operations/quickstart.md) 拉起 UI、调度服务与示例 Worker。指标栈是可选组件；生产 mTLS、配额/背压、备份恢复和公网 HTTPS 仍需后续完善。
 
 <!-- doc-section:overview -->
 ## 简介
-OTRYX Flow 是拟议中的、以 **OTRYX RPC** 作为内部同步远程调用框架的分布式任务调度和 DAG 工作流平台。目标交付包含 Java Worker SDK、Vue 3 管理界面、独立微服务、运行与故障恢复、Docker 镜像、可受控访问的 HTTPS 演示站点，以及可复核的验收记录。
+OTRYX Flow 是以 **OTRYX RPC** 作为内部同步远程调用框架的分布式任务调度和 DAG 工作流平台，包含 Java Worker SDK、Vue 3 管理界面和独立微服务。当前可在隔离开发环境运行核心调度与工作流功能；安全加固、集群运维和公网演示仍在路线图中。
 
 产品边界：可信 Java Handler、持久化触发、至少一次执行、租约与代际隔离；不承诺通用 Exactly Once，也不允许公网用户执行任意代码。
 
+首次启动执行 `./scripts/dev.sh up` 即可生成本地凭据、构建并运行应用。默认不启动 Prometheus、Grafana 或 OpenTelemetry Collector。
+
 <!-- doc-section:architecture -->
 ## 技术基线与架构
-- **OTRYX RPC 当前依据**：`1.0.0-SNAPSHOT` / JDK 21 / Spring Boot 3.5.4，唯一 Starter `com.peachsoft.otryx:otryx-spring-boot-starter`，**尚未发布到 Maven Central**。具体集成必须锁定并验证仓库提交；参考 [依赖事实与外部证据](docs/09-references/source-evidence.md)。
+- **OTRYX RPC 当前依据**：`1.0.0-SNAPSHOT` / JDK 21 / Spring Boot 3.5.4，唯一 Starter `com.peachsoft.otryx:otryx-spring-boot-starter`，固定提交 `0addd7df17c5ba4a0b77e2d30e4c7c75d7ac31f2`，**尚未发布到 Maven Central**；参考 [依赖事实与外部证据](docs/09-references/source-evidence.md)。
 - **拟议业务栈**：Java 21 / Vue 3 + TypeScript / MySQL 8.4 LTS / Flyway / Nacos 3.2.4 / Docker Compose；Redis、RocketMQ、Kubernetes 不作为 M1 的强制前置条件。
 - **拟议应用**：`flow-api`、`flow-metadata`、`flow-scheduler`、`flow-engine`、`flow-dispatcher`、`flow-worker`、`flow-web`。应用通过 OTRYX RPC 接口契约交互；任务交付依赖业务状态与 Outbox。
 

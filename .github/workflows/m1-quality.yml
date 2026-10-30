@@ -16,6 +16,8 @@ on:
       - 'deploy/**'
       - 'compose.yaml'
       - 'scripts/check_m1_source.py'
+      - 'scripts/dev.sh'
+      - 'scripts/test_dev_quickstart.sh'
       - 'scripts/check_observability_evidence.py'
       - 'scripts/test_check_observability_evidence.py'
       - 'scripts/test_m1_e2e.sh'
@@ -44,6 +46,8 @@ jobs:
       - run: python3 scripts/check_m1_source.py
       - name: Test strict OTRYX RPC trace evidence validator
         run: python3 scripts/test_check_observability_evidence.py
+      - name: Test local quickstart and credential handling
+        run: bash scripts/test_dev_quickstart.sh
   backend:
     runs-on: ubuntu-latest
     steps:
