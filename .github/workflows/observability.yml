@@ -1,22 +1,6 @@
 name: Observability configuration
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - ".github/workflows/observability.yml"
-      - "compose.yaml"
-      - "compose.observability.yaml"
-      - "deploy/observability/**"
-      - "flow-api/pom.xml"
-      - "flow-api/src/main/resources/application.yml"
-      - "flow-metadata/pom.xml"
-      - "flow-metadata/src/main/resources/application.yml"
-      - "flow-scheduler/pom.xml"
-      - "flow-scheduler/src/main/resources/application.yml"
-      - "flow-engine/pom.xml"
-      - "flow-engine/src/main/resources/application.yml"
-      - "flow-dispatcher/pom.xml"
-      - "flow-dispatcher/src/main/resources/application.yml"
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -24,7 +8,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   validate-observability:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -39,7 +23,7 @@ jobs:
           FLOW_DB_PASSWORD=$(openssl rand -hex 24)
           FLOW_ADMIN_USERNAME=admin
           FLOW_ADMIN_PASSWORD=$(openssl rand -hex 24)
-          OTRYX_RPC_SHA=706b6506e49e1ade70de9c6c64c844fdd4631e17
+          OTRYX_RPC_SHA=0addd7df17c5ba4a0b77e2d30e4c7c75d7ac31f2
           FLOW_DISPATCH_E2E_PROFILE=e2e
           FLOW_NACOS_AUTH_TOKEN=$(openssl rand -base64 48)
           FLOW_NACOS_IDENTITY_VALUE=$(openssl rand -hex 24)
