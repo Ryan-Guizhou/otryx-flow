@@ -1,4 +1,4 @@
-> **GitHub execution status (2026-10-30):** M1/M2/M3 and FLOW-021 are merged to `main`; [PR #35](https://github.com/Ryan-Guizhou/otryx-flow/pull/35) closed Issues #30/#34. Production FLOW-020 remains blocked by OTRYX RPC #179 ([Issue #29](https://github.com/Ryan-Guizhou/otryx-flow/issues/29)). FLOW-023 is tracked by [Issue #37](https://github.com/Ryan-Guizhou/otryx-flow/issues/37); scripts and read-only reconciliation are implemented, with real Compose restore acceptance pending.
+> **GitHub execution status (2026-10-30):** M1/M2/M3, FLOW-021, and FLOW-023 are merged to `main`; [PR #35](https://github.com/Ryan-Guizhou/otryx-flow/pull/35) closed Issues #30/#34, and [PR #37](https://github.com/Ryan-Guizhou/otryx-flow/pull/37) delivered FLOW-023 and closed Issue #37 after the Compose restore acceptance passed. Production FLOW-020 remains blocked by OTRYX RPC #179 ([Issue #29](https://github.com/Ryan-Guizhou/otryx-flow/issues/29)).
 
 # GitHub Issue 计划索引（部分已创建）
 
@@ -28,7 +28,7 @@
 | FLOW-020 | M4 | Nacos 3.2.4 双通道 TLS、mTLS、证书绑定与方法 AuthZ | NFR-001，AT-11；[Issue #29](https://github.com/Ryan-Guizhou/otryx-flow/issues/29)，依赖 OTRYX RPC #179 |
 | FLOW-021 | M4 | 接入 OpenTelemetry、业务指标、告警及审计 | FR-021/023/028，AT-12/17；[Issue #30](https://github.com/Ryan-Guizhou/otryx-flow/issues/30)，依赖 014/019 |
 | FLOW-022 | M4 | 实现项目配额、Backpressure、Worker Drain | FR-008/015/017，AT-13；依赖 013/020 |
-| FLOW-023 | M4 | 实现备份、恢复、对账和历史清理 | [Issue #37](https://github.com/Ryan-Guizhou/otryx-flow/issues/37)：实现中；FR-026/027，AT-15；依赖 014/017 |
+| FLOW-023 | M4 | 实现备份、恢复、对账和历史清理 | [Issue #37](https://github.com/Ryan-Guizhou/otryx-flow/issues/37) / [PR #37](https://github.com/Ryan-Guizhou/otryx-flow/pull/37)：已合并；AT-15 隔离 Compose 验收通过；FR-026/027；依赖 014/017 |
 | FLOW-024 | M4 | 限制 Demo Handler、访客权限及敏感输入 | FR-024，AT-16；依赖 006/019/020 |
 | FLOW-025 | M5 | 全量两 JVM、DB 及网络 mTLS 故障注入 | AT-07/08/09/10/11；依赖 020/023 |
 | FLOW-026 | M5 | 固定环境业务吞吐与 10k RPC 基线对比 | NFR-007，AT-13；依赖 022/025 |

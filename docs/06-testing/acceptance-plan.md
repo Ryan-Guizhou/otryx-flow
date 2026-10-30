@@ -1,6 +1,6 @@
 # OTRYX Flow 验收计划与需求追踪矩阵（Proposed）
 
-**状态：除已有明确证据的验收外均为 `NOT_RUN`；FLOW-023 已增加本地回归与 Compose 验收脚本，AT-15 真实备份恢复演练仍待执行。** 验收必须记录 Commit SHA、构建环境、测试命令、原始输出、截图/Trace/日志和审核人；不可凭 README 描述或绿色徽章替代实际业务证据。
+**状态：除已有明确证据的验收外均为 `NOT_RUN`；AT-15 在隔离 GitHub Actions Compose 环境通过（FLOW-023）。** 验收必须记录 Commit SHA、构建环境、测试命令、原始输出、截图/Trace/日志和审核人；不可凭 README 描述或绿色徽章替代实际业务证据。
 
 ## 进入验收前提
 测试硬件、系统时间同步、MySQL/Etcd/证书版本、Worker Handler 负载类型、OTRYX RPC 锁定 SHA、数据种子和初始迁移状态必须先记录。`Local` 用于开发快捷验证，`Staging` 用于真实网络安全和并发/故障验收。发布前禁止仍使用 `TRUSTED_DEVELOPMENT` 的公网业务进程。
@@ -22,7 +22,7 @@
 | AT-12 | FR-019, FR-020, FR-021, FR-022, FR-023, FR-028, NFR-004, NFR-005, NFR-010 | 日志、Trace、指标、告警、审计按 Run 串联且无敏感数据 | NOT_RUN |
 | AT-13 | FR-008, FR-015, FR-016, FR-017, NFR-003, NFR-007 | 固定机器下吞吐/积压/p99/内存有真实可重复记录，过载有界 | NOT_RUN |
 | AT-14 | FR-004, FR-011, FR-025, NFR-006, NFR-008 | API/SDK/RPC 两版本滚动组合与回滚通过 | NOT_RUN |
-| AT-15 | FR-026, FR-027, NFR-006 | 备份恢复和迁移重建定义/运行状态，恢复后可对账 | IN_PROGRESS |
+| AT-15 | FR-026, FR-027, NFR-006 | 备份恢复和迁移重建定义/运行状态，恢复后可对账 | PASS (isolated Compose) |
 | AT-16 | FR-001, FR-024, NFR-001, NFR-006 | HTTPS 站点可打开；受限访客安全演示，无任意代码入口 | NOT_RUN |
 | AT-17 | FR-021, FR-023, FR-028, NFR-004 | Outbox 延迟、积压、Worker 失联/证书过期等告警能真实触发恢复 | NOT_RUN |
 
@@ -30,6 +30,12 @@
 - **基础 P0**：AT-01~AT-12、AT-14~AT-16，功能与安全的所有阻断项不允许豁免。
 - **专项性能**：AT-13 使用 [受控性能计划](performance-plan.md) 预设可量化门槛；M0 尚无真实数据。
 - **运维验证**：AT-17、备份与完整日志关联须在 Release Candidate 前通过。
+
+## AT-15 执行记录
+- 结果：通过隔离 GitHub Actions Compose 环境的五 Schema 备份、校验、显式恢复、只读对账和服务恢复验收；不代表生产 RPO/RTO 或跨 Nacos 原子恢复能力。
+- 代码版本：`9085685b0b666d5a5b3953055e911c907673e63e`（FLOW-023 实现提交；随后仅恢复了全量 Compose 工作流的手动触发策略）。
+- 环境与命令：GitHub Actions `ubuntu-latest`；`bash scripts/test_flow_ops_compose.sh`，由 [Flow full Compose integration run #101](https://github.com/Ryan-Guizhou/otryx-flow/actions/runs/41037421325) 执行。
+- 证据：M1 source/build、Docs quality、全量 Compose integration 均成功；新增验收步骤验证恢复出的业务探针值、五个 Flyway 历史表、只读 reconcile 报告及 API 重启后就绪。
 
 ## Release Gate
 只有当 P0 全绿、无法恢复的非幂等场景已明确限制、生产证书配置真实验收、性能目标事先冻结且重复验证通过、部署与回滚演练完成，才允许将状态从 `Release Candidate` 修改为 `Ready to Publish`。任何证据必须同时指向版本 SHA 和执行环境；CI shared runner 不能当作物理机生产容量证明。
