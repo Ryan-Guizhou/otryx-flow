@@ -42,12 +42,39 @@ CID="$(docker compose ps -q flow-metadata)"
 [ -n "$CID" ] || { echo "Missing live Metadata container"; exit 1; }
 KILLED=1
 docker kill --signal=KILL "$CID" >/dev/null
-# The real idempotent ProjectRpc.listByOwner call must fail through the transport.
-# ClientRetryController allows up to the configured maxAttempts with a bounded retry budget.
-code="$(curl --silent --show-error --max-time 12 -o "$WORK/during.json" -w '%{http_code}' \
-  -b "$COOKIE" "$BASE/api/v1/projects" || true)"
-[ "$code" != 200 ] || { echo "Killed Metadata Provider unexpectedly returned HTTP 200"; exit 1; }
-snapshot > "$WORK/after-failure.prom"
+# SIGKILL may initially leave a stale Nacos endpoint. A transient transport error
+# is not automatically equivalent to a scheduled retry. Probe after Nacos marks the
+# application member absent and verify that the idempotent directory-failure path
+# produces a real, bounded ClientRetryController decision.
+retries() {
+  python3 - "$1" <<'PY'
+import sys
+from pathlib import Path
+
+sys.path.insert(0, "scripts")
+from check_rpc_metric_evidence import count, parse_samples
+
+samples = parse_samples(Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(int(count(samples, "otryx_rpc_client_retries_total")))
+PY
+}
+start_retries="$(retries "$WORK/before.prom")"
+retry_observed=0
+for i in $(seq 1 25); do
+  code="$(curl --silent --show-error --max-time 12 -o "$WORK/during.json" -w '%{http_code}' \
+    -b "$COOKIE" "$BASE/api/v1/projects" || true)"
+  [ "$code" != 200 ] || { echo "Killed Metadata Provider unexpectedly returned HTTP 200"; exit 1; }
+  snapshot > "$WORK/after-failure.prom"
+  current_retries="$(retries "$WORK/after-failure.prom")"
+  if [ "$current_retries" -gt "$start_retries" ]; then
+    retry_observed=1
+    break
+  fi
+  sleep 2
+done
+[ "$retry_observed" = 1 ] || {
+  echo "FAIL: no real RPC retry after 25 idempotent requests during Provider loss"; exit 1;
+}
 
 docker compose up -d --no-deps flow-metadata
 KILLED=0
