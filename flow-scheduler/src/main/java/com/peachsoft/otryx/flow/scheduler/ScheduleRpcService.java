@@ -6,6 +6,7 @@ import com.peachsoft.otryx.flow.contracts.v1.ScheduleListReply;
 import com.peachsoft.otryx.flow.contracts.v1.ScheduleMutationReply;
 import com.peachsoft.otryx.flow.contracts.v1.ScheduleRpc;
 import com.peachsoft.otryx.flow.contracts.v1.ScheduleToggleCommand;
+import com.peachsoft.otryx.flow.contracts.v1.ScheduleUpdateCommand;
 import com.peachsoft.otryx.flow.contracts.v1.ScheduleTriggerListReply;
 import com.peachsoft.otryx.flow.contracts.v1.ScheduleTriggerView;
 import com.peachsoft.otryx.flow.contracts.v1.ScheduleView;
@@ -27,7 +28,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** 基于 OTRYX RPC 的持久化计划 Provider；创建前验证 Metadata 不可变 JobRevision。 */
+/**
+ * 基于 OTRYX RPC 的持久化计划 Provider；创建前验证 Metadata 不可变 JobRevision。
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/03 14:40
+ */
 @OtryxRpcService(interfaceClass = ScheduleRpc.class, version = "1.0.0")
 public class ScheduleRpcService implements ScheduleRpc {
     private static final Pattern USERNAME = Pattern.compile("[a-zA-Z0-9_.-]{1,64}");
@@ -93,7 +100,8 @@ public class ScheduleRpcService implements ScheduleRpc {
         String owner = owner(ownerUsername);
         String project = uuid(projectId);
         List<ScheduleView> rows = jdbc.query("SELECT * FROM flow_schedule_definition "
-                        + "WHERE owner_username = ? AND project_id = ? ORDER BY created_at DESC, id DESC LIMIT ?",
+                        + "WHERE owner_username = ? AND project_id = ? AND archived = FALSE "
+                + "ORDER BY created_at DESC, id DESC LIMIT ?",
                 (rs, index) -> readSchedule(rs), owner, project, MAX_ROWS);
         return new ScheduleListReply(rows.toArray(ScheduleView[]::new));
     }
@@ -108,7 +116,8 @@ public class ScheduleRpcService implements ScheduleRpc {
                         + "WHERE s.id = ? AND s.owner_username = ? AND s.project_id = ? "
                         + "ORDER BY t.planned_fire_at_utc DESC LIMIT ?",
                 (rs, index) -> new ScheduleTriggerView(rs.getString("id"), rs.getString("schedule_id"),
-                        rs.getInt("schedule_revision"), rs.getTimestamp("planned_fire_at_utc").toInstant().toString(),
+                        rs.getInt("schedule_revision"),
+                        rs.getTimestamp("planned_fire_at_utc").toInstant().toString(),
                         rs.getString("status"), rs.getTimestamp("created_at").toInstant().toString()),
                 id, owner, project, MAX_ROWS);
         return new ScheduleTriggerListReply(rows.toArray(ScheduleTriggerView[]::new));
@@ -116,7 +125,9 @@ public class ScheduleRpcService implements ScheduleRpc {
 
     @Override
     public ScheduleMutationReply toggle(ScheduleToggleCommand command) {
-        if (command == null || command.expectedVersion() < 1) throw new IllegalArgumentException("Invalid schedule toggle");
+        if (command == null || command.expectedVersion() < 1) {
+            throw new IllegalArgumentException("Invalid schedule toggle");
+        }
         String owner = owner(command.ownerUsername());
         String project = uuid(command.projectId());
         String id = uuid(command.scheduleId());
@@ -135,6 +146,52 @@ public class ScheduleRpcService implements ScheduleRpc {
                     command.enabled() ? 1 : 0, Timestamp.from(next), id, owner, project,
                     command.expectedVersion());
             if (updated != 1) return reply(CONFLICT, owned(owner, project, id), false);
+            return reply(OK, owned(owner, project, id), false);
+        });
+    }
+
+    @Override
+    public ScheduleMutationReply update(ScheduleUpdateCommand command) {
+        if (command == null || command.expectedVersion() < 1 || command.jobRevision() < 1) {
+            throw new IllegalArgumentException("Invalid schedule update");
+        }
+        String owner = owner(command.ownerUsername());
+        String project = uuid(command.projectId());
+        String id = uuid(command.scheduleId());
+        String job = uuid(command.jobId());
+        SchedulePlanner.MisfirePolicy.valueOf(command.misfirePolicy());
+        if (jobs.revision(owner, project, job, command.jobRevision()) == null) return reply(NOT_FOUND, null, false);
+        Instant next = planner.next(command.expression(), command.timeZone(), Instant.now());
+        return tx.execute(ignored -> {
+            ScheduleView current = owned(owner, project, id);
+            if (current == null || current.archived()) return reply(NOT_FOUND, current, false);
+            if (current.version() != command.expectedVersion()) return reply(CONFLICT, current, false);
+            int updated = jdbc.update("UPDATE flow_schedule_definition SET job_id=?, job_revision=?, "
+                            + "schedule_revision=schedule_revision+1, cron_expr=?, time_zone=?, misfire_policy=?, "
+                            + "next_fire_at_utc=?, version=version+1, updated_at=CURRENT_TIMESTAMP(3) "
+                            + "WHERE id=? AND owner_username=? AND project_id=? AND version=? AND archived=FALSE",
+                    job, command.jobRevision(), command.expression().trim(), command.timeZone(),
+                    command.misfirePolicy(), Timestamp.from(next), id, owner, project, command.expectedVersion());
+            if (updated != 1) return reply(CONFLICT, owned(owner, project, id), false);
+            return reply(OK, owned(owner, project, id), false);
+        });
+    }
+
+    @Override
+    public ScheduleMutationReply archive(String ownerUsername, String projectId, String scheduleId,
+            long expectedVersion) {
+        if (expectedVersion < 1) throw new IllegalArgumentException("Invalid schedule archive");
+        String owner = owner(ownerUsername);
+        String project = uuid(projectId);
+        String id = uuid(scheduleId);
+        return tx.execute(ignored -> {
+            ScheduleView current = owned(owner, project, id);
+            if (current == null) return reply(NOT_FOUND, null, false);
+            if (current.version() != expectedVersion) return reply(CONFLICT, current, false);
+            if (current.archived()) return reply(OK, current, true);
+            jdbc.update("UPDATE flow_schedule_definition SET archived=TRUE, enabled=FALSE, version=version+1, "
+                            + "updated_at=CURRENT_TIMESTAMP(3) WHERE id=? AND version=?",
+                    id, expectedVersion);
             return reply(OK, owned(owner, project, id), false);
         });
     }
@@ -166,7 +223,8 @@ public class ScheduleRpcService implements ScheduleRpc {
         return new ScheduleView(rs.getString("id"), rs.getString("project_id"),
                 rs.getString("job_id"), rs.getInt("job_revision"), rs.getString("cron_expr"),
                 rs.getString("time_zone"), rs.getString("misfire_policy"), rs.getBoolean("enabled"),
-                rs.getLong("version"), rs.getTimestamp("next_fire_at_utc").toInstant().toString());
+                rs.getLong("version"), rs.getTimestamp("next_fire_at_utc").toInstant().toString(),
+                rs.getBoolean("archived"));
     }
 
     private static ScheduleMutationReply reply(String code, ScheduleView schedule, boolean duplicate) {

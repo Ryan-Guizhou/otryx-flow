@@ -1,7 +1,12 @@
 package com.peachsoft.otryx.flow.scheduler;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.peachsoft.otryx.flow.contracts.v1.JobRevisionView;
 import com.peachsoft.otryx.flow.contracts.v1.JobRpc;
@@ -15,7 +20,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.test.util.ReflectionTestUtils;
 
-/** 真实事务库下校验请求键去重、权限边界和版本 CAS。 */
+/**
+ * 真实事务库下校验请求键去重、权限边界和版本 CAS。
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/03 14:40
+ */
 class ScheduleRpcServiceTest {
     private static final String PROJECT = "00000000-0000-4000-8000-000000000001";
     private static final String JOB = "00000000-0000-4000-8000-000000000002";
@@ -32,7 +43,8 @@ class ScheduleRpcServiceTest {
                 + "owner_username VARCHAR(64), create_request_key VARCHAR(80), create_fingerprint CHAR(64), "
                 + "job_id VARCHAR(36), job_revision INT, schedule_revision INT, cron_expr VARCHAR(120), "
                 + "time_zone VARCHAR(64), misfire_policy VARCHAR(16), enabled BOOLEAN, "
-                + "next_fire_at_utc TIMESTAMP(3), version BIGINT, created_at TIMESTAMP(3), "
+                + "next_fire_at_utc TIMESTAMP(3), version BIGINT, archived BOOLEAN DEFAULT FALSE, "
+                + "created_at TIMESTAMP(3), "
                 + "updated_at TIMESTAMP(3), UNIQUE(owner_username, create_request_key))");
         jdbc.execute("CREATE TABLE flow_schedule_trigger (id VARCHAR(36) PRIMARY KEY, schedule_id VARCHAR(36), "
                 + "schedule_revision INT, planned_fire_at_utc TIMESTAMP(3), origin VARCHAR(16), "
