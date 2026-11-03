@@ -14,7 +14,13 @@ import java.util.regex.Pattern;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-/** 项目数据持久化 RPC 服务，不与 flow-api 共享 JDBC 访问。 */
+/**
+ * 项目数据持久化 RPC 服务，不与 flow-api 共享 JDBC 访问。
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/03 14:40
+ */
 @OtryxRpcService(interfaceClass = ProjectRpc.class, version = "1.0.0")
 public class ProjectRpcService implements ProjectRpc {
     private static final int MAX_NAME = 100;
@@ -33,6 +39,22 @@ public class ProjectRpcService implements ProjectRpc {
                 + "WHERE owner_username = ? ORDER BY created_at DESC, id DESC LIMIT ?",
                 (rs, index) -> view(rs), owner, MAX_ROWS);
         return new ProjectListReply(projects.toArray(ProjectView[]::new));
+    }
+
+    @Override
+    public boolean hasAccess(String ownerUsername, String projectId) {
+        String owner = validOwner(ownerUsername);
+        if (projectId == null) return false;
+        String project;
+        try {
+            project = java.util.UUID.fromString(projectId).toString();
+        } catch (IllegalArgumentException invalid) {
+            return false;
+        }
+        if (!project.equals(projectId)) return false;
+        Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM flow_project WHERE id = ? AND owner_username = ?",
+                Integer.class, project, owner);
+        return count != null && count == 1;
     }
 
     @Override

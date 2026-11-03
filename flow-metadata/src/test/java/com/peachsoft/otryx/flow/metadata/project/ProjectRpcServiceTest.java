@@ -1,6 +1,9 @@
 package com.peachsoft.otryx.flow.metadata.project;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.peachsoft.otryx.flow.contracts.v1.ProjectCreateCommand;
 import org.h2.jdbcx.JdbcDataSource;
@@ -8,7 +11,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-/** Verifies project ownership and idempotent retry without a remote registry. */
+/**
+ * 校验项目归属和幂等重试，不连接远程注册中心。
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/03 14:40
+ */
 class ProjectRpcServiceTest {
     private ProjectRpcService service;
 
@@ -25,7 +34,8 @@ class ProjectRpcServiceTest {
 
     @Test
     void retryWithSameKeyReturnsSameProjectWithoutDuplicateWrite() {
-        ProjectCreateCommand request = new ProjectCreateCommand("admin", "00000000-0000-4000-8000-000000000001", "First");
+        ProjectCreateCommand request = new ProjectCreateCommand("admin",
+                "00000000-0000-4000-8000-000000000001", "First");
         var first = service.create(request);
         var retry = service.create(request);
         assertEquals(first.project().id(), retry.project().id());
@@ -33,6 +43,15 @@ class ProjectRpcServiceTest {
         assertFalse(retry.conflict());
         assertEquals(1, service.listByOwner("admin").projects().length);
         assertEquals(0, service.listByOwner("other").projects().length);
+        assertTrue(service.hasAccess("admin", first.project().id()));
+        assertFalse(service.hasAccess("other", first.project().id()));
+    }
+
+    @Test
+    void otherOwnerCannotSeeProject() {
+        var created = service.create(new ProjectCreateCommand("admin",
+                "00000000-0000-4000-8000-000000000009", "Owned"));
+        assertFalse(service.hasAccess("other", created.project().id()));
     }
 
     @Test
