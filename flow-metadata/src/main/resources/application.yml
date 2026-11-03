@@ -9,22 +9,23 @@ spring:
     enabled: true
 server:
   port: ${FLOW_HTTP_PORT:8081}
-management:
-  server:
-    port: ${FLOW_MANAGEMENT_PORT:9091}
-  endpoints:
-    web:
-      exposure:
-        include: health,info,prometheus
-  endpoint:
-    health:
-      show-details: never
-  tracing:
-    sampling:
-      probability: ${FLOW_TRACE_SAMPLING_PROBABILITY:0.0}
-  otlp:
-    tracing:
-      endpoint: ${MANAGEMENT_OTLP_TRACING_ENDPOINT:http://127.0.0.1:4318/v1/traces}
+# 本机多服务同机启动时不单独开管理端口，避免都绑定 9091。容器内抓取指标时再打开。
+#management:
+#  server:
+#    port: ${FLOW_MANAGEMENT_PORT:9091}
+#  endpoints:
+#    web:
+#      exposure:
+#        include: health,info,prometheus
+#  endpoint:
+#    health:
+#      show-details: never
+#  tracing:
+#    sampling:
+#      probability: ${FLOW_TRACE_SAMPLING_PROBABILITY:0.0}
+#  otlp:
+#    tracing:
+#      endpoint: ${MANAGEMENT_OTLP_TRACING_ENDPOINT:http://127.0.0.1:4318/v1/traces}
 otryx:
   rpc:
     security-profile: TRUSTED_DEVELOPMENT # Developer-only isolated Compose network.
