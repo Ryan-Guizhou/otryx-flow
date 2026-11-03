@@ -26,7 +26,8 @@ for relative in REQUIRED:
     if not (ROOT / relative).is_file():
         ERRORS.append('Missing required file: ' + relative)
 
-all_md = sorted(ROOT.rglob('*.md'))
+SKIP_DIRS = {'node_modules', 'target', '.git'}
+all_md = sorted(path for path in ROOT.rglob('*.md') if not SKIP_DIRS.intersection(path.parts))
 mermaid_count = 0
 if len(all_md) < 25:
     ERRORS.append('Expected a substantive multi-document baseline; found %s MD files' % len(all_md))

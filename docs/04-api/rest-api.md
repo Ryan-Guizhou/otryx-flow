@@ -32,6 +32,25 @@
 | `GET` | `/projects/{p}/workers` | viewer | 状态、容量、分组、标签 |
 | `GET` | `/projects/{p}/audit` | owner | 审计过滤 |
 
+## Flow 1.0 已落地入口
+
+上表仍是早期草案。下面这些路径已经有 Controller，行为以 [Job Run 控制](../03-design/job-run-control.md) 为准。
+
+| 方法 | 路径 | 行为 |
+|---|---|---|
+| `POST` | `/api/v1/auth/login` `/logout` `/change-password` | 会话登录、退出、修改自己的密码 |
+| `GET` | `/api/v1/overview` | 项目、任务、运行和在线 Worker 计数 |
+| `GET` | `/api/v1/projects/{p}/jobs/{j}` | 任务详情，归档后仍可按标识读取 |
+| `POST` | `/api/v1/projects/{p}/jobs/{j}/runs` | 立即执行，需要 `Idempotency-Key` |
+| `GET` | `/api/v1/projects/{p}/job-runs` 与 `/{runId}` | 查询 Run。列表可按任务、来源、状态、时间和 Worker 筛选；详情包含 Attempt |
+| `POST` | `/api/v1/projects/{p}/job-runs/{runId}/cancel` `/retry` | 停止这一次，或新建一次重试 |
+| `GET` | `/api/v1/projects/{p}/job-runs/{runId}/logs` | 按 Run 查询调度日志 |
+| `PUT` | `/api/v1/projects/{p}/schedules/{s}` | 编辑 Cron |
+| `POST` | `/api/v1/projects/{p}/schedules/{s}/archive` `/run-now` | 归档，或立即执行一次 |
+| `GET` | `/api/v1/handlers` `/api/v1/workers` | Handler 目录和 Worker 心跳 |
+
+没有在线 Worker 声明对应 Handler 时，立即执行返回 `409` 和 `HANDLER_UNAVAILABLE`。
+
 ## 创建工作流运行的样例（提议格式）
 ```http
 POST /api/v1/projects/PROJECT_ID/workflows/WORKFLOW_ID/run

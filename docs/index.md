@@ -7,7 +7,7 @@
 | 为什么做 | [产品定位](01-product/product-vision.md) | 角色、目标、非目标、成功指标 |
 | 做什么 | [PRD](01-product/requirements-prd.md) / [用例](01-product/use-cases.md) / [功能细则](01-product/functional-spec.md) | 每个功能何时触发、怎样失败、如何验收 |
 | 怎么拆分 | [架构](02-architecture/architecture-overview.md) / [边界](02-architecture/service-boundaries.md) | 真实服务职责、依赖方向 |
-| 怎么保证可靠 | [一致性恢复](03-design/consistency-and-recovery.md) / [Scheduler](03-design/scheduler-design.md) / [Engine](03-design/workflow-engine-design.md) / [Dispatcher](03-design/dispatcher-worker-design.md) | 幂等、租约、状态机、失败路径 |
+| 怎么保证可靠 | [一致性恢复](03-design/consistency-and-recovery.md) / [Scheduler](03-design/scheduler-design.md) / [Engine](03-design/workflow-engine-design.md) / [Dispatcher](03-design/dispatcher-worker-design.md) / [Job Run](03-design/job-run-control.md) / [Handler](03-design/handler-catalog.md) / [配额](03-design/concurrency-admission.md) | 幂等、租约、状态机、失败路径 |
 | 数据/API | [数据模型](03-design/data-model.md) / [REST](04-api/rest-api.md) / [RPC](04-api/rpc-contracts.md) | 存储和契约、业务权限 |
 | 前端体验 | [交互规范](05-frontend/ui-ux-spec.md) / [页面](05-frontend/page-design.md) / [画布](05-frontend/workflow-editor.md) | 页面、用户操作、校验、失败展示 |
 | 交付质量 | [验收计划](06-testing/acceptance-plan.md) / [测试用例](06-testing/test-cases.md) / [性能基线](06-testing/performance-plan.md) | 如何产生可核查测试证据 |
@@ -26,3 +26,5 @@ M1 已在 [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2) 验收。M2
 M3 FLOW-015 / [PR #20](https://github.com/Ryan-Guizhou/otryx-flow/pull/20)、FLOW-016 / [PR #22](https://github.com/Ryan-Guizhou/otryx-flow/pull/22)、FLOW-017 / [PR #24](https://github.com/Ryan-Guizhou/otryx-flow/pull/24) 均通过五项 CI 和真实 Compose 验收并合并。FLOW-018 / [PR #26](https://github.com/Ryan-Guizhou/otryx-flow/pull/26) 已交付 Vue Flow 工作流画布、草稿 CAS、不可变 Revision 与固定版本运行入口。
 
 FLOW-019 / [PR #28](https://github.com/Ryan-Guizhou/otryx-flow/pull/28) 已合并。FLOW-021 / [PR #35](https://github.com/Ryan-Guizhou/otryx-flow/pull/35) 与 FLOW-023 / [PR #37](https://github.com/Ryan-Guizhou/otryx-flow/pull/37) 已合并。仓库内已有项目配额、Worker 停领、终态清理、`safe.*` Handler 拒绝和审计查询。FLOW-020 / [Issue #29](https://github.com/Ryan-Guizhou/otryx-flow/issues/29) 仍被 OTRYX RPC #179 挡住；AT-11 及之后的发行验收没有通过。Nacos 3.2.4 仍是唯一活跃注册中心。
+
+普通 Job 的手动执行、停止、重试、Cron 编辑和执行中心代码已落地，见 [Job Run](03-design/job-run-control.md)、[验收口径](01-product/flow-1.0-acceptance.md)、[本地步骤](07-operations/flow-1.0-quickstart.md) 和 [验证记录](06-testing/flow-1.0-evidence.md)。完整环境验收尚未通过。

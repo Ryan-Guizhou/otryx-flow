@@ -19,6 +19,9 @@
 | `flow-dispatcher` | `WorkerReportRpc.heartbeat` | `attemptId, leaseEpoch, progress` | Epoch CAS，重复更新有界 |
 | `flow-dispatcher` | `WorkerReportRpc.complete` | `attemptId, leaseEpoch, resultDigest` | 仅匹配有效 Epoch；重复同回执可安全复读 |
 | `flow-engine` | `WorkflowRunQueryRpc.getRun` | `projectId, runId` | 只读，可重试，授权过滤 |
+| `flow-engine` | `JobRunRpc.startManual` / `cancel` | `owner, project, job, requestKey` | 请求键表去重；取消不覆盖终态 |
+| `flow-metadata` | `HandlerCatalogRpc.list` | 无 | 只读目录 |
+| `flow-dispatcher` | `DispatcherRpc.cancelTask` / `registerWorker` | `runId` 或 `workerId` | 取消用围栏；心跳可重复登记 |
 
 ## RPC 错误/退避
 - `AUTH_DENIED`/`IDENTITY_INVALID`/`SCHEMA_INCOMPATIBLE`：安全或契约错误，不绕过、不当成瞬时网络错误重试。
