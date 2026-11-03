@@ -30,6 +30,7 @@ import com.peachsoft.otryx.flow.contracts.v1.DispatchLogBatchCommand;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchLogBatchReply;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchLogEntry;
 import com.peachsoft.otryx.flow.contracts.v1.DispatcherRpc;
+import com.peachsoft.otryx.flow.contracts.v1.WorkerRegistrationCommand;
 
 /**
  * 提供有界任务领取、固定 Handler Allowlist、租约续期、超时与协作取消的纯 Java Worker SDK。
@@ -128,6 +129,7 @@ public final class WorkerRuntime implements AutoCloseable {
     /** 执行单次有界领取轮次；正常运行由独立控制线程周期调用。 */
     public void pollOnce() {
         if (!accepting.get()) return;
+        announce();
         for (Map.Entry<String, WorkerHandler> binding : handlers.entrySet()) {
             int n = Math.min(capacity.availablePermits(), settings.maxConcurrent());
             if (n == 0 || !accepting.get()) return;
@@ -319,6 +321,17 @@ public final class WorkerRuntime implements AutoCloseable {
                     task.lease.leaseEpoch(),
                     outcome,
                     uncertain.getClass().getSimpleName());
+        }
+    }
+
+    private void announce() {
+        try {
+            int occupied = settings.maxConcurrent() - capacity.availablePermits();
+            if (occupied < 0) occupied = 0;
+            dispatcher.registerWorker(new WorkerRegistrationCommand(settings.workerId(), settings.maxConcurrent(),
+                    Math.min(occupied, settings.maxConcurrent()), String.join(",", handlers.keySet())));
+        } catch (RuntimeException ignored) {
+            LOGGER.warn("Worker registration was not acknowledged: workerId={}", settings.workerId());
         }
     }
 

@@ -23,6 +23,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * 每个 DAG NodeRun 独立可靠入队。复用 M2 Dispatcher 的稳定 runId 语义，
  * 以 nodeRunId 作为入队键；父 WorkflowRun 使用独立 DAG Run ID。
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/03 14:40
  */
 @Component
 public class DagDispatchRelay {
@@ -80,7 +84,7 @@ public class DagDispatchRelay {
                         claim.nodeRunId(), claim.eventId(), payload.owner(), payload.project(),
                         payload.workflowRunId(), payload.workflowId(), payload.workflowRevision(),
                         payload.handler(), payload.parameters(), payload.timeoutSeconds(),
-                        payload.maxAttempts()));
+                        payload.maxAttempts(), "DAG"));
                 if (result == null) throw new IllegalStateException("Null Dispatcher RPC result");
                 if ("CREATED".equals(result.code()) || "DUPLICATE".equals(result.code())) {
                     if (ack(claim)) delivered++;
@@ -89,6 +93,8 @@ public class DagDispatchRelay {
                     abandon(claim);
                 } else if ("CONFLICT".equals(result.code())) {
                     dead(claim, "NODE_DISPATCHER_CONFLICT");
+                } else if ("CAPACITY_WAIT".equals(result.code()) || "CAPACITY_REJECTED".equals(result.code())) {
+                    retry(claim, result.code());
                 } else {
                     retry(claim, "UNEXPECTED_DISPATCH_REPLY");
                 }
@@ -176,7 +182,8 @@ public class DagDispatchRelay {
     }
 
     private void retry(Claim claim, String problem) {
-        if (claim.attempts() >= MAX_ATTEMPTS) {
+        boolean capacity = problem != null && problem.contains("CAPACITY");
+        if (!capacity && claim.attempts() >= MAX_ATTEMPTS) {
             dead(claim, "DAG_RETRY_BUDGET_EXHAUSTED");
             return;
         }

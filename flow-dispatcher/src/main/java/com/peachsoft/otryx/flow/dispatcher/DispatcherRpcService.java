@@ -3,6 +3,7 @@ package com.peachsoft.otryx.flow.dispatcher;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchCompleteCommand;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchAttemptView;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchCancelCommand;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchCancelReply;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchEnqueueCommand;
@@ -22,8 +23,11 @@ import com.peachsoft.otryx.flow.contracts.v1.DispatchTaskView;
 import com.peachsoft.otryx.flow.contracts.v1.DispatcherRpc;
 import com.peachsoft.otryx.flow.contracts.v1.ProjectAdmissionCommand;
 import com.peachsoft.otryx.flow.contracts.v1.ProjectAdmissionView;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchTaskCancelCommand;
 import com.peachsoft.otryx.flow.contracts.v1.WorkerDrainCommand;
 import com.peachsoft.otryx.flow.contracts.v1.WorkerDrainView;
+import com.peachsoft.otryx.flow.contracts.v1.WorkerRegistrationCommand;
+import com.peachsoft.otryx.flow.contracts.v1.WorkerRegistrationView;
 import com.peachsoft.otryx.spring.annotation.OtryxRpcService;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -114,12 +118,12 @@ public class DispatcherRpcService implements DispatcherRpc {
                                 + "owner_username, project_id, schedule_id, job_id, job_revision, "
                                 + "handler_key, parameters_json, timeout_seconds, max_attempts, "
                                 + "attempts, status, lease_epoch, next_attempt_at, payload_fingerprint, "
-                                + "created_at, updated_at) "
-                                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,'READY',0,?,?,?,?)",
+                                + "created_at, updated_at, target_type) "
+                                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,'READY',0,?,?,?,?,?)",
                         task, command.runId(), command.eventId(), command.ownerUsername(), command.projectId(),
                         command.scheduleId(), command.jobId(), command.jobRevision(), command.handlerKey(),
                         command.parametersJson(), command.timeoutSeconds(), command.maxAttempts(),
-                        Timestamp.from(Instant.EPOCH), fingerprint, now, now);
+                        Timestamp.from(Instant.EPOCH), fingerprint, now, now, command.targetType());
                 return new DispatchEnqueueReply("CREATED", task, READY);
             });
         } catch (DuplicateKeyException duplicate) {
@@ -433,6 +437,25 @@ public class DispatcherRpcService implements DispatcherRpc {
         return new DispatchTaskListReply(tasks.toArray(DispatchTaskView[]::new));
     }
 
+    /** 按 Run 读取物理尝试。令牌留在数据库里。 */
+    @Override
+    public DispatchAttemptView[] listAttempts(String ownerUsername, String projectId, String runId) {
+        String owner = validateOwner(ownerUsername);
+        String project = validateUuid(projectId);
+        String run = validateUuid(runId);
+        return jdbc.query("SELECT a.task_id, a.lease_epoch, a.worker_id, a.status, a.started_at, a.finished_at "
+                        + "FROM flow_dispatch_attempt a JOIN flow_dispatch_task t ON t.id = a.task_id "
+                        + "WHERE t.owner_username = ? AND t.project_id = ? AND t.engine_run_id = ? "
+                        + "ORDER BY a.started_at, a.lease_epoch",
+                (rs, index) -> {
+                    Timestamp finished = rs.getTimestamp("finished_at");
+                    return new DispatchAttemptView(rs.getString("task_id"), rs.getLong("lease_epoch"),
+                            rs.getString("worker_id"), rs.getString("status"),
+                            rs.getTimestamp("started_at").toInstant().toString(),
+                            finished == null ? null : finished.toInstant().toString());
+                }, owner, project, run).toArray(DispatchAttemptView[]::new);
+    }
+
     /** 单次最多领取八个同 Handler 的任务；领取和更新租约均发生在短事务内。 */
     @Override
     public DispatchLeaseReply claim(DispatchLeaseCommand command) {
@@ -459,6 +482,7 @@ public class DispatcherRpcService implements DispatcherRpc {
                 return new DispatchLeaseReply(new DispatchLeaseView[0]);
             }
             // Keep production SQL unchanged; append a bound NodeRun criterion only for CI.
+            int scan = targetRunId == null ? Math.min(32, command.limit() * 4) : command.limit();
             String query = "SELECT * FROM flow_dispatch_task "
                     + "WHERE handler_key = ? AND attempts < max_attempts AND "
                     + "((status = 'READY' AND next_attempt_at <= ?) OR "
@@ -466,11 +490,12 @@ public class DispatcherRpcService implements DispatcherRpc {
                     + (targetRunId == null ? "" : "AND engine_run_id = ? ")
                     + "ORDER BY created_at, id LIMIT ? FOR UPDATE SKIP LOCKED";
             Object[] args = targetRunId == null
-                    ? new Object[]{handler, now, now, command.limit()}
-                    : new Object[]{handler, now, now, targetRunId, command.limit()};
+                    ? new Object[]{handler, now, now, scan}
+                    : new Object[]{handler, now, now, targetRunId, scan};
             List<TaskRow> rows = jdbc.query(query, (rs, index) -> readTask(rs), args);
             List<DispatchLeaseView> claims = new ArrayList<>(rows.size());
             for (TaskRow row : rows) {
+                if (claims.size() >= command.limit()) break;
                 if ("READY".equals(row.status())
                         && !AdmissionGate.liveInflightAllows(jdbc, row.project(), now)) {
                     continue;
@@ -528,6 +553,107 @@ public class DispatcherRpcService implements DispatcherRpc {
     @Override
     public WorkerDrainView[] activeDrains() {
         return AdmissionGate.activeDrains(jdbc, dbNow());
+    }
+
+    /** 普通任务和 DAG 共用的取消栅栏。终态不被后到的取消改写。 */
+    @Override
+    public DispatchCancelReply cancelTask(DispatchTaskCancelCommand command) {
+        if (command == null) throw new IllegalArgumentException("Invalid task cancellation");
+        validateOwner(command.ownerUsername());
+        validateUuid(command.projectId());
+        validateUuid(command.runId());
+        try {
+            return persistTaskCancel(command);
+        } catch (DuplicateKeyException raced) {
+            return persistTaskCancel(command);
+        }
+    }
+
+    private DispatchCancelReply persistTaskCancel(DispatchTaskCancelCommand command) {
+        return tx.execute(ignored -> {
+            Timestamp now = dbNow();
+            List<CancelRow> rows = jdbc.query(
+                    "SELECT id,owner_username,project_id,status FROM flow_dispatch_task "
+                            + "WHERE engine_run_id=? FOR UPDATE",
+                    (rs, index) -> new CancelRow(rs.getString(1), rs.getString(2), rs.getString(3),
+                            "", "", 0, rs.getString(4)), command.runId());
+            if (rows.isEmpty()) {
+                jdbc.update("INSERT INTO flow_dispatch_task (id,engine_run_id,event_id,"
+                                + "owner_username,project_id,schedule_id,job_id,job_revision,"
+                                + "handler_key,parameters_json,timeout_seconds,max_attempts,"
+                                + "attempts,status,lease_epoch,next_attempt_at,payload_fingerprint,"
+                                + "created_at,updated_at,target_type) VALUES (?,?,?,?,?,?,?,?,"
+                                + "'flow.cancelled','{}',1,1,0,'CANCELLED',0,?,?,?,?,'JOB')",
+                        UUID.randomUUID().toString(), command.runId(), UUID.randomUUID().toString(),
+                        command.ownerUsername(), command.projectId(), command.runId(), command.runId(), 1,
+                        Timestamp.from(Instant.EPOCH), cancelTaskFingerprint(command), now, now);
+                return new DispatchCancelReply(CANCELLED, CANCELLED);
+            }
+            CancelRow old = rows.getFirst();
+            if (!old.owner().equals(command.ownerUsername()) || !old.project().equals(command.projectId())) {
+                return new DispatchCancelReply("CONFLICT", null);
+            }
+            if (SUCCEEDED.equals(old.status()) || FAILED.equals(old.status())) {
+                return new DispatchCancelReply("TERMINAL", old.status());
+            }
+            if (!CANCELLED.equals(old.status())) {
+                jdbc.update("UPDATE flow_dispatch_task SET status='CANCELLED', lease_epoch=lease_epoch+1, "
+                                + "lease_token=NULL, worker_id=NULL, lease_until=NULL, updated_at=? "
+                                + "WHERE id=? AND status IN ('READY','LEASED')", now, old.id());
+                jdbc.update("UPDATE flow_dispatch_attempt SET status='CANCELLED', finished_at=? "
+                                + "WHERE task_id=? AND status='LEASED'", now, old.id());
+            }
+            return new DispatchCancelReply(CANCELLED, CANCELLED);
+        });
+    }
+
+    /** 记录 Worker 心跳。调用方必须已经通过身份校验。 */
+    @Override
+    public WorkerRegistrationView registerWorker(WorkerRegistrationCommand command) {
+        if (command == null || command.capacity() < 1 || command.capacity() > 64
+                || command.occupied() < 0 || command.occupied() > command.capacity()
+                || command.handlersCsv() == null || command.handlersCsv().length() > 1024) {
+            throw new IllegalArgumentException("Invalid worker registration");
+        }
+        String worker = validateWorker(command.workerId());
+        Timestamp now = dbNow();
+        int updated = jdbc.update("UPDATE flow_worker_registration SET heartbeat_at=?, capacity=?, "
+                        + "occupied=?, handlers_csv=?, updated_at=? WHERE worker_id=?",
+                now, command.capacity(), command.occupied(), command.handlersCsv(), now, worker);
+        if (updated == 0) {
+            jdbc.update("INSERT INTO flow_worker_registration (worker_id, heartbeat_at, capacity, occupied, "
+                            + "handlers_csv, updated_at) VALUES (?,?,?,?,?,?)",
+                    worker, now, command.capacity(), command.occupied(), command.handlersCsv(), now);
+        }
+        return toRegistration(worker, now, command.capacity(), command.occupied(), command.handlersCsv(), now);
+    }
+
+    /** 心跳超过 45 秒视为离线。Drain 只附加在真实心跳记录上。 */
+    @Override
+    public WorkerRegistrationView[] listWorkers() {
+        Timestamp now = dbNow();
+        List<WorkerRegistrationView> rows = jdbc.query("SELECT * FROM flow_worker_registration "
+                        + "ORDER BY worker_id LIMIT 100",
+                (rs, index) -> toRegistration(rs.getString("worker_id"), rs.getTimestamp("heartbeat_at"),
+                        rs.getInt("capacity"), rs.getInt("occupied"), rs.getString("handlers_csv"), now));
+        return rows.toArray(WorkerRegistrationView[]::new);
+    }
+
+    private WorkerRegistrationView toRegistration(String worker, Timestamp heartbeat, int capacity, int occupied,
+            String handlers, Timestamp now) {
+        boolean online = heartbeat != null && heartbeat.toInstant().isAfter(now.toInstant().minusSeconds(45));
+        return new WorkerRegistrationView(worker, heartbeat.toInstant().toString(), online ? "ONLINE" : "OFFLINE",
+                capacity, occupied, handlers, AdmissionGate.workerDraining(jdbc, worker, now));
+    }
+
+    private static String cancelTaskFingerprint(DispatchTaskCancelCommand command) {
+        String raw = String.join("\u0000", "cancel", command.runId(), command.ownerUsername(), command.projectId());
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(raw.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException unavailable) {
+            throw new IllegalStateException("SHA-256 unavailable", unavailable);
+        }
     }
 
     /** 心跳只允许合法且未过期的当前代际延长租约。 */
@@ -649,7 +775,11 @@ public class DispatcherRpcService implements DispatcherRpc {
         validateUuid(c.eventId());
         validateOwner(c.ownerUsername());
         validateUuid(c.projectId());
-        validateUuid(c.scheduleId());
+        if (!"JOB".equals(c.targetType()) && !"DAG".equals(c.targetType())) {
+            throw new IllegalArgumentException("Invalid dispatch target");
+        }
+        if (c.scheduleId() != null && !c.scheduleId().isBlank()) validateUuid(c.scheduleId());
+        else if (!"JOB".equals(c.targetType())) throw new IllegalArgumentException("Missing schedule identity");
         validateUuid(c.jobId());
         validateHandler(c.handlerKey());
         if (c.parametersJson() == null
@@ -668,7 +798,8 @@ public class DispatcherRpcService implements DispatcherRpc {
 
     private static String fingerprint(DispatchEnqueueCommand c) {
         String payload = String.join("\u0000", c.runId(), c.eventId(), c.ownerUsername(), c.projectId(),
-                c.scheduleId(), c.jobId(), String.valueOf(c.jobRevision()), c.handlerKey(),
+                c.scheduleId() == null ? "" : c.scheduleId(), c.jobId(), String.valueOf(c.jobRevision()),
+                c.handlerKey(),
                 c.parametersJson(), String.valueOf(c.timeoutSeconds()), String.valueOf(c.maxAttempts()));
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
@@ -710,7 +841,7 @@ public class DispatcherRpcService implements DispatcherRpc {
                 rs.getString("project_id"), rs.getString("handler_key"), rs.getString("status"),
                 rs.getInt("attempts"), rs.getInt("max_attempts"), rs.getLong("lease_epoch"),
                 leaseUntil == null ? null : leaseUntil.toInstant().toString(),
-                rs.getTimestamp("updated_at").toInstant().toString());
+                rs.getTimestamp("updated_at").toInstant().toString(), rs.getString("worker_id"));
     }
     private static TaskRow readTask(ResultSet rs) throws SQLException {
         return new TaskRow(rs.getString("id"), rs.getString("engine_run_id"), rs.getString("event_id"),

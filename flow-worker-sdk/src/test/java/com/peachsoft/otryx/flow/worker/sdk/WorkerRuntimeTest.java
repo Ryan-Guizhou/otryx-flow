@@ -250,6 +250,22 @@ class WorkerRuntimeTest {
         @Override public com.peachsoft.otryx.flow.contracts.v1.WorkerDrainView[] activeDrains() {
             throw new UnsupportedOperationException();
         }
+        @Override public com.peachsoft.otryx.flow.contracts.v1.DispatchCancelReply cancelTask(
+                com.peachsoft.otryx.flow.contracts.v1.DispatchTaskCancelCommand unused) {
+            return new com.peachsoft.otryx.flow.contracts.v1.DispatchCancelReply("CANCELLED", "CANCELLED");
+        }
+        @Override public com.peachsoft.otryx.flow.contracts.v1.WorkerRegistrationView registerWorker(
+                com.peachsoft.otryx.flow.contracts.v1.WorkerRegistrationCommand unused) {
+            return new com.peachsoft.otryx.flow.contracts.v1.WorkerRegistrationView(
+                    "worker", "2026-11-03T00:00:00Z", "ONLINE", 1, 0, "safe.echo", false);
+        }
+        @Override public com.peachsoft.otryx.flow.contracts.v1.WorkerRegistrationView[] listWorkers() {
+            return new com.peachsoft.otryx.flow.contracts.v1.WorkerRegistrationView[0];
+        }
+        @Override public com.peachsoft.otryx.flow.contracts.v1.DispatchAttemptView[] listAttempts(
+                String owner, String project, String runId) {
+            return new com.peachsoft.otryx.flow.contracts.v1.DispatchAttemptView[0];
+        }
         @Override public DispatchMutationReply complete(DispatchCompleteCommand request) {
             outcome.set(request.outcome());
             completionCount.incrementAndGet();

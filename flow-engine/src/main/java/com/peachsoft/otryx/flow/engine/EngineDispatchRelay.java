@@ -2,6 +2,7 @@ package com.peachsoft.otryx.flow.engine;
 
 import com.peachsoft.otryx.flow.contracts.v1.DispatchEnqueueCommand;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchEnqueueReply;
+import com.peachsoft.otryx.flow.contracts.v1.DispatchTaskCancelCommand;
 import com.peachsoft.otryx.flow.contracts.v1.DispatcherRpc;
 import com.peachsoft.otryx.flow.contracts.v1.JobRevisionView;
 import com.peachsoft.otryx.flow.contracts.v1.JobRpc;
@@ -25,6 +26,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * Engine Outbox：短事务领取，事务外 RPC 查询固定 JobRevision 并幂等发送到 Dispatcher。
  * <p>RPC 超时后同 runId 持久重投，直到确认 Dispatcher 已落库；不冒充 Worker 实际执行。</p>
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/03 14:40
  */
 @Component
 public class EngineDispatchRelay {
@@ -67,20 +72,34 @@ public class EngineDispatchRelay {
                     quarantine(claim, "RUN_SNAPSHOT_MISSING");
                     continue;
                 }
+                if ("CANCEL_REQUESTED".equals(run.status()) || "CANCELLED".equals(run.status())) {
+                    dispatcher.cancelTask(new DispatchTaskCancelCommand(run.owner(), run.project(), run.id()));
+                    ackCancelled(claim);
+                    continue;
+                }
                 JobRevisionView job = jobs.revision(run.owner(), run.project(), run.jobId(), run.jobRevision());
                 if (job == null) {
                     quarantine(claim, "PUBLISHED_REVISION_MISSING");
                     continue;
                 }
+                String parameters = overrideParameters(run.id(), job.parametersJson());
                 DispatchEnqueueReply result = dispatcher.enqueue(new DispatchEnqueueCommand(
                         run.id(), run.eventId(), run.owner(), run.project(), run.scheduleId(), run.jobId(),
-                        run.jobRevision(), job.handlerKey(), job.parametersJson(),
-                        job.timeoutSeconds(), job.maxAttempts()));
+                        run.jobRevision(), job.handlerKey(), parameters,
+                        job.timeoutSeconds(), job.maxAttempts(), "JOB"));
                 if (result == null) throw new IllegalStateException("Missing Dispatcher result");
                 if ("CREATED".equals(result.code()) || "DUPLICATE".equals(result.code())) {
                     if (ack(claim)) sent++;
                 } else if ("CONFLICT".equals(result.code())) {
-                    quarantine(claim, "DISPATCHER_CONFLICT");
+                    Run again = getRun(claim.runId());
+                    if (again != null && ("CANCEL_REQUESTED".equals(again.status())
+                            || "CANCELLED".equals(again.status()))) {
+                        ackCancelled(claim);
+                    } else {
+                        quarantine(claim, "DISPATCHER_CONFLICT");
+                    }
+                } else if ("CAPACITY_WAIT".equals(result.code()) || "CAPACITY_REJECTED".equals(result.code())) {
+                    retry(claim, result.code());
                 } else {
                     retry(claim, "DISPATCHER_UNKNOWN_REPLY");
                 }
@@ -134,7 +153,8 @@ public class EngineDispatchRelay {
                         "SELECT status FROM flow_workflow_run WHERE id = ?",
                         String.class, claimed.runId());
                 if (!("DISPATCHED".equals(persisted) || "SUCCEEDED".equals(persisted)
-                        || "FAILED".equals(persisted))) {
+                        || "FAILED".equals(persisted) || "CANCEL_REQUESTED".equals(persisted)
+                        || "CANCELLED".equals(persisted))) {
                     throw new IllegalStateException("Run disappeared during dispatch ACK");
                 }
             }
@@ -156,7 +176,9 @@ public class EngineDispatchRelay {
                         + "claim_token = NULL, lease_until = NULL, last_error = ? "
                         + "WHERE run_id = ? AND claim_token = ? AND delivery_state = 'IN_FLIGHT'",
                 reason, claim.runId(), claim.token());
-        if (updated == 1) LOGGER.error("Engine dispatch outbox quarantined: runId={}, reason={}", claim.runId(), reason);
+        if (updated == 1) {
+            LOGGER.error("Engine dispatch outbox quarantined: runId={}, reason={}", claim.runId(), reason);
+        }
     }
 
     private Run getRun(String id) {
@@ -175,13 +197,28 @@ public class EngineDispatchRelay {
         if (value == null) return "UNKNOWN";
         return value.length() > 120 ? value.substring(0, 120) : value;
     }
+    private boolean ackCancelled(Claimed claimed) {
+        Integer changed = jdbc.update("UPDATE flow_engine_dispatch_outbox SET delivery_state='DELIVERED', "
+                        + "claim_token=NULL, lease_until=NULL, last_error=NULL, delivered_at=CURRENT_TIMESTAMP(3) "
+                        + "WHERE run_id=? AND claim_token=? AND delivery_state='IN_FLIGHT'",
+                claimed.runId(), claimed.token());
+        return changed != null && changed == 1;
+    }
+
+    private String overrideParameters(String runId, String published) {
+        List<String> rows = jdbc.query("SELECT parameter_override FROM flow_workflow_run WHERE id=?",
+                (rs, index) -> rs.getString(1), runId);
+        if (rows.isEmpty() || rows.getFirst() == null || rows.getFirst().isBlank()) return published;
+        return rows.getFirst();
+    }
+
     private static Run mapRun(ResultSet rs) throws SQLException {
         return new Run(rs.getString("id"), rs.getString("event_id"), rs.getString("owner_username"),
                 rs.getString("project_id"), rs.getString("schedule_id"), rs.getString("job_id"),
-                rs.getInt("job_revision"));
+                rs.getInt("job_revision"), rs.getString("status"));
     }
     private record Pending(String runId, String eventId, int attempts) { }
     private record Claimed(String runId, String eventId, String token, int attempts) { }
     private record Run(String id, String eventId, String owner, String project, String scheduleId,
-                       String jobId, int jobRevision) { }
+                       String jobId, int jobRevision, String status) { }
 }

@@ -54,5 +54,21 @@ public interface DispatcherRpc {
     /** 列出尚未到期的 Worker 停领记录。 */
     @OtryxRpcIdempotent
     WorkerDrainView[] activeDrains();
+
+    /** 按 Run 取消物理任务，并在入队之前留下不可领取的占位。 */
+    @OtryxRpcIdempotent
+    DispatchCancelReply cancelTask(DispatchTaskCancelCommand command);
+
+    /** 刷新 Worker 心跳与 Handler 能力。停领状态不由本调用伪造。 */
+    @OtryxRpcIdempotent
+    WorkerRegistrationView registerWorker(WorkerRegistrationCommand command);
+
+    /** 列出心跳目录。过期心跳标记为 OFFLINE。 */
+    @OtryxRpcIdempotent
+    WorkerRegistrationView[] listWorkers();
+
+    /** 查询一条 Run 的物理尝试。只返回该用户项目内的记录。 */
+    @OtryxRpcIdempotent
+    DispatchAttemptView[] listAttempts(String ownerUsername, String projectId, String runId);
 }
 

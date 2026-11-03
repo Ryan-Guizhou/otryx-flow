@@ -25,6 +25,7 @@ final class AdmissionGate {
     static final int DEFAULT_MAX_QUEUED = 256;
     static final int DEFAULT_RETENTION_DAYS = 14;
     static final String CAPACITY_REJECTED = "CAPACITY_REJECTED";
+    static final String CAPACITY_WAIT = "CAPACITY_WAIT";
     private static final Pattern POLICY = Pattern.compile("ALLOW|FORBID|QUEUE");
     private static final Pattern WORKER = Pattern.compile("[a-zA-Z0-9_.-]{3,64}");
     private static final Pattern OWNER = Pattern.compile("[a-zA-Z0-9_.-]{1,64}");
@@ -39,13 +40,18 @@ final class AdmissionGate {
      * @return 拒绝码；允许入队时返回 null
      */
     static String rejectEnqueue(JdbcTemplate jdbc, DispatchEnqueueCommand command) {
+        jdbc.query("SELECT project_id FROM flow_project_admission WHERE project_id=? FOR UPDATE",
+                (rs, index) -> rs.getString(1), command.projectId());
         Limits limits = load(jdbc, command.projectId());
         int sameJob = count(jdbc, "SELECT COUNT(*) FROM flow_dispatch_task WHERE project_id=? "
-                + "AND job_id=? AND status IN ('READY','LEASED')", command.projectId(), command.jobId());
-        if ("FORBID".equals(limits.policy) && sameJob > 0) return CAPACITY_REJECTED;
+                + "AND job_id=? AND target_type='JOB' AND status IN ('READY','LEASED')",
+                command.projectId(), command.jobId());
+        if ("JOB".equals(command.targetType()) && "FORBID".equals(limits.policy) && sameJob > 0) {
+            return CAPACITY_WAIT;
+        }
         int active = count(jdbc, "SELECT COUNT(*) FROM flow_dispatch_task WHERE project_id=? "
                 + "AND status IN ('READY','LEASED')", command.projectId());
-        if ("ALLOW".equals(limits.policy) && active >= limits.maxInflight) return CAPACITY_REJECTED;
+        if ("ALLOW".equals(limits.policy) && active >= limits.maxInflight) return CAPACITY_WAIT;
         if (active >= limits.maxQueued) return CAPACITY_REJECTED;
         return null;
     }

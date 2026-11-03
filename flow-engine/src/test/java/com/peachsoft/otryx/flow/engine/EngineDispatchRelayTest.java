@@ -1,9 +1,14 @@
 package com.peachsoft.otryx.flow.engine;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.peachsoft.otryx.flow.contracts.v1.DispatchEnqueueCommand;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchEnqueueReply;
@@ -20,7 +25,13 @@ import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-/** 验证 Engine Outbox RPC 不持有 DB 事务、幂等重投、回滚和 Dispatcher 中断恢复。 */
+/**
+ * 验证 Engine Outbox RPC 不持有 DB 事务、幂等重投、回滚和 Dispatcher 中断恢复。
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/03 14:40
+ */
 class EngineDispatchRelayTest {
     private static final String PROJECT = "00000000-0000-4000-8000-000000000001";
     private static final String SCHEDULE = "00000000-0000-4000-8000-000000000002";
@@ -41,7 +52,8 @@ class EngineDispatchRelayTest {
         jdbc.execute("CREATE TABLE flow_workflow_run (id VARCHAR(36) PRIMARY KEY, event_id VARCHAR(36) UNIQUE, "
                 + "owner_username VARCHAR(64), project_id VARCHAR(36), schedule_id VARCHAR(36), "
                 + "schedule_revision INT, job_id VARCHAR(36), job_revision INT, planned_fire_at_utc TIMESTAMP(3), "
-                + "origin VARCHAR(16), status VARCHAR(24), created_at TIMESTAMP(3), updated_at TIMESTAMP(3))");
+                + "origin VARCHAR(16), status VARCHAR(24), parameter_override TEXT, "
+                + "created_at TIMESTAMP(3), updated_at TIMESTAMP(3))");
         jdbc.execute("CREATE TABLE flow_engine_dispatch_outbox (run_id VARCHAR(36) PRIMARY KEY, "
                 + "event_id VARCHAR(36) UNIQUE, delivery_state VARCHAR(16), claim_token VARCHAR(36), "
                 + "lease_until TIMESTAMP(3), attempts INT, next_attempt_at TIMESTAMP(3) "

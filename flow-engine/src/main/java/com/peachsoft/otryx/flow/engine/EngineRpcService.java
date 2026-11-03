@@ -27,6 +27,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * 独立 Engine RPC Provider：Inbox 与逻辑 Run 必须由同一数据库事务提交。
  * 同一 eventId 可任意重投，但内容不一致或逻辑火点重复且 ID 不同必须拒绝。
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/03 14:40
  */
 @OtryxRpcService(interfaceClass = EngineRpc.class, version = "1.0.0")
 public class EngineRpcService implements EngineRpc {
@@ -137,7 +141,8 @@ public class EngineRpcService implements EngineRpc {
                             : new EngineOutcomeReply("CONFLICT", null, null);
                 }
                 String status = runs.getFirst()[1];
-                if (!("WAITING_DISPATCH".equals(status) || "DISPATCHED".equals(status))) {
+                if (!("WAITING_DISPATCH".equals(status) || "DISPATCHED".equals(status)
+                        || "CANCEL_REQUESTED".equals(status))) {
                     return new EngineOutcomeReply("CONFLICT", null, null);
                 }
                 Timestamp now = Timestamp.from(Instant.now());
@@ -146,7 +151,7 @@ public class EngineRpcService implements EngineRpc {
                                 + "payload_fingerprint,accepted_at) VALUES (?,?,?,?,?,?,?,?)",
                         event, run, task, project, command.leaseEpoch(), command.outcome(), fingerprint, now);
                 int changed = jdbc.update("UPDATE flow_workflow_run SET status = ?, updated_at = ? "
-                                + "WHERE id = ? AND status IN ('WAITING_DISPATCH','DISPATCHED')",
+                                + "WHERE id = ? AND status IN ('WAITING_DISPATCH','DISPATCHED','CANCEL_REQUESTED')",
                         command.outcome(), now, run);
                 if (changed != 1) throw new IllegalStateException("Engine terminal outcome CAS lost");
                 return new EngineOutcomeReply("ACCEPTED", run, command.outcome());
@@ -186,10 +191,11 @@ public class EngineRpcService implements EngineRpc {
     }
 
     private static EngineRunView toView(ResultSet rs) throws SQLException {
+        Timestamp planned = rs.getTimestamp("planned_fire_at_utc");
         return new EngineRunView(rs.getString("id"), rs.getString("event_id"),
                 rs.getString("project_id"), rs.getString("schedule_id"),
                 rs.getInt("schedule_revision"), rs.getString("job_id"),
-                rs.getInt("job_revision"), rs.getTimestamp("planned_fire_at_utc").toInstant().toString(),
+                rs.getInt("job_revision"), planned == null ? "" : planned.toInstant().toString(),
                 rs.getString("origin"), rs.getString("status"),
                 rs.getTimestamp("created_at").toInstant().toString());
     }

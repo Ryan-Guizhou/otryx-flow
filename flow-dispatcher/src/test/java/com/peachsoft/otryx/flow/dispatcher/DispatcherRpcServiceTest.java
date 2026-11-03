@@ -58,7 +58,8 @@ class DispatcherRpcServiceTest {
                 + "handler_key VARCHAR(128), parameters_json TEXT, timeout_seconds INT, max_attempts INT, "
                 + "attempts INT, status VARCHAR(24), lease_epoch BIGINT, lease_token VARCHAR(36), "
                 + "worker_id VARCHAR(64), lease_until TIMESTAMP(3), next_attempt_at TIMESTAMP(3), "
-                + "payload_fingerprint CHAR(64), created_at TIMESTAMP(3), updated_at TIMESTAMP(3))");
+                + "payload_fingerprint CHAR(64), created_at TIMESTAMP(3), updated_at TIMESTAMP(3), "
+                + "target_type VARCHAR(16) DEFAULT 'LEGACY')");
         jdbc.execute("CREATE TABLE flow_dispatch_attempt (task_id VARCHAR(36), lease_epoch BIGINT, "
                 + "worker_id VARCHAR(64), lease_token VARCHAR(36), status VARCHAR(24), "
                 + "started_at TIMESTAMP(3), finished_at TIMESTAMP(3), PRIMARY KEY(task_id,lease_epoch))");
@@ -91,7 +92,7 @@ class DispatcherRpcServiceTest {
         assertEquals("DUPLICATE", second.code());
         assertEquals(first.taskId(), second.taskId());
         DispatchEnqueueCommand conflict = new DispatchEnqueueCommand(payload.runId(), payload.eventId(),
-                "admin", PROJECT, SCHEDULE, JOB, 1, "safe.other", "{}", 30, 2);
+                "admin", PROJECT, SCHEDULE, JOB, 1, "safe.other", "{}", 30, 2, "JOB");
         assertEquals("CONFLICT", service.enqueue(conflict).code());
         assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM flow_dispatch_task", Integer.class));
         assertEquals(1, service.list("admin", PROJECT).tasks().length);
@@ -181,7 +182,8 @@ class DispatcherRpcServiceTest {
     void rejectsOversizedParametersInvalidIdsAndUnboundedBatch() {
         DispatchEnqueueCommand c = event(2);
         assertThrows(IllegalArgumentException.class, () -> service.enqueue(new DispatchEnqueueCommand(
-                c.runId(), c.eventId(), "admin", PROJECT, SCHEDULE, JOB, 1, "safe.echo", "x".repeat(16385), 30, 2)));
+                c.runId(), c.eventId(), "admin", PROJECT, SCHEDULE, JOB, 1, "safe.echo", "x".repeat(16385), 30, 2,
+                "JOB")));
         assertThrows(IllegalArgumentException.class,
                 () -> service.claim(new DispatchLeaseCommand("worker-a", "safe.echo", 9)));
         assertThrows(IllegalArgumentException.class, () -> service.heartbeat(
@@ -371,7 +373,7 @@ class DispatcherRpcServiceTest {
     void allowPolicyRejectsASecondActiveTaskAndDrainStopsClaims() {
         service.putAdmission(new ProjectAdmissionCommand("admin", PROJECT, 1, 4, "ALLOW", 14));
         assertEquals("CREATED", service.enqueue(event(1)).code());
-        assertEquals("CAPACITY_REJECTED", service.enqueue(event(1)).code());
+        assertEquals("CAPACITY_WAIT", service.enqueue(event(1)).code());
         service.drainWorker(new WorkerDrainCommand("admin", "worker-drained", 60));
         assertEquals(0, service.claim(new DispatchLeaseCommand("worker-drained", "safe.echo", 1)).leases().length);
         assertEquals(1, service.claim(new DispatchLeaseCommand("worker-open", "safe.echo", 1)).leases().length);
@@ -381,7 +383,7 @@ class DispatcherRpcServiceTest {
     void forbidPolicyRejectsAnotherRunOfTheSameJob() {
         service.putAdmission(new ProjectAdmissionCommand("admin", PROJECT, 4, 8, "FORBID", 14));
         assertEquals("CREATED", service.enqueue(event(1)).code());
-        assertEquals("CAPACITY_REJECTED", service.enqueue(event(1)).code());
+        assertEquals("CAPACITY_WAIT", service.enqueue(event(1)).code());
     }
 
     @Test
@@ -407,6 +409,6 @@ class DispatcherRpcServiceTest {
 
     private static DispatchEnqueueCommand event(int max) {
         return new DispatchEnqueueCommand(UUID.randomUUID().toString(), UUID.randomUUID().toString(),
-                "admin", PROJECT, SCHEDULE, JOB, 1, "safe.echo", "{}", 30, max);
+                "admin", PROJECT, SCHEDULE, JOB, 1, "safe.echo", "{}", 30, max, "JOB");
     }
 }
