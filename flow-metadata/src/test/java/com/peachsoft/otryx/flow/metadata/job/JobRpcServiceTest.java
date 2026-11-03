@@ -1,6 +1,9 @@
 package com.peachsoft.otryx.flow.metadata.job;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.peachsoft.otryx.flow.contracts.v1.JobCreateDraftCommand;
@@ -13,7 +16,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 
-/** Job draft, publish, retry, fencing and authorization unit tests. */
+/**
+ * Job draft, publish, retry, fencing and authorization unit tests.
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/03 14:40
+ */
 class JobRpcServiceTest {
     private static final String PROJECT = "00000000-0000-4000-8000-000000000001";
     private JobRpcService service;
@@ -31,6 +40,7 @@ class JobRpcServiceTest {
                 + "name VARCHAR(100), handler_key VARCHAR(128), parameters_json TEXT, timeout_seconds INT, "
                 + "max_attempts INT, draft_version BIGINT, published_revision INT, "
                 + "last_published_draft_version BIGINT, created_at TIMESTAMP, updated_at TIMESTAMP, "
+                + "enabled BOOLEAN DEFAULT TRUE, archived BOOLEAN DEFAULT FALSE, "
                 + "UNIQUE(owner_username,create_request_key))");
         jdbc.execute("CREATE TABLE flow_job_revision (job_id VARCHAR(36), revision INT, "
                 + "publish_request_key VARCHAR(80), name VARCHAR(100), handler_key VARCHAR(128), "

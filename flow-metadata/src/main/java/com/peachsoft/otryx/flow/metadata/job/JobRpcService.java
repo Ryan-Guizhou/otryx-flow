@@ -28,7 +28,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** Persisted job drafts and immutable publication revisions with scoped ownership. */
+/**
+ * Persisted job drafts and immutable publication revisions with scoped ownership.
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/03 14:40
+ */
 @OtryxRpcService(interfaceClass = JobRpc.class, version = "1.0.0")
 public class JobRpcService implements JobRpc {
     private static final String OK = "OK";
@@ -60,10 +66,15 @@ public class JobRpcService implements JobRpc {
         String project = identifier(projectId);
         List<JobView> jobs = jdbc.query("SELECT j.* FROM flow_job_definition j "
                 + "JOIN flow_project p ON p.id = j.project_id "
-                + "WHERE p.owner_username = ? AND j.project_id = ? "
+                + "WHERE p.owner_username = ? AND j.project_id = ? AND j.archived = FALSE "
                 + "ORDER BY j.updated_at DESC, j.id DESC LIMIT ?",
                 (rs, row) -> readJob(rs), owner, project, MAX_LIST);
         return new JobListReply(jobs.toArray(JobView[]::new));
+    }
+
+    @Override
+    public JobView get(String ownerUsername, String projectId, String jobId) {
+        return getJob(owner(ownerUsername), identifier(projectId), identifier(jobId), false);
     }
 
     @Override
@@ -83,7 +94,8 @@ public class JobRpcService implements JobRpc {
                 jdbc.update("INSERT INTO flow_job_definition "
                                 + "(id, project_id, owner_username, create_request_key, create_fingerprint, "
                                 + "name, handler_key, parameters_json, timeout_seconds, max_attempts, "
-                                + "draft_version, published_revision, last_published_draft_version, created_at, updated_at) "
+                                + "draft_version, published_revision, last_published_draft_version, "
+                                + "created_at, updated_at) "
                                 + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 0, ?, ?)",
                         id, project, owner, key, digest, draft.name(), draft.handler(), draft.json(),
                         draft.timeoutSeconds(), draft.maxAttempts(), now, now);
@@ -181,6 +193,37 @@ public class JobRpcService implements JobRpc {
         return revisions.isEmpty() ? null : revisions.getFirst();
     }
 
+    @Override
+    public JobMutationReply archive(String ownerUsername, String projectId, String jobId, long expectedDraftVersion) {
+        return changeState(ownerUsername, projectId, jobId, expectedDraftVersion, false, true);
+    }
+
+    @Override
+    public JobMutationReply setEnabled(String ownerUsername, String projectId, String jobId, boolean enabled,
+            long expectedDraftVersion) {
+        return changeState(ownerUsername, projectId, jobId, expectedDraftVersion, enabled, false);
+    }
+
+    private JobMutationReply changeState(String ownerUsername, String projectId, String jobId,
+            long expectedDraftVersion, boolean enabled, boolean archive) {
+        String owner = owner(ownerUsername);
+        String project = identifier(projectId);
+        String id = identifier(jobId);
+        if (expectedDraftVersion < 1) throw new IllegalArgumentException("Invalid draft version");
+        return transaction.execute(ignored -> {
+            JobView current = getJob(owner, project, id, true);
+            if (current == null) return reply(NOT_FOUND, null, false);
+            if (current.draftVersion() != expectedDraftVersion) return reply(CONFLICT, current, false);
+            if (current.archived() && !archive) return reply(CONFLICT, current, false);
+            boolean nextEnabled = archive ? false : enabled;
+            boolean nextArchived = archive || current.archived();
+            jdbc.update("UPDATE flow_job_definition SET enabled=?, archived=?, draft_version=draft_version+1, "
+                            + "updated_at=? WHERE id=? AND draft_version=?",
+                    nextEnabled, nextArchived, Timestamp.from(Instant.now()), id, expectedDraftVersion);
+            return reply(OK, getJob(owner, project, id, false), false);
+        });
+    }
+
     private boolean ownsProject(String owner, String project) {
         Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM flow_project "
                 + "WHERE id = ? AND owner_username = ?", Integer.class, project, owner);
@@ -206,7 +249,8 @@ public class JobRpcService implements JobRpc {
                 rs.getInt("timeout_seconds"), rs.getInt("max_attempts"),
                 rs.getLong("draft_version"), rs.getInt("published_revision"),
                 rs.getLong("last_published_draft_version"),
-                rs.getTimestamp("updated_at").toInstant().toString());
+                rs.getTimestamp("updated_at").toInstant().toString(),
+                rs.getBoolean("enabled"), rs.getBoolean("archived"));
     }
 
     private Draft validate(String name, String handler, String json, int timeout, int maxAttempts) {
@@ -221,7 +265,9 @@ public class JobRpcService implements JobRpc {
         }
         try {
             JsonNode parsed = mapper.readTree(json);
-            if (parsed == null || !parsed.isObject()) throw new IllegalArgumentException("Parameters must be JSON object");
+            if (parsed == null || !parsed.isObject()) {
+                throw new IllegalArgumentException("Parameters must be a JSON object");
+            }
         } catch (com.fasterxml.jackson.core.JsonProcessingException invalid) {
             throw new IllegalArgumentException("Invalid JSON parameters");
         }
@@ -251,8 +297,9 @@ public class JobRpcService implements JobRpc {
 
     private static String fingerprint(String owner, String project, Draft draft) {
         try {
-            String payload = String.join(String.valueOf((char) 0), owner, project, draft.name(), draft.handler(),
-                    draft.json(), Integer.toString(draft.timeoutSeconds()), Integer.toString(draft.maxAttempts()));
+            String payload = String.join(String.valueOf((char) 0), owner, project, draft.name(),
+                    draft.handler(), draft.json(), Integer.toString(draft.timeoutSeconds()),
+                    Integer.toString(draft.maxAttempts()));
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                     .digest(payload.getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException unavailable) {

@@ -7,6 +7,9 @@ import com.peachsoft.otryx.flow.contracts.v1.JobDraftUpdateCommand;
 import com.peachsoft.otryx.flow.contracts.v1.JobMutationReply;
 import com.peachsoft.otryx.flow.contracts.v1.JobPublishCommand;
 import com.peachsoft.otryx.flow.contracts.v1.JobRpc;
+import com.peachsoft.otryx.flow.contracts.v1.JobView;
+import com.peachsoft.otryx.flow.contracts.v1.ProjectRpc;
+import com.peachsoft.otryx.flow.contracts.v1.ScheduleRpc;
 import com.peachsoft.otryx.spring.annotation.OtryxRpcReference;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -50,6 +53,10 @@ public class JobController {
     private static final String REQUEST_KEY_PATTERN = "[a-zA-Z0-9_-]{16,80}";
     @OtryxRpcReference(version = RPC_VERSION)
     private JobRpc jobs;
+    @OtryxRpcReference(version = RPC_VERSION)
+    private ProjectRpc projects;
+    @OtryxRpcReference(version = RPC_VERSION)
+    private ScheduleRpc schedules;
     @Autowired(required = false)
     private FlowAuditRecorder audit;
 
@@ -57,15 +64,27 @@ public class JobController {
     @GetMapping
     public ResponseEntity<?> list(Principal principal, @PathVariable String projectId) {
         if (!validId(projectId)) return invalidId();
+        if (!allowed(principal, projectId)) return notFound();
         return ResponseEntity.ok(Arrays.asList(jobs.list(principal.getName(), projectId).jobs()));
+    }
+
+    /** 查询一条任务。归档后仍可按标识读取，列表不再展示它。 */
+    @GetMapping("/{jobId}")
+    public ResponseEntity<?> get(Principal principal, @PathVariable String projectId, @PathVariable String jobId) {
+        if (!validId(projectId) || !validId(jobId)) return badRequest();
+        if (!allowed(principal, projectId)) return notFound();
+        JobView job = jobs.get(principal.getName(), projectId, jobId);
+        return job == null ? ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("code", "JOB_NOT_FOUND"))
+                : ResponseEntity.ok(job);
     }
 
     /** Create a draft with a durable request key. */
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','OPERATOR')")
     public ResponseEntity<?> create(Principal principal, @PathVariable String projectId,
             @RequestHeader("Idempotency-Key") String key, @Valid @RequestBody DraftBody body) {
         if (!validId(projectId) || !validKey(key) || !validJson(body.parametersJson())) return badRequest();
+        if (!allowed(principal, projectId)) return notFound();
         if (!HandlerPolicy.allowed(body.handlerKey(), body.parametersJson())) return rejectedHandler();
         JobMutationReply result = jobs.createDraft(new JobCreateDraftCommand(principal.getName(),
                 projectId, key, body.name(), body.handlerKey(), body.parametersJson(),
@@ -75,10 +94,11 @@ public class JobController {
 
     /** CAS-update a draft without changing previous published snapshots. */
     @PutMapping("/{jobId}/draft")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','OPERATOR')")
     public ResponseEntity<?> save(Principal principal, @PathVariable String projectId,
             @PathVariable String jobId, @Valid @RequestBody UpdateBody body) {
         if (!validId(projectId) || !validId(jobId) || !validJson(body.parametersJson())) return badRequest();
+        if (!allowed(principal, projectId)) return notFound();
         if (!HandlerPolicy.allowed(body.handlerKey(), body.parametersJson())) return rejectedHandler();
         JobMutationReply result = jobs.saveDraft(new JobDraftUpdateCommand(principal.getName(),
                 projectId, jobId, body.expectedDraftVersion(), body.name(), body.handlerKey(),
@@ -88,11 +108,12 @@ public class JobController {
 
     /** Publish a permanent revision once for each stable publication key. */
     @PostMapping("/{jobId}/publish")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','OPERATOR')")
     public ResponseEntity<?> publish(Principal principal, @PathVariable String projectId,
             @PathVariable String jobId, @RequestHeader("Idempotency-Key") String key,
             @Valid @RequestBody PublishBody body) {
         if (!validId(projectId) || !validId(jobId) || !validKey(key)) return badRequest();
+        if (!allowed(principal, projectId)) return notFound();
         return respond(principal.getName(), jobs.publish(new JobPublishCommand(principal.getName(), projectId,
                 jobId, body.expectedDraftVersion(), key)), HttpStatus.OK);
     }
@@ -104,6 +125,31 @@ public class JobController {
         if (!validId(projectId) || !validId(jobId) || revision <= 0) return badRequest();
         var snapshot = jobs.revision(principal.getName(), projectId, jobId, revision);
         return snapshot == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(snapshot);
+    }
+
+    /** 归档任务。历史执行仍保留。 */
+    @PostMapping("/{jobId}/archive")
+    @PreAuthorize("hasAnyRole('ADMIN','OPERATOR')")
+    public ResponseEntity<?> archive(Principal principal, @PathVariable String projectId,
+            @PathVariable String jobId, @Valid @RequestBody VersionBody body) {
+        if (!validId(projectId) || !validId(jobId)) return badRequest();
+        if (!allowed(principal, projectId)) return notFound();
+        if (schedules != null && Arrays.stream(schedules.list(principal.getName(), projectId).schedules())
+                .anyMatch(item -> jobId.equals(item.jobId()) && item.enabled())) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("code", "SCHEDULE_STILL_ACTIVE"));
+        }
+        return respond(principal.getName(), jobs.archive(principal.getName(), projectId, jobId,
+                body.expectedDraftVersion()), HttpStatus.OK);
+    }
+
+    /** 启用或停用任务定义。不停掉已经存在的 Run。 */
+    @PostMapping("/{jobId}/enabled")
+    @PreAuthorize("hasAnyRole('ADMIN','OPERATOR')")
+    public ResponseEntity<?> enabled(Principal principal, @PathVariable String projectId,
+            @PathVariable String jobId, @Valid @RequestBody EnabledBody body) {
+        if (!validId(projectId) || !validId(jobId)) return badRequest();
+        return respond(principal.getName(), jobs.setEnabled(principal.getName(), projectId, jobId,
+                body.enabled(), body.expectedDraftVersion()), HttpStatus.OK);
     }
 
     private ResponseEntity<?> respond(String actor, JobMutationReply result, HttpStatus createdStatus) {
@@ -141,6 +187,14 @@ public class JobController {
         catch (IllegalArgumentException invalid) { return false; }
     }
 
+    private boolean allowed(Principal principal, String projectId) {
+        return projects == null || projects.hasAccess(principal.getName(), projectId);
+    }
+
+    private static ResponseEntity<?> notFound() {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("code", "PROJECT_NOT_FOUND"));
+    }
+
     private static ResponseEntity<?> badRequest() {
         return ResponseEntity.badRequest().body(Map.of("code", "INVALID_JOB_REQUEST"));
     }
@@ -170,4 +224,8 @@ public class JobController {
 
     /** Version read at publish time; stale publication must return 409. */
     public record PublishBody(@Min(1) long expectedDraftVersion) { }
+    /** 归档或启停时浏览器看到的草稿版本。 */
+    public record VersionBody(@Min(1) long expectedDraftVersion) { }
+    /** 停用后新的手动执行会被拒绝。 */
+    public record EnabledBody(boolean enabled, @Min(1) long expectedDraftVersion) { }
 }

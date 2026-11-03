@@ -3,6 +3,8 @@ package com.peachsoft.otryx.flow.worker.quickstart;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Objects;
 import io.micrometer.core.instrument.FunctionCounter;
 import io.micrometer.core.instrument.Gauge;
@@ -38,6 +40,8 @@ public final class QuickstartWorkerLauncher {
     private static final String HANDLER_SAFE_ECHO = "safe.echo";
     private static final String HANDLER_SAFE_FAIL = "safe.fail";
     private static final String HANDLER_SAFE_DELAY = "safe.delay";
+    private static final String HANDLER_SAFE_SUMMARIZE = "safe.summarize";
+    private static final ObjectMapper JSON = new ObjectMapper();
     private static final int DELAY_HANDLER_TICKS = 12;
     private static final long DELAY_HANDLER_TICK_MILLIS = 1_000L;
     private static final String LOG_LEVEL_INFO = "INFO";
@@ -108,6 +112,24 @@ public final class QuickstartWorkerLauncher {
                                     "safe.fail handler will fail",
                                     Map.of("errorType", IllegalStateException.class.getSimpleName()));
                             throw new IllegalStateException("intentional test failure");
+                        },
+                        HANDLER_SAFE_SUMMARIZE,
+                        (parameters, context) -> {
+                            context.checkCancelled();
+                            JsonNode root = JSON.readTree(parameters);
+                            JsonNode values = root.get("values");
+                            long sum = 0;
+                            int count = 0;
+                            if (values != null && values.isArray()) {
+                                for (JsonNode item : values) {
+                                    if (item.isNumber()) {
+                                        sum += item.longValue();
+                                        count++;
+                                    }
+                                }
+                            }
+                            context.log(LOG_LEVEL_INFO, "summarize.sum=" + sum,
+                                    Map.of("count", Integer.toString(count), "sum", Long.toString(sum)));
                         }));
         if (e2eDelayHandlerEnabled) {
             // 仅供隔离 CI 验收；固定 12 秒且每秒响应协作取消，不解析业务参数。

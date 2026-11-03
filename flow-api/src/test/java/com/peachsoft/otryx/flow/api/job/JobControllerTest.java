@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import com.peachsoft.otryx.flow.contracts.v1.JobMutationReply;
 import com.peachsoft.otryx.flow.contracts.v1.JobRpc;
 import com.peachsoft.otryx.flow.contracts.v1.JobView;
+import com.peachsoft.otryx.flow.contracts.v1.ProjectRpc;
 import java.security.Principal;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,13 +27,18 @@ import org.springframework.test.util.ReflectionTestUtils;
 class JobControllerTest {
     private final JobController controller = new JobController();
     private final JobRpc rpc = mock(JobRpc.class);
+    private final ProjectRpc projects = mock(ProjectRpc.class);
     private final Principal owner = () -> "admin";
     private final String project = UUID.randomUUID().toString();
     private final String job = UUID.randomUUID().toString();
     private final String key = UUID.randomUUID().toString();
 
     @BeforeEach
-    void prepare() { ReflectionTestUtils.setField(controller, "jobs", rpc); }
+    void prepare() {
+        ReflectionTestUtils.setField(controller, "jobs", rpc);
+        ReflectionTestUtils.setField(controller, "projects", projects);
+        when(projects.hasAccess(any(), any())).thenReturn(true);
+    }
 
     @Test
     void createAndReplayStatuses() {
@@ -74,6 +80,6 @@ class JobControllerTest {
 
     private JobMutationReply reply(String code, boolean duplicate) {
         return new JobMutationReply(code, new JobView(job, project, "Task", "safe.echo", "{}",
-                20, 2, 1, 0, 0, "2026-10-26T00:00:00Z"), duplicate);
+                20, 2, 1, 0, 0, "2026-10-26T00:00:00Z", true, false), duplicate);
     }
 }

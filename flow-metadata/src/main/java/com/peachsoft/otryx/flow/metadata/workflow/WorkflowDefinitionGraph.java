@@ -21,13 +21,18 @@ import java.util.regex.Pattern;
  * 工作流 JSON Schema v1 的强制校验和确定性规范化。
  *
  * <p>仅允许可信 Java Handler 和有界字段比较条件；严禁脚本、反射和 SQL。
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/03 14:40
  */
 public final class WorkflowDefinitionGraph {
     public static final int MAX_GRAPH_BYTES = 48 * 1024;
     private static final int MAX_NODE_PARAMS_BYTES = 16 * 1024;
     private static final int MAX_CONDITION_DEPTH = 6;
     private static final int MAX_LIST_VALUES = 20;
-    private static final Set<String> TRUSTED_HANDLERS = Set.of("safe.echo", "safe.fail");
+    private static final java.util.regex.Pattern TRUSTED_HANDLERS =
+            java.util.regex.Pattern.compile("safe\\.[a-z][a-z0-9_.-]{0,120}");
     private static final Set<String> TOP_FIELDS = Set.of("schemaVersion", "nodes", "edges");
     private static final Set<String> TASK_FIELDS = Set.of("id", "type", "label", "handlerKey",
             "parameters", "timeoutSeconds", "maxAttempts");
@@ -84,7 +89,7 @@ public final class WorkflowDefinitionGraph {
             if (node.has("label")) text(node.get("label"), 100);
             if (type.equals("TASK")) {
                 String handler = text(node.get("handlerKey"), 128);
-                if (!TRUSTED_HANDLERS.contains(handler)) {
+                if (handler == null || !TRUSTED_HANDLERS.matcher(handler).matches()) {
                     throw new IllegalArgumentException("Handler is not registered in the trusted allowlist");
                 }
                 JsonNode params = node.get("parameters");
