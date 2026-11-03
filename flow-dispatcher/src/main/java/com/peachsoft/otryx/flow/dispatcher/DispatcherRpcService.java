@@ -20,6 +20,10 @@ import com.peachsoft.otryx.flow.contracts.v1.DispatchLogView;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchTaskListReply;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchTaskView;
 import com.peachsoft.otryx.flow.contracts.v1.DispatcherRpc;
+import com.peachsoft.otryx.flow.contracts.v1.ProjectAdmissionCommand;
+import com.peachsoft.otryx.flow.contracts.v1.ProjectAdmissionView;
+import com.peachsoft.otryx.flow.contracts.v1.WorkerDrainCommand;
+import com.peachsoft.otryx.flow.contracts.v1.WorkerDrainView;
 import com.peachsoft.otryx.spring.annotation.OtryxRpcService;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -45,7 +49,12 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Dispatcher 队列与租约协议：独立数据库、持久化尝试、leaseEpoch/leaseToken 双重 fencing。
- * <p>Worker SDK 在下一阶段提供自动执行，当前仅提供受限领取与完成 RPC 契约。</p>
+ *
+ * <p>入队和领取受项目配额与 Worker 停领窗口约束。外部副作用是否已发生不由本服务撤销。</p>
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/03 11:20
  */
 @OtryxRpcService(interfaceClass = DispatcherRpc.class, version = "1.0.0")
 public class DispatcherRpcService implements DispatcherRpc {
@@ -63,8 +72,10 @@ public class DispatcherRpcService implements DispatcherRpc {
     private static final int MAX_LOG_FIELDS = 16;
     private static final int MAX_LOG_FIELD_VALUE_BYTES = 80;
     private static final int MAX_LOG_FIELDS_BYTES = 4096;
-    private static final Pattern SENSITIVE_FIELD = Pattern.compile("(?i).*(password|token|secret|authorization|cookie|credential|api[_-]?key).*");
-    private static final Pattern SENSITIVE_ASSIGNMENT = Pattern.compile("(?i)(password|token|secret|authorization|cookie|credential|api[_-]?key)(\\s*[:=]\\s*)([^\\s,;]+)");
+    private static final Pattern SENSITIVE_FIELD = Pattern.compile(
+            "(?i).*(password|token|secret|authorization|cookie|credential|api[_-]?key).*");
+    private static final Pattern SENSITIVE_ASSIGNMENT = Pattern.compile(
+            "(?i)(password|token|secret|authorization|cookie|credential|api[_-]?key)(\\s*[:=]\\s*)([^\\s,;]+)");
     private static final Pattern BEARER = Pattern.compile("(?i)Bearer\\s+[A-Za-z0-9._~+/=-]+");
     private static final long LEASE_SECONDS = 30;
     private static final String READY = "READY";
@@ -95,6 +106,8 @@ public class DispatcherRpcService implements DispatcherRpc {
         if (prior != null) return prior;
         try {
             return tx.execute(ignored -> {
+                String rejected = AdmissionGate.rejectEnqueue(jdbc, command);
+                if (rejected != null) return new DispatchEnqueueReply(rejected, null, null);
                 String task = UUID.randomUUID().toString();
                 Timestamp now = Timestamp.from(Instant.now());
                 jdbc.update("INSERT INTO flow_dispatch_task (id, engine_run_id, event_id, "
@@ -442,6 +455,9 @@ public class DispatcherRpcService implements DispatcherRpc {
         String handler = validateHandler(command.handlerKey());
         DispatchLeaseReply reply = tx.execute(ignored -> {
             Timestamp now = dbNow();
+            if (AdmissionGate.workerDraining(jdbc, worker, now)) {
+                return new DispatchLeaseReply(new DispatchLeaseView[0]);
+            }
             // Keep production SQL unchanged; append a bound NodeRun criterion only for CI.
             String query = "SELECT * FROM flow_dispatch_task "
                     + "WHERE handler_key = ? AND attempts < max_attempts AND "
@@ -455,6 +471,10 @@ public class DispatcherRpcService implements DispatcherRpc {
             List<TaskRow> rows = jdbc.query(query, (rs, index) -> readTask(rs), args);
             List<DispatchLeaseView> claims = new ArrayList<>(rows.size());
             for (TaskRow row : rows) {
+                if ("READY".equals(row.status())
+                        && !AdmissionGate.liveInflightAllows(jdbc, row.project(), now)) {
+                    continue;
+                }
                 if (LEASED.equals(row.status())) {
                     jdbc.update("UPDATE flow_dispatch_attempt SET status = 'EXPIRED', finished_at = ? "
                                     + "WHERE task_id = ? AND lease_epoch = ? AND status = 'LEASED'",
@@ -479,6 +499,35 @@ public class DispatcherRpcService implements DispatcherRpc {
             return new DispatchLeaseReply(claims.toArray(DispatchLeaseView[]::new));
         });
         return reply == null ? new DispatchLeaseReply(new DispatchLeaseView[0]) : reply;
+    }
+
+    /** 读取项目配额。项目标识不合法时拒绝，不返回其他项目的配置。 */
+    @Override
+    public ProjectAdmissionView getAdmission(String ownerUsername, String projectId) {
+        return AdmissionGate.get(jdbc, validateOwner(ownerUsername), validateUuid(projectId));
+    }
+
+    /** 保存项目配额。非法范围在写入前拒绝。 */
+    @Override
+    public ProjectAdmissionView putAdmission(ProjectAdmissionCommand command) {
+        if (command == null) throw new IllegalArgumentException("Invalid project admission");
+        validateOwner(command.ownerUsername());
+        validateUuid(command.projectId());
+        return tx.execute(ignored -> AdmissionGate.put(jdbc, command, dbNow()));
+    }
+
+    /** 记录 Worker 停领窗口。已经领走的任务继续由原租约 fencing 保护。 */
+    @Override
+    public WorkerDrainView drainWorker(WorkerDrainCommand command) {
+        if (command == null) throw new IllegalArgumentException("Invalid worker drain");
+        validateOwner(command.ownerUsername());
+        return tx.execute(ignored -> AdmissionGate.drain(jdbc, command, dbNow()));
+    }
+
+    /** 返回尚未到期的停领记录。 */
+    @Override
+    public WorkerDrainView[] activeDrains() {
+        return AdmissionGate.activeDrains(jdbc, dbNow());
     }
 
     /** 心跳只允许合法且未过期的当前代际延长租约。 */
@@ -603,12 +652,15 @@ public class DispatcherRpcService implements DispatcherRpc {
         validateUuid(c.scheduleId());
         validateUuid(c.jobId());
         validateHandler(c.handlerKey());
-        if (c.parametersJson() == null || c.parametersJson().getBytes(StandardCharsets.UTF_8).length > MAX_PARAMETERS_BYTES) {
+        if (c.parametersJson() == null
+                || c.parametersJson().getBytes(StandardCharsets.UTF_8).length > MAX_PARAMETERS_BYTES) {
             throw new IllegalArgumentException("Invalid dispatch parameters length");
         }
         try {
             JsonNode json = mapper.readTree(c.parametersJson());
-            if (json == null || !json.isObject()) throw new IllegalArgumentException("Expected JSON parameters object");
+            if (json == null || !json.isObject()) {
+                throw new IllegalArgumentException("Expected JSON parameters object");
+            }
         } catch (com.fasterxml.jackson.core.JsonProcessingException invalid) {
             throw new IllegalArgumentException("Malformed JSON parameters", invalid);
         }
@@ -631,11 +683,15 @@ public class DispatcherRpcService implements DispatcherRpc {
         return owner;
     }
     private static String validateWorker(String worker) {
-        if (worker == null || !WORKER.matcher(worker).matches()) throw new IllegalArgumentException("Invalid worker identifier");
+        if (worker == null || !WORKER.matcher(worker).matches()) {
+            throw new IllegalArgumentException("Invalid worker identifier");
+        }
         return worker;
     }
     private static String validateHandler(String handler) {
-        if (handler == null || !HANDLER.matcher(handler).matches()) throw new IllegalArgumentException("Invalid handler key");
+        if (handler == null || !HANDLER.matcher(handler).matches()) {
+            throw new IllegalArgumentException("Invalid handler key");
+        }
         return handler;
     }
     private static String validateUuid(String id) {

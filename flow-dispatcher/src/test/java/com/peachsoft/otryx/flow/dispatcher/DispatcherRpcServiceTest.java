@@ -1,6 +1,12 @@
 package com.peachsoft.otryx.flow.dispatcher;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchCompleteCommand;
@@ -10,8 +16,12 @@ import com.peachsoft.otryx.flow.contracts.v1.DispatchHeartbeatCommand;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchLogBatchCommand;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchLogEntry;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchLogPageView;
+import com.peachsoft.otryx.flow.contracts.v1.DispatcherRpc;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchLeaseCommand;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchLeaseView;
+import com.peachsoft.otryx.flow.contracts.v1.ProjectAdmissionCommand;
+import com.peachsoft.otryx.flow.contracts.v1.WorkerDrainCommand;
+import com.peachsoft.otryx.spring.annotation.OtryxRpcService;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -22,7 +32,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 
-/** Dispatcher 队列幂等、并发抢占、代际隔离、租约续期、失败重试及耗尽回收测试。 */
+/**
+ * Dispatcher 队列幂等、并发抢占、代际隔离、租约续期、失败重试及耗尽回收测试。
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/03 11:20
+ */
 class DispatcherRpcServiceTest {
     private static final String PROJECT = "00000000-0000-4000-8000-000000000001";
     private static final String SCHEDULE = "00000000-0000-4000-8000-000000000002";
@@ -51,6 +67,11 @@ class DispatcherRpcServiceTest {
                 + "lease_epoch BIGINT, sequence_no BIGINT, level VARCHAR(8), message VARCHAR(2048), "
                 + "fields_json VARCHAR(4096), created_at TIMESTAMP(3), UNIQUE(task_id,lease_epoch,sequence_no), "
                 + "FOREIGN KEY(task_id) REFERENCES flow_dispatch_task(id))");
+        jdbc.execute("CREATE TABLE flow_project_admission (project_id VARCHAR(36) PRIMARY KEY, "
+                + "owner_username VARCHAR(64), max_inflight INT, max_queued INT, "
+                + "concurrency_policy VARCHAR(16), retention_days INT, updated_at TIMESTAMP(3))");
+        jdbc.execute("CREATE TABLE flow_worker_drain (worker_id VARCHAR(64) PRIMARY KEY, "
+                + "drain_until TIMESTAMP(3), updated_at TIMESTAMP(3))");
         jdbc.execute("CREATE TABLE flow_dispatch_outcome_outbox (event_id VARCHAR(36) PRIMARY KEY, "
                 + "engine_run_id VARCHAR(36) UNIQUE, task_id VARCHAR(36), project_id VARCHAR(36), "
                 + "lease_epoch BIGINT, outcome VARCHAR(16), delivery_state VARCHAR(16), "
@@ -87,7 +108,8 @@ class DispatcherRpcServiceTest {
         assertEquals("OK", service.heartbeat(new DispatchHeartbeatCommand("worker-alpha", first.taskId(),
                 first.leaseEpoch(), first.leaseToken())).code());
         assertEquals(0, service.claim(new DispatchLeaseCommand("worker-bravo", "safe.echo", 1)).leases().length);
-        jdbc.update("UPDATE flow_dispatch_task SET lease_until = TIMESTAMP '2000-01-01 00:00:00' WHERE id = ?", first.taskId());
+        jdbc.update("UPDATE flow_dispatch_task SET lease_until = TIMESTAMP '2000-01-01 00:00:00' "
+                + "WHERE id = ?", first.taskId());
         DispatchLeaseView second = service.claim(new DispatchLeaseCommand("worker-bravo", "safe.echo", 1)).leases()[0];
         assertEquals(2L, second.leaseEpoch());
         assertEquals(2, second.attempt());
@@ -315,7 +337,8 @@ class DispatcherRpcServiceTest {
     void invalidLogBatchIsRejectedBeforeAnyRecordIsWritten() {
         DispatchEnqueueCommand command = event(2);
         service.enqueue(command);
-        DispatchLeaseView lease = service.claim(new DispatchLeaseCommand("worker-invalid-logs", "safe.echo", 1)).leases()[0];
+        DispatchLeaseView lease = service.claim(
+                new DispatchLeaseCommand("worker-invalid-logs", "safe.echo", 1)).leases()[0];
         java.util.Map<String, String> oversizedFields = new java.util.LinkedHashMap<>();
         for (int index = 0; index < 17; index++) oversizedFields.put("field" + index, "value");
         var batch = new DispatchLogBatchCommand("worker-invalid-logs", lease.taskId(),
@@ -326,6 +349,60 @@ class DispatcherRpcServiceTest {
         var reply = service.appendLogs(batch);
         assertEquals("INVALID", reply.code());
         assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM flow_dispatch_log", Integer.class));
+    }
+
+    @Test
+    void missingAdmissionUsesDefaultQuotaAndStillClaims() {
+        var marker = DispatcherRpcService.class.getAnnotation(OtryxRpcService.class);
+        assertNotNull(marker);
+        assertEquals("1.0.0", marker.version());
+        assertEquals(DispatcherRpc.class, marker.interfaceClass());
+        var created = service.enqueue(event(1));
+        assertEquals("CREATED", created.code());
+        var admission = service.getAdmission("admin", PROJECT);
+        assertEquals(AdmissionGate.DEFAULT_MAX_INFLIGHT, admission.maxInflight());
+        assertEquals("ALLOW", admission.concurrencyPolicy());
+        var leases = service.claim(new DispatchLeaseCommand("worker-legacy", "safe.echo", 1)).leases();
+        assertEquals(1, leases.length);
+        assertEquals(created.taskId(), leases[0].taskId());
+    }
+
+    @Test
+    void allowPolicyRejectsASecondActiveTaskAndDrainStopsClaims() {
+        service.putAdmission(new ProjectAdmissionCommand("admin", PROJECT, 1, 4, "ALLOW", 14));
+        assertEquals("CREATED", service.enqueue(event(1)).code());
+        assertEquals("CAPACITY_REJECTED", service.enqueue(event(1)).code());
+        service.drainWorker(new WorkerDrainCommand("admin", "worker-drained", 60));
+        assertEquals(0, service.claim(new DispatchLeaseCommand("worker-drained", "safe.echo", 1)).leases().length);
+        assertEquals(1, service.claim(new DispatchLeaseCommand("worker-open", "safe.echo", 1)).leases().length);
+    }
+
+    @Test
+    void forbidPolicyRejectsAnotherRunOfTheSameJob() {
+        service.putAdmission(new ProjectAdmissionCommand("admin", PROJECT, 4, 8, "FORBID", 14));
+        assertEquals("CREATED", service.enqueue(event(1)).code());
+        assertEquals("CAPACITY_REJECTED", service.enqueue(event(1)).code());
+    }
+
+    @Test
+    void terminalHistoryPurgeSkipsLiveAndUndeliveredTasks() {
+        var created = service.enqueue(event(1));
+        jdbc.update("UPDATE flow_dispatch_task SET status='SUCCEEDED', updated_at=TIMESTAMP '2000-01-01 00:00:00' "
+                + "WHERE id=?", created.taskId());
+        var live = service.enqueue(event(1));
+        var held = service.enqueue(event(1));
+        jdbc.update("UPDATE flow_dispatch_task SET status='SUCCEEDED', updated_at=TIMESTAMP '2000-01-01 00:00:00' "
+                + "WHERE id=?", held.taskId());
+        jdbc.update("INSERT INTO flow_dispatch_outcome_outbox (event_id, engine_run_id, task_id, delivery_state) "
+                + "VALUES (?,?,?,?)", UUID.randomUUID().toString(), UUID.randomUUID().toString(),
+                held.taskId(), "PENDING");
+        assertEquals(1, AdmissionGate.purgeTerminal(jdbc, java.time.Instant.parse("2026-11-03T00:00:00Z")));
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM flow_dispatch_task WHERE id=?", Integer.class, created.taskId()));
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM flow_dispatch_task WHERE id=?", Integer.class, live.taskId()));
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM flow_dispatch_task WHERE id=?", Integer.class, held.taskId()));
     }
 
     private static DispatchEnqueueCommand event(int max) {

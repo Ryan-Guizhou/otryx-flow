@@ -357,6 +357,36 @@ export interface DispatchLogPage {
   nextCursor: string | null
   limit: number
 }
+
+export interface ProjectAdmission {
+  ownerUsername: string
+  projectId: string
+  maxInflight: number
+  maxQueued: number
+  concurrencyPolicy: 'ALLOW' | 'FORBID' | 'QUEUE'
+  retentionDays: number
+}
+export interface WorkerDrain { workerId: string; drainUntil: string }
+export interface AuditEvent {
+  actor: string
+  action: string
+  projectId: string | null
+  outcome: string
+  createdAt: string
+}
+export function getAdmission(projectId: string): Promise<ProjectAdmission> {
+  return call('/api/v1/projects/' + encodeURIComponent(projectId) + '/admission')
+}
+export function saveAdmission(projectId: string, body: Omit<ProjectAdmission, 'ownerUsername' | 'projectId'>): Promise<ProjectAdmission> {
+  return call('/api/v1/projects/' + encodeURIComponent(projectId) + '/admission', {
+    method: 'PUT', body: JSON.stringify(body)
+  })
+}
+export function listDrains(): Promise<WorkerDrain[]> { return call('/api/v1/workers/drains') }
+export function drainWorker(workerId: string, drainSeconds: number): Promise<WorkerDrain> {
+  return call('/api/v1/workers/drains', { method: 'POST', body: JSON.stringify({ workerId, drainSeconds }) })
+}
+export function listAudit(): Promise<AuditEvent[]> { return call('/api/v1/audit') }
 export async function getDagRunLogs(projectId: string, runId: string,
   cursor?: string | null, limit = 100): Promise<DispatchLogPage> {
   const query = new URLSearchParams({ limit: String(limit) })

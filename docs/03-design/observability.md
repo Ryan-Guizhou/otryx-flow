@@ -47,11 +47,11 @@ docker compose -f compose.yaml -f compose.observability.yaml down
 - [x] 在真实 Compose 中验证 Prometheus 抓取、关键业务指标查询、规则加载与 Collector 收集 Trace。
 - [x] 为 OTRYX RPC Trace 增加单元测试，并在真实验收中检查跨服务 client/server Span 的 Trace ID、Parent Span ID 与 method ID 关系。
 - [x] 真实 RPC 成功调用的 logical-call/network-attempt 计数及低基数标签校验（PR #35 CI）。
-- [ ] 真实故障路径的 retry/timeout 计数语义仍需专项可重复触发证据。
+- [x] 真实故障路径的 retry/timeout 计数由隔离脚本 `scripts/test_rpc_timeout_fault.sh` 与 `scripts/test_rpc_retry_fault.sh` 覆盖；这不是 AT-12 的签字记录。
 - [x] HTTP/API 401、403 安全响应计数与敏感字段 Meter 标签边界。
 - [x] 数据库指标刷新错误状态与恢复单测；Collector 断连时 Worker Heartbeat、complete、Dispatcher/Engine 终态的真实 Compose 故障注入。
 - [x] Prometheus 数据库刷新故障与 Collector 不可用告警表达式及 promtool 触发/恢复测试。
-- [ ] Collector 在线但下游 exporter 失败的直接可观测信号及故障测试，尚不宣称验证所有出口故障。
+- [x] Collector 在线但下游 exporter 失败由 `scripts/test_collector_exporter_failure.sh` 覆盖；不宣称所有出口故障都已验证。
 - [ ] 生产 mTLS/Nacos TLS 与公开 HTTPS 仍由独立安全工作项负责。
 
 ## FLOW-021 后续验证：HTTP 安全、数据库刷新与遥测隔离

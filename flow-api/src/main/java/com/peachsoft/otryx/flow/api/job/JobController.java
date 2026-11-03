@@ -1,6 +1,7 @@
 package com.peachsoft.otryx.flow.api.job;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.peachsoft.otryx.flow.api.audit.FlowAuditRecorder;
 import com.peachsoft.otryx.flow.contracts.v1.JobCreateDraftCommand;
 import com.peachsoft.otryx.flow.contracts.v1.JobDraftUpdateCommand;
 import com.peachsoft.otryx.flow.contracts.v1.JobMutationReply;
@@ -18,6 +19,7 @@ import java.security.Principal;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -30,7 +32,15 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** REST facade for persisted job drafts and immutable revisions over OTRYX RPC. */
+/**
+ * 任务草稿与不可变版本的 REST 入口。
+ *
+ * <p>Handler 标识必须落在 safe. 白名单内。变更成功后写入审计；审计器缺失时单元测试仍可映射状态码。</p>
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/03 11:20
+ */
 @RestController
 @RequestMapping("/api/v1/projects/{projectId}/jobs")
 public class JobController {
@@ -40,6 +50,8 @@ public class JobController {
     private static final String REQUEST_KEY_PATTERN = "[a-zA-Z0-9_-]{16,80}";
     @OtryxRpcReference(version = RPC_VERSION)
     private JobRpc jobs;
+    @Autowired(required = false)
+    private FlowAuditRecorder audit;
 
     /** List owned jobs; missing projects do not reveal other owners' data. */
     @GetMapping
@@ -54,10 +66,11 @@ public class JobController {
     public ResponseEntity<?> create(Principal principal, @PathVariable String projectId,
             @RequestHeader("Idempotency-Key") String key, @Valid @RequestBody DraftBody body) {
         if (!validId(projectId) || !validKey(key) || !validJson(body.parametersJson())) return badRequest();
+        if (!HandlerPolicy.allowed(body.handlerKey(), body.parametersJson())) return rejectedHandler();
         JobMutationReply result = jobs.createDraft(new JobCreateDraftCommand(principal.getName(),
                 projectId, key, body.name(), body.handlerKey(), body.parametersJson(),
                 body.timeoutSeconds(), body.maxAttempts()));
-        return respond(result, result.duplicate() ? HttpStatus.OK : HttpStatus.CREATED);
+        return respond(principal.getName(), result, result.duplicate() ? HttpStatus.OK : HttpStatus.CREATED);
     }
 
     /** CAS-update a draft without changing previous published snapshots. */
@@ -66,10 +79,11 @@ public class JobController {
     public ResponseEntity<?> save(Principal principal, @PathVariable String projectId,
             @PathVariable String jobId, @Valid @RequestBody UpdateBody body) {
         if (!validId(projectId) || !validId(jobId) || !validJson(body.parametersJson())) return badRequest();
+        if (!HandlerPolicy.allowed(body.handlerKey(), body.parametersJson())) return rejectedHandler();
         JobMutationReply result = jobs.saveDraft(new JobDraftUpdateCommand(principal.getName(),
                 projectId, jobId, body.expectedDraftVersion(), body.name(), body.handlerKey(),
                 body.parametersJson(), body.timeoutSeconds(), body.maxAttempts()));
-        return respond(result, HttpStatus.OK);
+        return respond(principal.getName(), result, HttpStatus.OK);
     }
 
     /** Publish a permanent revision once for each stable publication key. */
@@ -79,7 +93,7 @@ public class JobController {
             @PathVariable String jobId, @RequestHeader("Idempotency-Key") String key,
             @Valid @RequestBody PublishBody body) {
         if (!validId(projectId) || !validId(jobId) || !validKey(key)) return badRequest();
-        return respond(jobs.publish(new JobPublishCommand(principal.getName(), projectId,
+        return respond(principal.getName(), jobs.publish(new JobPublishCommand(principal.getName(), projectId,
                 jobId, body.expectedDraftVersion(), key)), HttpStatus.OK);
     }
 
@@ -92,7 +106,10 @@ public class JobController {
         return snapshot == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(snapshot);
     }
 
-    private static ResponseEntity<?> respond(JobMutationReply result, HttpStatus createdStatus) {
+    private ResponseEntity<?> respond(String actor, JobMutationReply result, HttpStatus createdStatus) {
+        if ("OK".equals(result.code()) && audit != null && result.job() != null) {
+            audit.record(actor, "JOB_MUTATION", result.job().projectId(), result.code());
+        }
         return switch (result.code()) {
             case "OK" -> ResponseEntity.status(createdStatus).body(result.job());
             case "NOT_FOUND" -> ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -126,6 +143,10 @@ public class JobController {
 
     private static ResponseEntity<?> badRequest() {
         return ResponseEntity.badRequest().body(Map.of("code", "INVALID_JOB_REQUEST"));
+    }
+
+    private static ResponseEntity<?> rejectedHandler() {
+        return ResponseEntity.badRequest().body(Map.of("code", "HANDLER_REJECTED"));
     }
 
     private static ResponseEntity<?> invalidId() { return badRequest(); }

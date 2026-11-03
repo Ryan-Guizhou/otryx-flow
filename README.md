@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en-US.md)
 
-> **核心业务主链路已实现：** M1/M2 与 M3 FLOW-015/016/017/018/019 已合并。可用 [一键本地启动](docs/07-operations/quickstart.md) 拉起 UI、调度服务与示例 Worker。指标栈是可选组件；生产 mTLS、配额/背压、备份恢复和公网 HTTPS 仍需后续完善。
+> **核心业务主链路已实现：** M1/M2 与 M3 FLOW-015/016/017/018/019 已合并。FLOW-021 可观测与 FLOW-023 隔离 Compose 备份恢复已合并。可用 [一键本地启动](docs/07-operations/quickstart.md) 拉起 UI、调度服务与示例 Worker。项目配额、Handler 白名单和终态清理已进入代码；生产 mTLS、固定环境性能数字、公网 HTTPS 和发行 Tag 仍未完成。
 
 <!-- doc-section:overview -->
 ## 简介
@@ -56,9 +56,9 @@ M1 合并于 [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2)，M2 完
 
 FLOW-018 / [PR #26](https://github.com/Ryan-Guizhou/otryx-flow/pull/26) 已通过五项门禁与真实 Compose 验收并合并，提供 Vue Flow DAG 编辑、草稿 CAS、不可变发布版本和固定 Revision 运行入口。
 
-FLOW-019 / [Issue #27](https://github.com/Ryan-Guizhou/otryx-flow/issues/27) 已在 [PR #28](https://github.com/Ryan-Guizhou/otryx-flow/pull/28) 合并，交付 DAG Run 详情、Attempt 历史与有界脱敏日志。FLOW-021 / [Issue #30](https://github.com/Ryan-Guizhou/otryx-flow/issues/30) 的第一阶段在 PR #31 中交付 RPC Trace、核心业务指标和本地告警面板；RPC 指标语义、HTTP 安全事件计数与故障注入仍需补齐。FLOW-020 / [Issue #29](https://github.com/Ryan-Guizhou/otryx-flow/issues/29) 继续负责生产 RPC mTLS/Nacos TLS。
+FLOW-019 / [PR #28](https://github.com/Ryan-Guizhou/otryx-flow/pull/28) 已合并。FLOW-021 / [PR #35](https://github.com/Ryan-Guizhou/otryx-flow/pull/35) 与 FLOW-023 / [PR #37](https://github.com/Ryan-Guizhou/otryx-flow/pull/37) 已合并。Dispatcher 现按项目执行 ALLOW/FORBID/QUEUE、队列上限和 Worker 停领；终态且已投递的任务可按保留期删除。任务 Handler 仅接受 `safe.*`，并拒绝 URL 与进程执行字样。
 
-**边界：** 当前为 Nacos 3.2.4 的隔离开发环境；生产 mTLS/HTTPS、完整 Playwright 浏览器矩阵与外部副作用补偿仍是后续阶段。
+**边界：** 当前仍是 Nacos 3.2.4 的 `TRUSTED_DEVELOPMENT`。`NETWORK_MTLS` 会在启动时失败，因为上游 OTRYX RPC #179 尚未提供该能力。AT-11 到 AT-14、AT-16、AT-17 没有新的通过证据。没有打发行 Tag，也没有推送 GHCR。
 
 
 <!-- doc-section:contribute -->

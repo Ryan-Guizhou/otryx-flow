@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | [English](README.en-US.md)
 
-> **Core business path implemented:** M1/M2 and M3 FLOW-015/016/017/018/019 are merged. Use the [one-command local quickstart](docs/07-operations/quickstart.md) to run the UI, scheduler services, and demo Worker. Metrics are optional; production mTLS, quotas/backpressure, backup/restore, and public HTTPS remain future work.
+> **Core business path implemented:** M1/M2 and M3 FLOW-015/016/017/018/019 are merged. FLOW-021 observability and FLOW-023 isolated Compose backup/restore are merged. Use the [one-command local quickstart](docs/07-operations/quickstart.md) to run the UI, scheduler services, and demo Worker. Project quotas, the Handler allowlist, and terminal cleanup are in the code. Production mTLS, fixed-environment performance numbers, public HTTPS, and a release tag are not done.
 
 <!-- doc-section:overview -->
 ## Overview
@@ -56,9 +56,9 @@ M1 merged in [PR #2](https://github.com/Ryan-Guizhou/otryx-flow/pull/2), and the
 
 FLOW-018 / [PR #26](https://github.com/Ryan-Guizhou/otryx-flow/pull/26) passed all five gates and real Compose acceptance, delivering the Vue Flow DAG editor, draft CAS, immutable revisions, and pinned-version Run entry.
 
-FLOW-019 / [Issue #27](https://github.com/Ryan-Guizhou/otryx-flow/issues/27) merged in [PR #28](https://github.com/Ryan-Guizhou/otryx-flow/pull/28), delivering DAG Run details, Attempt history, and bounded redacted logs. FLOW-021 / [Issue #30](https://github.com/Ryan-Guizhou/otryx-flow/issues/30) receives its first observability slice in PR #31: RPC Trace, core business metrics, and local dashboards. RPC metric semantics, HTTP security-event counters, and failure-injection coverage remain follow-up work. FLOW-020 / [Issue #29](https://github.com/Ryan-Guizhou/otryx-flow/issues/29) tracks production RPC/Nacos TLS security.
+FLOW-019 merged in [PR #28](https://github.com/Ryan-Guizhou/otryx-flow/pull/28). FLOW-021 merged in [PR #35](https://github.com/Ryan-Guizhou/otryx-flow/pull/35) and FLOW-023 merged in [PR #37](https://github.com/Ryan-Guizhou/otryx-flow/pull/37). Dispatcher now enforces per-project ALLOW/FORBID/QUEUE, a queue cap, and worker drain. Terminal tasks with a delivered outcome can be deleted after the retention window. Job handlers must use the `safe.*` prefix, and URL or process-execution text in parameters is rejected.
 
-**Boundary:** the current environment is isolated development with Nacos 3.2.4. Production mTLS/HTTPS, the full Playwright browser matrix, and external side-effect compensation remain future work.
+**Boundary:** the runtime is still Nacos 3.2.4 with `TRUSTED_DEVELOPMENT`. Selecting `NETWORK_MTLS` fails at startup because OTRYX RPC #179 has not delivered that capability. AT-11 through AT-14, AT-16, and AT-17 have no new pass evidence. No release tag has been created and no GHCR image has been pushed.
 
 
 <!-- doc-section:contribute -->

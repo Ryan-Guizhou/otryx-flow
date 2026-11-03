@@ -1,0 +1,12 @@
+name: Image build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image without pushing
+        run: docker build -f deploy/Dockerfile.backend -t otryx-flow-backend:local .

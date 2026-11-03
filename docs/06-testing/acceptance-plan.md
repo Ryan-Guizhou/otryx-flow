@@ -1,6 +1,6 @@
 # OTRYX Flow 验收计划与需求追踪矩阵（Proposed）
 
-**状态：除已有明确证据的验收外均为 `NOT_RUN`；AT-15 在隔离 GitHub Actions Compose 环境通过（FLOW-023）。** 验收必须记录 Commit SHA、构建环境、测试命令、原始输出、截图/Trace/日志和审核人；不可凭 README 描述或绿色徽章替代实际业务证据。
+**状态：除已有明确证据的验收外均为 `NOT_RUN`；AT-15 在隔离 GitHub Actions Compose 环境通过（FLOW-023）。** 2026-11-03 增加的配额、停领、终态清理和 Handler 拒绝有单元测试，没有新的 AT 通过记录。验收必须记录 Commit SHA、构建环境、测试命令、原始输出、截图/Trace/日志和审核人。
 
 ## 进入验收前提
 测试硬件、系统时间同步、MySQL/Etcd/证书版本、Worker Handler 负载类型、OTRYX RPC 锁定 SHA、数据种子和初始迁移状态必须先记录。`Local` 用于开发快捷验证，`Staging` 用于真实网络安全和并发/故障验收。发布前禁止仍使用 `TRUSTED_DEVELOPMENT` 的公网业务进程。

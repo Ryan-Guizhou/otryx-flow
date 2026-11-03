@@ -235,6 +235,21 @@ class WorkerRuntimeTest {
             heartbeats.incrementAndGet();
             return new DispatchMutationReply(staleHeartbeat.get() ? "STALE" : "OK", "LEASED");
         }
+        @Override public com.peachsoft.otryx.flow.contracts.v1.ProjectAdmissionView getAdmission(
+                String owner, String project) {
+            throw new UnsupportedOperationException();
+        }
+        @Override public com.peachsoft.otryx.flow.contracts.v1.ProjectAdmissionView putAdmission(
+                com.peachsoft.otryx.flow.contracts.v1.ProjectAdmissionCommand unused) {
+            throw new UnsupportedOperationException();
+        }
+        @Override public com.peachsoft.otryx.flow.contracts.v1.WorkerDrainView drainWorker(
+                com.peachsoft.otryx.flow.contracts.v1.WorkerDrainCommand unused) {
+            throw new UnsupportedOperationException();
+        }
+        @Override public com.peachsoft.otryx.flow.contracts.v1.WorkerDrainView[] activeDrains() {
+            throw new UnsupportedOperationException();
+        }
         @Override public DispatchMutationReply complete(DispatchCompleteCommand request) {
             outcome.set(request.outcome());
             completionCount.incrementAndGet();

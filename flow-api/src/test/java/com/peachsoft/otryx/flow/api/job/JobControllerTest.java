@@ -2,7 +2,9 @@ package com.peachsoft.otryx.flow.api.job;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 import com.peachsoft.otryx.flow.contracts.v1.JobMutationReply;
 import com.peachsoft.otryx.flow.contracts.v1.JobRpc;
@@ -14,7 +16,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 
-/** Verify REST status boundaries for job mutations. */
+/**
+ * 校验任务 REST 状态边界与 Handler 拒绝。
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/03 11:20
+ */
 class JobControllerTest {
     private final JobController controller = new JobController();
     private final JobRpc rpc = mock(JobRpc.class);
@@ -32,6 +40,13 @@ class JobControllerTest {
         var body = new JobController.DraftBody("First task", "safe.echo", "{}", 20, 2);
         assertEquals(HttpStatus.CREATED, controller.create(owner, project, key, body).getStatusCode());
         assertEquals(HttpStatus.OK, controller.create(owner, project, key, body).getStatusCode());
+    }
+
+    @Test
+    void unsafeHandlerIsRejectedBeforeRpc() {
+        var body = new JobController.DraftBody("Shell", "shell.exec", "{}", 20, 2);
+        assertEquals(HttpStatus.BAD_REQUEST, controller.create(owner, project, key, body).getStatusCode());
+        verifyNoInteractions(rpc);
     }
 
     @Test

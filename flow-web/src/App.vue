@@ -5,10 +5,13 @@ import DispatchQueuePanel from './DispatchQueuePanel.vue'
 import SchedulePanel from './SchedulePanel.vue'
 import WorkflowEditor from './WorkflowEditor.vue'
 import DagRunPanel from './DagRunPanel.vue'
+import SettingsPanel from './SettingsPanel.vue'
+import WorkerPanel from './WorkerPanel.vue'
+import AuditPanel from './AuditPanel.vue'
 import type { Project, Job, SessionUser, ApiError, CronPreview } from './api'
 import { createProject, currentUser, listProjects, login, logout, refreshCsrf, listJobs, createJobDraft, publishJob, previewCron } from './api'
 
-type ViewKey = 'overview' | 'projects' | 'jobs' | 'workflows' | 'runs' | 'dag-runs' | 'queue' | 'workers'
+type ViewKey = 'overview' | 'projects' | 'jobs' | 'workflows' | 'runs' | 'dag-runs' | 'queue' | 'workers' | 'settings' | 'audit'
 const activeView = ref<ViewKey>('overview')
 const navigation: { id: ViewKey; label: string; icon: string; ready: boolean }[] = [
   { id: 'overview', label: 'Overview', icon: '▦', ready: true },
@@ -18,7 +21,9 @@ const navigation: { id: ViewKey; label: string; icon: string; ready: boolean }[]
   { id: 'runs', label: 'Executions', icon: '◷', ready: true },
   { id: 'dag-runs', label: 'Workflow runs', icon: '◇', ready: true },
   { id: 'queue', label: 'Dispatch queue', icon: '▣', ready: true },
-  { id: 'workers', label: 'Worker cluster', icon: '⬡', ready: false },
+  { id: 'workers', label: 'Workers', icon: '⬡', ready: true },
+  { id: 'settings', label: 'Limits', icon: '⚙', ready: true },
+  { id: 'audit', label: 'Audit', icon: '☰', ready: true },
 ]
 const user = ref<SessionUser | null>(null)
 const username = ref('admin')
@@ -233,6 +238,9 @@ function selectView(id: ViewKey) { activeView.value = id; error.value = ''; if (
         <template v-else-if="activeView === 'runs'"><RunPanel :projects="projects" /></template>
         <template v-else-if="activeView === 'dag-runs'"><DagRunPanel :projects="projects" :user-role="user.role" /></template>
         <template v-else-if="activeView === 'queue'"><DispatchQueuePanel :projects="projects" /></template>
+        <template v-else-if="activeView === 'workers'"><WorkerPanel :admin="user.role === 'ADMIN'" /></template>
+        <template v-else-if="activeView === 'settings'"><SettingsPanel :projects="projects" :admin="user.role === 'ADMIN'" /></template>
+        <template v-else-if="activeView === 'audit'"><AuditPanel /></template>
         <template v-else><div class="page-title-row"><div><div class="eyebrow">UPCOMING CAPABILITY</div><h1>{{ activeTitle }}</h1><p class="muted">This module is part of the approved project roadmap.</p></div><span class="label-outline">NOT YET IMPLEMENTED</span></div><div class="panel coming-panel"><div class="coming-glyph">◇</div><h2>Coming soon</h2><p>We don't display simulated task runs or invented cluster health data. This page will be activated after the real service and tests are shipped.</p><button class="btn btn-outline" @click="activeView = 'overview'">Back to overview</button></div></template>
       </div>
     </main>
@@ -240,7 +248,7 @@ function selectView(id: ViewKey) { activeView.value = id; error.value = ''; if (
       <div class="modal-top"><div class="eyebrow">NEW JOB DRAFT</div><button type="button" class="icon-btn" aria-label="Close" @click="showJobCreate = false">×</button></div>
       <h2>Create a job</h2><p class="muted">Definitions are stored via the OTRYX RPC metadata provider. This does not execute the Handler yet.</p>
       <label for="job-name">Name</label><input id="job-name" v-model="jobName" required maxlength="100" @input="jobPendingKey = null" />
-      <label for="job-handler">Handler key</label><input id="job-handler" v-model="jobHandler" required pattern="[a-z][a-z0-9_.-]{2,127}" @input="jobPendingKey = null" />
+      <label for="job-handler">Handler key</label><input id="job-handler" v-model="jobHandler" required pattern="safe\.[a-z][a-z0-9_.-]{0,120}" title="Use a safe.* handler key" @input="jobPendingKey = null" />
       <label for="job-input">JSON object parameters</label><textarea id="job-input" v-model="jobParameters" rows="3" maxlength="16384" @input="jobPendingKey = null" />
       <label for="job-timeout">Timeout (seconds)</label><input id="job-timeout" v-model.number="jobTimeout" type="number" min="1" max="86400" />
       <label for="job-attempts">Maximum attempts</label><input id="job-attempts" v-model.number="jobMaxAttempts" type="number" min="1" max="10" />

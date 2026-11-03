@@ -39,6 +39,6 @@ The report has a unique `reconcileId` and reads one MySQL consistent snapshot. I
 
 ## Retention and current limits
 
-Dispatcher execution logs are deleted in bounded batches of at most 10,000 rows after 14 days. Run, NodeRun, Attempt, definitions, Inbox, and Outbox records are retained. Per-project history retention and archival are not implemented; automatic deletion of execution state is intentionally absent until referential and in-progress-run guarantees are designed and tested.
+Dispatcher execution logs are still deleted in bounded batches after 14 days. `TerminalHistoryRetention` additionally deletes at most 100 terminal Dispatcher tasks per hour when they are older than the project retention window and their outcome outbox is delivered. READY and LEASED tasks are skipped. Engine runs, definitions, and undelivered outbox rows are not deleted by this job.
 
 This helper covers the single MySQL instance in the isolated Compose stack. It does not back up Nacos state, credentials, Docker images, or external Worker side effects, and it does not provide incremental/PITR recovery. Record backup time, restore duration, application SHA, migration state, and any manually resolved items when conducting a recovery exercise.

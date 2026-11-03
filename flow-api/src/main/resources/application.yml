@@ -19,6 +19,7 @@ flow:
   bootstrap:
     admin-username: ${FLOW_ADMIN_USERNAME:admin}
     admin-password: ${FLOW_ADMIN_PASSWORD:}
+    demo-guest-password: ${FLOW_DEMO_GUEST_PASSWORD:}
 management:
   server:
     port: ${FLOW_MANAGEMENT_PORT:9091}
