@@ -29,7 +29,13 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** 工作流定义 HTTP Facade，业务数据库读写只通过 OTRYX RPC。 */
+/**
+ * 工作流定义 HTTP Facade，业务数据库读写只通过 OTRYX RPC。
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/03 14:40
+ */
 @RestController
 @RequestMapping("/api/v1/projects/{projectId}/workflows")
 public class WorkflowController {
@@ -50,7 +56,7 @@ public class WorkflowController {
 
     /** 使用同一个幂等键重复提交相同内容最多生成一个草稿。 */
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','OPERATOR')")
     public ResponseEntity<?> create(Principal principal, @PathVariable String projectId,
             @RequestHeader("Idempotency-Key") String key, @Valid @RequestBody DraftBody body) {
         if (!validId(projectId) || !validKey(key) || !validGraphJson(body.graphJson())) return badRequest();
@@ -61,7 +67,7 @@ public class WorkflowController {
 
     /** 利用版本 CAS 保存草稿，禁止透明重试导致覆盖。 */
     @PutMapping("/{workflowId}/draft")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','OPERATOR')")
     public ResponseEntity<?> save(Principal principal, @PathVariable String projectId,
             @PathVariable String workflowId, @Valid @RequestBody UpdateBody body) {
         if (!validId(projectId) || !validId(workflowId)
@@ -73,7 +79,7 @@ public class WorkflowController {
 
     /** 发布有 SHA-256 的固定 DAG 快照，不触发任务执行。 */
     @PostMapping("/{workflowId}/publish")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','OPERATOR')")
     public ResponseEntity<?> publish(Principal principal, @PathVariable String projectId,
             @PathVariable String workflowId, @RequestHeader("Idempotency-Key") String key,
             @Valid @RequestBody PublishBody body) {

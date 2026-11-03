@@ -22,7 +22,13 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** 项目 HTTP 接口，通过 RPC 访问元数据服务。 */
+/**
+ * 项目 HTTP 接口，通过 RPC 访问元数据服务。
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/03 14:40
+ */
 @RestController
 @RequestMapping("/api/v1/projects")
 public class ProjectController {
@@ -38,7 +44,7 @@ public class ProjectController {
 
     /** 使用客户端提供的幂等键创建项目。 */
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','OPERATOR')")
     public ResponseEntity<?> create(Principal principal,
             @RequestHeader("Idempotency-Key") String key, @Valid @RequestBody NewProject body) {
         if (key == null || !key.matches("[a-zA-Z0-9_-]{16,80}")) {

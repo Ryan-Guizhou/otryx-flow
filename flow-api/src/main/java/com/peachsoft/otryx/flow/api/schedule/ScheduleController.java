@@ -28,7 +28,13 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** REST 鉴权门面：通过 OTRYX RPC 调用独立 Scheduler；业务调用不共享底层数据库。 */
+/**
+ * REST 鉴权门面：通过 OTRYX RPC 调用独立 Scheduler；业务调用不共享底层数据库。
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/03 14:40
+ */
 @RestController
 @RequestMapping("/api/v1/projects/{projectId}/schedules")
 public class ScheduleController {
@@ -48,7 +54,7 @@ public class ScheduleController {
 
     /** 校验已发布 JobRevision 后，幂等创建 Cron 计划。 */
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','OPERATOR')")
     public ResponseEntity<?> create(Principal user, @PathVariable String projectId,
             @RequestHeader("Idempotency-Key") String key, @Valid @RequestBody CreateBody body) {
         if (!validId(projectId) || !validId(body.jobId()) || key == null || !key.matches(KEY_PATTERN)) {
@@ -75,7 +81,7 @@ public class ScheduleController {
 
     /** CAS 启停；重新启用的下一计划从当前 UTC 计算而非盲目追赶。 */
     @PostMapping("/{scheduleId}/enabled")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','OPERATOR')")
     public ResponseEntity<?> toggle(Principal user, @PathVariable String projectId,
             @PathVariable String scheduleId, @Valid @RequestBody ToggleBody body) {
         if (!validId(projectId) || !validId(scheduleId)) return bad();

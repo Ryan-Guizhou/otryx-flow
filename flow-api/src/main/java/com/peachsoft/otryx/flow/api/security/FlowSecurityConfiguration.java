@@ -18,7 +18,9 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.logout.LogoutFilter;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
@@ -45,7 +47,8 @@ public class FlowSecurityConfiguration {
             HttpSecurity http,
             SecurityContextRepository contexts,
             @Value("${management.server.port:9091}") int managementPort,
-            @Value("${server.port:8080}") int serverPort) throws Exception {
+            @Value("${server.port:8080}") int serverPort,
+            JdbcTemplate jdbc) throws Exception {
         return http
                 .exceptionHandling(e -> e.authenticationEntryPoint(
                         new HttpStatusEntryPoint(org.springframework.http.HttpStatus.UNAUTHORIZED)))
@@ -57,7 +60,7 @@ public class FlowSecurityConfiguration {
                         .requestMatchers(internalPrometheusOnly(managementPort, serverPort)).permitAll()
                         .requestMatchers("/api/v1/auth/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/**").authenticated()
-                        .requestMatchers("/api/**").hasRole("ADMIN")
+                        .requestMatchers("/api/**").hasAnyRole("ADMIN", "OPERATOR")
                         .anyRequest().authenticated())
                 .csrf(c -> c.csrfTokenRepository(new CookieCsrfTokenRepository())
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
@@ -66,6 +69,7 @@ public class FlowSecurityConfiguration {
                 .formLogin(f -> f.disable())
                 .httpBasic(b -> b.disable())
                 .logout(l -> l.disable())
+                .addFilterAfter(new CredentialVersionFilter(jdbc), LogoutFilter.class)
                 .build();
     }
 

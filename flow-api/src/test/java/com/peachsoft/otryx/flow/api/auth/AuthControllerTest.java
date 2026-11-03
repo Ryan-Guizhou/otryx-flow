@@ -1,8 +1,15 @@
 package com.peachsoft.otryx.flow.api.auth;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -16,14 +23,24 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.mockito.ArgumentCaptor;
 
-/** 校验登录安全上下文显式持久化、会话轮换和拒绝错误凭据。 */
+/**
+ * 校验登录安全上下文显式持久化、会话轮换和拒绝错误凭据。
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/03 14:40
+ */
 class AuthControllerTest {
     private final AuthenticationManager manager = mock(AuthenticationManager.class);
     private final SecurityContextRepository repository = mock(SecurityContextRepository.class);
-    private final AuthController controller = new AuthController(manager, repository);
+    private final JdbcTemplate jdbc = mock(JdbcTemplate.class);
+    private final PasswordEncoder passwords = mock(PasswordEncoder.class);
+    private final AuthController controller = new AuthController(manager, repository, jdbc, passwords, 5, 900);
 
     @AfterEach
     void cleanup() {

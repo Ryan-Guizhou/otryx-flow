@@ -18,6 +18,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Cron/时区预览入口。采用本地纯计算核心，不访问 Registry 或将预览冒充真实调度。
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/03 14:40
  */
 @RestController
 @RequestMapping("/api/v1/schedules")
@@ -27,7 +31,7 @@ public class CronPreviewController {
 
     /** 计算严格晚于 fromUtc 的有限次 UTC 触发预览。 */
     @PostMapping("/preview")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','OPERATOR')")
     public ResponseEntity<?> preview(@Valid @RequestBody Request body) {
         try {
             Instant from = Instant.parse(body.fromUtc());

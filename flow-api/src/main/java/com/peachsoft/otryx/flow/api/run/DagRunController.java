@@ -33,7 +33,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/** 用户授权的 DAG Run 手动触发与节点级进度查询；不暴露 RPC 租约 Token。 */
+/**
+ * 用户授权的 DAG Run 手动触发与节点级进度查询；不暴露 RPC 租约 Token。
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/03 14:40
+ */
 @RestController
 @RequestMapping("/api/v1/projects/{projectId}/workflow-runs")
 public class DagRunController {
@@ -49,7 +55,7 @@ public class DagRunController {
 
     /** 手动触发固定工作流版本，而不是可变草稿。 */
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','OPERATOR')")
     public ResponseEntity<?> start(Principal principal, @PathVariable String projectId,
             @RequestHeader("Idempotency-Key") String requestKey,
             @Valid @RequestBody StartBody body) {
@@ -112,7 +118,7 @@ public class DagRunController {
 
     /** 取消之前客户端必须读取当前 runVersion；请求幂等键必须在重试时复用。 */
     @PostMapping("/{runId}/cancel")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','OPERATOR')")
     public ResponseEntity<?> cancel(Principal principal, @PathVariable String projectId,
             @PathVariable String runId, @RequestHeader("Idempotency-Key") String requestKey,
             @Valid @RequestBody ControlBody body) {
@@ -124,7 +130,7 @@ public class DagRunController {
 
     /** 只能对已收敛的 FAILED Run 生成新的逻辑 NodeRun；Worker 租约重试是另一层。 */
     @PostMapping("/{runId}/nodes/{nodeId}/retry")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','OPERATOR')")
     public ResponseEntity<?> retryNode(Principal principal, @PathVariable String projectId,
             @PathVariable String runId, @PathVariable String nodeId,
             @RequestHeader("Idempotency-Key") String requestKey,
