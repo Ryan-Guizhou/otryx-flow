@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, shallowRef, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { MarkerType, VueFlow, useVueFlow } from '@vue-flow/core'
 import type { Edge as FlowEdge, Node as FlowNode, Connection } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
@@ -32,6 +33,7 @@ import {
 } from './workflowGraph'
 
 const props = defineProps<{ projects: Project[]; userRole: string }>()
+const { t, locale } = useI18n()
 type ConditionOperator = 'equals' | 'notEquals' | 'exists' | 'in' | 'and' | 'or'
 interface CanvasData { payload: WorkflowNode }
 type CanvasNode = FlowNode<CanvasData> & { data: CanvasData }
@@ -83,7 +85,9 @@ const conflictRemote = ref<WorkflowDefinition | null>(null)
 const conflictNotice = ref('')
 const rebaseArmed = ref(false)
 const errorMessage = ref('')
+const errorParams = ref<Record<string, string | number>>({})
 const statusMessage = ref('')
+const statusParams = ref<Record<string, string | number>>({})
 
 const selectedProject = computed(() => props.projects.find(project => project.id === selectedProjectId.value) ?? null)
 const selectedWorkflow = computed(() => workflows.value.find(workflow => workflow.id === selectedWorkflowId.value) ?? null)
@@ -129,8 +133,8 @@ function prettyJson(value: string): string {
 
 function canvasLabel(node: WorkflowNode): string {
   const raw = node as unknown as Record<string, unknown>
-  const type = raw?.type === 'CONDITION' ? '◇ Condition' : '▣ Task'
-  const id = typeof raw?.id === 'string' ? raw.id : 'invalid node'
+  const type = raw?.type === 'CONDITION' ? '◇ ' + t('workflow.nodeCondition') : '▣ ' + t('workflow.nodeTask')
+  const id = typeof raw?.id === 'string' ? raw.id : t('workflow.invalidNode')
   const label = typeof raw?.label === 'string' && raw.label.trim() ? ' — ' + raw.label.trim() : ''
   return type + ' · ' + id + label
 }
@@ -239,7 +243,7 @@ function loadGraphJson(json: string, scope: string): void {
   } catch (problem) {
     canvasNodes.value = []
     canvasEdges.value = []
-    errorMessage.value = 'Unable to read this draft graph: ' + (problem instanceof Error ? problem.message : 'invalid JSON')
+    setError('workflow.unreadable')
   }
 }
 
@@ -299,23 +303,32 @@ async function loadWorkflowList(projectId: string, resetSelection: boolean): Pro
       loadGraphJson(latest.graphJson, 'draft')
     }
   } catch (problem) {
-    errorMessage.value = messageForError(problem)
+    setError(messageForError(problem))
   } finally { loadingList.value = false }
 }
 
 function messageForError(problem: unknown): string {
   const error = apiError(problem)
-  if (error.status === 401) return 'Your session expired. Sign in again to continue.'
-  if (error.status === 403) return 'This action is not permitted for your role.'
-  if (error.status === 404) return 'The workflow or project is no longer available.'
-  if (error.status === 409) return 'The server draft changed. Your local graph has been preserved for comparison.'
-  if (error.status === 503 || error.status === 502) return 'The metadata RPC service is temporarily unavailable. Your local changes are preserved.'
-  return error.message || 'Workflow request failed.'
+  if (error.status === 401) return 'workflow.errSession'
+  if (error.status === 403) return 'workflow.errDenied'
+  if (error.status === 404) return 'workflow.errMissing'
+  if (error.status === 409) return 'workflow.errConflict'
+  if (error.status === 503 || error.status === 502) return 'workflow.errUnavailable'
+  return 'workflow.errFailed'
+}
+function setError(key: string, params: Record<string, string | number> = {}) {
+  errorMessage.value = key
+  errorParams.value = params
+}
+function setStatus(key: string, params: Record<string, string | number> = {}) {
+  statusMessage.value = key
+  statusParams.value = params
+  errorMessage.value = ''
 }
 
 function confirmLeaveEditor(): boolean {
   if (!hasLocalChanges.value) return true
-  return window.confirm('This workflow has unsaved changes. Discard them and continue?')
+  return window.confirm(t('workflow.confirmLeave'))
 }
 
 watch(() => props.projects.map(project => project.id).join('|'), () => {
@@ -369,7 +382,7 @@ async function createWorkflow(): Promise<void> {
   if (!isAdmin.value || busy.value || !selectedProjectId.value) return
   const name = newWorkflowName.value.trim()
   if (!name || name.length > 100) {
-    errorMessage.value = 'Workflow name must contain 1–100 characters.'
+    setError('workflow.nameLength')
     return
   }
   if (!confirmLeaveEditor()) return
@@ -386,9 +399,9 @@ async function createWorkflow(): Promise<void> {
     newWorkflowName.value = ''
     showCreateForm.value = false
     selectWorkflowInternal(created)
-    statusMessage.value = 'Workflow draft created. Add nodes and edges, then save and publish.'
+    setStatus('workflow.created')
   } catch (problem) {
-    errorMessage.value = messageForError(problem)
+    setError(messageForError(problem))
   } finally { busy.value = false }
 }
 
@@ -436,7 +449,7 @@ function loadNodeDraft(id: string): void {
 }
 
 function selectNode(id: string): void {
-  if (nodeDraftDirty.value && !window.confirm('Discard unapplied node field changes?')) {
+  if (nodeDraftDirty.value && !window.confirm(t('workflow.confirmNode'))) {
     restoreSelection()
     return
   }
@@ -448,7 +461,7 @@ function onNodeClick(event: any): void {
 }
 
 function onEdgeClick(event: any): void {
-  if (nodeDraftDirty.value && !window.confirm('Discard unapplied node field changes?')) {
+  if (nodeDraftDirty.value && !window.confirm(t('workflow.confirmNode'))) {
     restoreSelection()
     return
   }
@@ -460,7 +473,7 @@ function onEdgeClick(event: any): void {
 }
 
 function onPaneClick(): void {
-  if (nodeDraftDirty.value && !window.confirm('Discard unapplied node field changes?')) {
+  if (nodeDraftDirty.value && !window.confirm(t('workflow.confirmNode'))) {
     restoreSelection()
     return
   }
@@ -477,18 +490,18 @@ function applyNodeDraft(): boolean {
   const draft = cloneJson(selectedNodeDraft.value)
   draft.id = typeof draft.id === 'string' ? draft.id.trim() : ''
   if (!draft.id || draft.id.length > 128 || draft.id.includes('\u0000')) {
-    nodeEditorError.value = 'Node ID must contain 1–128 characters and cannot contain a null character.'
+    nodeEditorError.value = 'workflow.nodeIdInvalid'
     return false
   }
   if (draft.id !== oldId && canvasNodes.value.some(node => node.id === draft.id)) {
-    nodeEditorError.value = 'Another node already uses this ID.'
+    nodeEditorError.value = 'workflow.nodeIdTaken'
     return false
   }
   if (draft.label !== undefined) {
     draft.label = draft.label.trim()
     if (!draft.label) draft.label = undefined
     if (draft.label && draft.label.length > 100) {
-      nodeEditorError.value = 'Node label cannot exceed 100 characters.'
+      nodeEditorError.value = 'workflow.labelLength'
       return false
     }
   }
@@ -496,7 +509,7 @@ function applyNodeDraft(): boolean {
     if (draft.type === 'TASK') {
       const parameters = JSON.parse(taskParametersText.value) as unknown
       if (!parameters || typeof parameters !== 'object' || Array.isArray(parameters)) {
-        nodeEditorError.value = 'Task parameters must be a JSON object.'
+        nodeEditorError.value = 'workflow.parametersObject'
         return false
       }
       draft.parameters = parameters as Record<string, unknown>
@@ -521,7 +534,7 @@ function applyNodeDraft(): boolean {
       draft.condition = condition
     }
   } catch {
-    nodeEditorError.value = 'Condition values and task parameters must be valid JSON.'
+    nodeEditorError.value = 'workflow.conditionJson'
     return false
   }
 
@@ -556,7 +569,7 @@ function applyNodeDraft(): boolean {
 function addNode(type: 'TASK' | 'CONDITION'): void {
   if (!canEdit.value) return
   if (canvasNodes.value.length >= 100) {
-    errorMessage.value = 'The canvas is limited to 100 nodes.'
+    setError('workflow.nodeLimit')
     return
   }
   const used = new Set(canvasNodes.value.map(node => node.id))
@@ -589,15 +602,15 @@ function addNode(type: 'TASK' | 'CONDITION'): void {
 function onConnect(connection: Connection): void {
   if (!canEdit.value || !connection.source || !connection.target) return
   if (connection.source === connection.target) {
-    errorMessage.value = 'A node cannot connect to itself.'
+    setError('workflow.selfEdge')
     return
   }
   if (canvasEdges.value.length >= 500) {
-    errorMessage.value = 'The canvas is limited to 500 edges.'
+    setError('workflow.edgeLimit')
     return
   }
   if (canvasEdges.value.some(edge => edge.source === connection.source && edge.target === connection.target)) {
-    errorMessage.value = 'This directed connection already exists.'
+    setError('workflow.edgeExists')
     return
   }
   const source = canvasNodes.value.find(node => node.id === connection.source)
@@ -609,7 +622,7 @@ function onConnect(connection: Connection): void {
     if (!existing.has('TRUE')) branch = 'TRUE'
     else if (!existing.has('FALSE')) branch = 'FALSE'
     else {
-      errorMessage.value = 'A condition node already has TRUE and FALSE branches.'
+      setError('workflow.branchesFull')
       return
     }
   }
@@ -640,11 +653,11 @@ function changeEdgeBranch(value: string): void {
   const source = canvasNodes.value.find(node => node.id === edge?.source)
   if (!edge || !source) return
   if (source.data.payload.type === 'TASK' && value !== 'ALWAYS') {
-    errorMessage.value = 'Task edges must use ALWAYS.'
+    setError('workflow.taskAlways')
     return
   }
   if (source.data.payload.type === 'CONDITION' && value === 'ALWAYS') {
-    errorMessage.value = 'Condition edges must use TRUE or FALSE.'
+    setError('workflow.conditionBranch')
     return
   }
   canvasEdges.value = canvasEdges.value.map(item => item.id === edge.id
@@ -656,7 +669,7 @@ function changeEdgeBranch(value: string): void {
 function deleteSelected(): void {
   if (!canEdit.value) return
   if (selectedNodeId.value) {
-    if (nodeDraftDirty.value && !window.confirm('Discard unapplied node field changes and delete this node?')) return
+    if (nodeDraftDirty.value && !window.confirm(t('workflow.confirmDelete'))) return
     const id = selectedNodeId.value
     canvasNodes.value = canvasNodes.value.filter(node => node.id !== id)
     canvasEdges.value = canvasEdges.value.filter(edge => edge.source !== id && edge.target !== id)
@@ -716,7 +729,7 @@ async function captureConflict(message: string): Promise<void> {
       conflictRemote.value = null
       conflictNotice.value = ''
       rebaseArmed.value = false
-      statusMessage.value = 'The server already contains this exact draft. No duplicate write was needed.'
+      setStatus('workflow.exactDraft')
       return
     }
     conflictRemote.value = remote
@@ -733,7 +746,7 @@ function discardLocalForRemote(): void {
   conflictNotice.value = ''
   conflictRemote.value = null
   rebaseArmed.value = false
-  statusMessage.value = 'Loaded the latest server draft.'
+  setStatus('workflow.loadedServer')
 }
 
 function rebaseLocalDraft(): void {
@@ -744,7 +757,7 @@ function rebaseLocalDraft(): void {
   conflictNotice.value = ''
   rebaseArmed.value = true
   dirty.value = true
-  statusMessage.value = 'Local graph retained. Saving will explicitly replace the remote draft based on version v' + remote.draftVersion + ' if it has not changed again.'
+  setStatus('workflow.rebaseHint', { version: remote.draftVersion })
 }
 
 async function saveCurrentDraft(): Promise<void> {
@@ -753,16 +766,15 @@ async function saveCurrentDraft(): Promise<void> {
   const graph = canvasToGraph()
   const problems = validateWorkflowGraph(graph)
   if (problems.length) {
-    errorMessage.value = 'Fix graph validation errors before saving.'
+    setError('workflow.fixBeforeSave')
     return
   }
   const name = workflowName.value.trim()
   if (!name || name.length > 100) {
-    errorMessage.value = 'Workflow name must contain 1–100 characters.'
+    setError('workflow.nameLength')
     return
   }
-  if (rebaseArmed.value && !window.confirm('Overwrite the server draft using version v'
-      + editingWorkflow.value.draftVersion + '? Your local graph will be saved only if that version is still current.')) return
+  if (rebaseArmed.value && !window.confirm(t('workflow.confirmOverwrite', { version: editingWorkflow.value.draftVersion }))) return
   busy.value = true
   errorMessage.value = ''
   statusMessage.value = ''
@@ -777,24 +789,24 @@ async function saveCurrentDraft(): Promise<void> {
     conflictRemote.value = null
     conflictNotice.value = ''
     rebaseArmed.value = false
-    statusMessage.value = 'Draft saved as version v' + saved.draftVersion + '.'
+    setStatus('workflow.draftSaved', { version: saved.draftVersion })
   } catch (problem) {
     const error = apiError(problem)
-    if (error.status === 409) await captureConflict('The server draft changed. Local edits are preserved; compare both versions before retrying.')
-    else if (error.status === 502 || error.status === 503) await captureConflict('The save response was lost or the RPC service is unavailable. Local edits are preserved; compare the server before retrying.')
-    else errorMessage.value = messageForError(problem)
+    if (error.status === 409) await captureConflict('workflow.conflictSave')
+    else if (error.status === 502 || error.status === 503) await captureConflict('workflow.conflictLost')
+    else setError(messageForError(problem))
   } finally { busy.value = false }
 }
 
 async function publishCurrentDraft(): Promise<void> {
   if (!canEdit.value || !editingWorkflow.value || busy.value) return
   if (hasLocalChanges.value) {
-    errorMessage.value = 'Save all local changes before publishing a revision.'
+    setError('workflow.saveFirst')
     return
   }
   const problems = validateWorkflowGraph(canvasToGraph())
   if (problems.length) {
-    errorMessage.value = 'Fix graph validation errors before publishing.'
+    setError('workflow.fixBeforePublish')
     return
   }
   const key = publishRequestKey.value ?? newKey()
@@ -817,13 +829,11 @@ async function publishCurrentDraft(): Promise<void> {
     revisionNumber.value = published.publishedRevision
     publishRequestKey.value = null
     const loaded = await loadRevision(published.publishedRevision)
-    statusMessage.value = loaded
-      ? 'Published immutable revision r' + published.publishedRevision + '.'
-      : 'Revision was published, but the snapshot could not be loaded. Retry loading the revision.'
+    setStatus(loaded ? 'workflow.publishedOk' : 'workflow.publishedPartial', { revision: published.publishedRevision })
   } catch (problem) {
     const error = apiError(problem)
-    if (error.status === 409) await captureConflict('The draft version changed before publication. Local graph state is preserved.')
-    else errorMessage.value = messageForError(problem)
+    if (error.status === 409) await captureConflict('workflow.conflictPublish')
+    else setError(messageForError(problem))
   } finally { busy.value = false }
 }
 
@@ -841,7 +851,7 @@ async function loadRevision(revision: number): Promise<boolean> {
     loadGraphJson(loaded.graphJson, 'revision-' + revision)
     return true
   } catch (problem) {
-    errorMessage.value = messageForError(problem)
+    setError(messageForError(problem))
     return false
   } finally { loadingRevision.value = false }
 }
@@ -902,9 +912,9 @@ async function cloneRevisionAsDraft(): Promise<void> {
     upsertWorkflow(copy)
     cloneRequestKey.value = null
     selectWorkflowInternal(copy)
-    statusMessage.value = 'Created a separate editable draft from the immutable revision.'
+    setStatus('workflow.cloned')
   } catch (problem) {
-    errorMessage.value = messageForError(problem)
+    setError(messageForError(problem))
   } finally { busy.value = false }
 }
 
@@ -917,15 +927,15 @@ async function runPublishedRevision(): Promise<void> {
   if (!revisionSnapshot.value || busy.value) return
   let input: unknown
   try { input = JSON.parse(runInputJson.value) } catch {
-    errorMessage.value = 'Run input must be valid JSON.'
+    setError('workflow.inputInvalid')
     return
   }
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
-    errorMessage.value = 'Run input must be a JSON object.'
+    setError('workflow.inputObject')
     return
   }
   if (new TextEncoder().encode(JSON.stringify(input)).length > 16 * 1024) {
-    errorMessage.value = 'Run input cannot exceed 16 KiB.'
+    setError('workflow.inputSize')
     return
   }
   const key = runRequestKey.value ?? newKey()
@@ -939,88 +949,92 @@ async function runPublishedRevision(): Promise<void> {
       inputJson: JSON.stringify(input),
     }, key)
     runRequestKey.value = null
-    statusMessage.value = 'Run accepted for immutable revision r' + revisionSnapshot.value.revision + '.'
+    setStatus('workflow.runAccepted', { revision: revisionSnapshot.value.revision })
   } catch (problem) {
-    errorMessage.value = messageForError(problem)
+    setError(messageForError(problem))
   } finally { busy.value = false }
 }
 
 function nodeDragStopped(): void { persistLayout() }
+
+watch(locale, () => {
+  canvasNodes.value = canvasNodes.value.map(node => ({ ...node, label: canvasLabel(node.data.payload) }))
+})
 </script>
 
 <template>
   <section class="workflow-editor">
     <div class="page-title-row workflow-page-heading">
       <div>
-        <div class="eyebrow">M3 · DAG ORCHESTRATION</div>
-        <h1>Workflow canvas</h1>
-        <p class="muted">Compose trusted task handlers and deterministic conditions, then publish an immutable revision.</p>
+        <div class="eyebrow">{{ t('workflow.eyebrow') }}</div>
+        <h1>{{ t('workflow.title') }}</h1>
+        <p class="muted">{{ t('workflow.hint') }}</p>
       </div>
       <div class="workflow-heading-actions">
-        <label class="workflow-project-picker">Project
-          <select :value="selectedProjectId" aria-label="Project for workflows" @change="onProjectChange">
+        <label class="workflow-project-picker">{{ t('workflow.project') }}
+          <select :value="selectedProjectId" :aria-label="t('workflow.project')" @change="onProjectChange">
             <option v-for="project in props.projects" :key="project.id" :value="project.id">{{ project.name }}</option>
           </select>
         </label>
         <button class="btn btn-outline" type="button" :disabled="loadingList || !selectedProjectId" @click="refreshWorkflows">
-          {{ loadingList ? 'Loading…' : 'Refresh' }}
+          {{ loadingList ? t('common.loading') : t('common.refresh') }}
         </button>
         <button v-if="isAdmin" class="btn btn-primary" type="button" :disabled="!selectedProjectId || busy"
-          @click="showCreateForm = !showCreateForm">+ New workflow</button>
+          @click="showCreateForm = !showCreateForm">{{ t('workflow.new') }}</button>
       </div>
     </div>
 
-    <p v-if="errorMessage" class="notice error" role="alert">{{ errorMessage }}</p>
-    <p v-if="statusMessage" class="notice workflow-status" role="status">{{ statusMessage }}</p>
+    <p v-if="errorMessage" class="notice error" role="alert">{{ t(errorMessage, errorParams) }}</p>
+    <p v-if="statusMessage" class="notice workflow-status" role="status">{{ t(statusMessage, statusParams) }}</p>
 
     <div v-if="showCreateForm && isAdmin" class="panel workflow-create-form">
       <div class="workflow-create-copy">
-        <strong>Create a workflow draft</strong>
-        <small>Starts with one safe.echo task. Canvas coordinates are stored locally and never enter the published graph hash.</small>
+        <strong>{{ t('workflow.createTitle') }}</strong>
+        <small>{{ t('workflow.createHint') }}</small>
       </div>
-      <label>Workflow name
-        <input v-model="newWorkflowName" maxlength="100" placeholder="e.g. Customer onboarding" @input="resetCreateKey" />
+      <label>{{ t('workflow.workflowName') }}
+        <input v-model="newWorkflowName" maxlength="100" :placeholder="t('workflow.namePlaceholder')" @input="resetCreateKey" />
       </label>
       <div class="workflow-create-actions">
-        <button class="btn btn-outline" type="button" @click="showCreateForm = false">Cancel</button>
+        <button class="btn btn-outline" type="button" @click="showCreateForm = false">{{ t('common.cancel') }}</button>
         <button class="btn btn-primary" type="button" :disabled="busy || !newWorkflowName.trim()" @click="createWorkflow">
-          {{ busy ? 'Creating…' : 'Create draft' }}
+          {{ busy ? t('common.creating') : t('workflow.createDraft') }}
         </button>
       </div>
     </div>
 
     <div v-if="!props.projects.length" class="panel empty-state workflow-empty">
-      <div class="empty-icon">◇</div><h3>Create a project first</h3>
-      <p>Workflow definitions are scoped to a project and accessed through the Metadata service via OTRYX RPC.</p>
+      <div class="empty-icon">◇</div><h3>{{ t('workflow.needProject') }}</h3>
+      <p>{{ t('workflow.needProjectHint') }}</p>
     </div>
     <div v-else class="workflow-workspace">
-      <aside class="panel workflow-library" aria-label="Workflow definitions">
+      <aside class="panel workflow-library" :aria-label="t('workflow.library')">
         <div class="workflow-library-heading">
-          <div><strong>Workflows</strong><span class="count-tag">{{ workflows.length }}</span></div>
-          <small>{{ selectedProject?.name ?? 'Selected project' }}</small>
+          <div><strong>{{ t('workflow.library') }}</strong><span class="count-tag">{{ workflows.length }}</span></div>
+          <small>{{ selectedProject?.name ?? t('workflow.selectedProject') }}</small>
         </div>
-        <div v-if="loadingList" class="workflow-library-empty">Loading workflow definitions…</div>
+        <div v-if="loadingList" class="workflow-library-empty">{{ t('workflow.loadingList') }}</div>
         <button v-for="workflow in workflows" :key="workflow.id" type="button"
           class="workflow-library-item" :class="{ selected: selectedWorkflowId === workflow.id }"
           @click="selectWorkflowById(workflow.id)">
           <span class="workflow-library-icon">◇</span>
           <span class="workflow-library-text">
             <strong>{{ workflow.name }}</strong>
-            <small>Draft v{{ workflow.draftVersion }} · {{ workflow.publishedRevision ? 'Published r' + workflow.publishedRevision : 'Not published' }}</small>
+            <small>{{ t('workflow.draftMeta', { version: workflow.draftVersion, published: workflow.publishedRevision ? t('workflow.published', { revision: workflow.publishedRevision }) : t('workflow.notPublished') }) }}</small>
           </span>
-          <span v-if="selectedWorkflowId === workflow.id && hasLocalChanges" class="workflow-dirty-dot" title="Unsaved changes" />
+          <span v-if="selectedWorkflowId === workflow.id && hasLocalChanges" class="workflow-dirty-dot" :title="t('workflow.unsavedChanges')" />
         </button>
         <div v-if="!loadingList && !workflows.length" class="workflow-library-empty">
-          <p>No workflows in this project yet.</p>
-          <button v-if="isAdmin" class="btn btn-outline" type="button" @click="showCreateForm = true">Create the first workflow</button>
+          <p>{{ t('workflow.emptyLibrary') }}</p>
+          <button v-if="isAdmin" class="btn btn-outline" type="button" @click="showCreateForm = true">{{ t('workflow.first') }}</button>
         </div>
-        <div class="workflow-library-footer">Schema v1 · up to 100 nodes / 500 edges</div>
+        <div class="workflow-library-footer">{{ t('workflow.schema') }}</div>
       </aside>
 
       <section class="workflow-main">
         <div v-if="!editingWorkflow" class="panel empty-state workflow-empty">
-          <div class="empty-icon">◇</div><h3>Select or create a workflow</h3>
-          <p>Drafts are saved with optimistic version checks. Published revisions are immutable.</p>
+          <div class="empty-icon">◇</div><h3>{{ t('workflow.selectTitle') }}</h3>
+          <p>{{ t('workflow.selectHint') }}</p>
         </div>
 
         <template v-else>
@@ -1028,10 +1042,10 @@ function nodeDragStopped(): void { persistLayout() }
             <div class="workflow-title-fields">
               <div class="workflow-title-line">
                 <span class="workflow-state-icon">{{ viewMode === 'draft' ? '✎' : '◈' }}</span>
-                <strong>{{ viewMode === 'draft' ? 'Draft editor' : 'Published revision viewer' }}</strong>
+                <strong>{{ viewMode === 'draft' ? t('workflow.draftEditor') : t('workflow.revisionViewer') }}</strong>
                 <span class="pill-grey">{{ viewMode === 'draft' ? 'v' + editingWorkflow.draftVersion : 'r' + revisionNumber }}</span>
               </div>
-              <input v-if="viewMode === 'draft'" v-model="workflowName" aria-label="Workflow name"
+              <input v-if="viewMode === 'draft'" v-model="workflowName" :aria-label="t('workflow.nameLabel')"
                 class="workflow-name-input" maxlength="100" :disabled="!canEdit" @input="markDirty" />
               <div v-else class="workflow-revision-name">{{ revisionSnapshot?.name ?? editingWorkflow.name }}</div>
               <small class="muted">{{ editingWorkflow.id }}</small>
@@ -1039,42 +1053,42 @@ function nodeDragStopped(): void { persistLayout() }
             <div class="workflow-toolbar-actions">
               <template v-if="viewMode === 'draft'">
                 <span class="workflow-draft-state" :class="{ invalid: validationErrors.length, dirty: hasLocalChanges }">
-                  {{ hasLocalChanges ? 'Unsaved' : validationErrors.length ? 'Invalid graph' : 'Saved' }}
+                  {{ hasLocalChanges ? t('workflow.unsaved') : validationErrors.length ? t('workflow.invalidGraph') : t('workflow.saved') }}
                 </span>
                 <button class="btn btn-outline" type="button" :disabled="busy || !canEdit || !hasLocalChanges"
-                  @click="saveCurrentDraft">Save draft</button>
+                  @click="saveCurrentDraft">{{ t('workflow.saveDraft') }}</button>
                 <button class="btn btn-primary" type="button" :disabled="busy || !canPublish"
-                  @click="publishCurrentDraft">Publish revision</button>
+                  @click="publishCurrentDraft">{{ t('workflow.publish') }}</button>
                 <button v-if="editingWorkflow.publishedRevision > 0" class="btn btn-text" type="button"
-                  :disabled="busy" @click="enterRevisionMode(editingWorkflow.publishedRevision)">View r{{ editingWorkflow.publishedRevision }}</button>
+                  :disabled="busy" @click="enterRevisionMode(editingWorkflow.publishedRevision)">{{ t('workflow.viewRevision', { revision: editingWorkflow.publishedRevision }) }}</button>
               </template>
               <template v-else>
-                <label class="workflow-revision-picker">Revision
+                <label class="workflow-revision-picker">{{ t('workflow.revision') }}
                   <select :value="revisionNumber" :disabled="loadingRevision || busy" @change="onRevisionChange">
                     <option v-for="revision in revisionOptions" :key="revision" :value="revision">r{{ revision }}</option>
                   </select>
                 </label>
                 <button v-if="isAdmin" class="btn btn-outline" type="button" :disabled="busy || !revisionSnapshot"
-                  @click="cloneRevisionAsDraft">Clone as draft</button>
+                  @click="cloneRevisionAsDraft">{{ t('workflow.clone') }}</button>
                 <button class="btn btn-primary" type="button" :disabled="busy || !draftSnapshot"
-                  @click="restoreDraftView">Back to draft</button>
+                  @click="restoreDraftView">{{ t('workflow.backToDraft') }}</button>
               </template>
             </div>
           </div>
 
           <div v-if="viewMode === 'revision' && revisionSnapshot" class="panel workflow-revision-meta">
-            <div><span class="eyebrow">IMMUTABLE REVISION</span><strong>r{{ revisionSnapshot.revision }} · source draft v{{ revisionSnapshot.sourceDraftVersion }}</strong>
-              <small>Published {{ revisionSnapshot.publishedAt }}</small></div>
+            <div><span class="eyebrow">{{ t('workflow.immutable') }}</span><strong>{{ t('workflow.revisionMeta', { revision: revisionSnapshot.revision, version: revisionSnapshot.sourceDraftVersion }) }}</strong>
+              <small>{{ t('workflow.publishedAt', { time: revisionSnapshot.publishedAt }) }}</small></div>
             <div class="workflow-hash"><span>SHA-256</span><code>{{ revisionSnapshot.graphSha256 }}</code></div>
           </div>
 
           <div v-if="viewMode === 'revision' && revisionSnapshot" class="panel workflow-run-panel">
-            <div class="workflow-run-copy"><strong>Run this published revision</strong><small>Runs pin the immutable revision and never read the editable draft.</small></div>
-            <label>Input JSON object
+            <div class="workflow-run-copy"><strong>{{ t('workflow.runTitle') }}</strong><small>{{ t('workflow.runHint') }}</small></div>
+            <label>{{ t('workflow.inputJson') }}
               <textarea v-model="runInputJson" rows="2" maxlength="16384" :disabled="busy"
-                @input="resetRunKey" aria-label="DAG run input JSON" />
+                @input="resetRunKey" :aria-label="t('workflow.inputJson')" />
             </label>
-            <button class="btn btn-primary" type="button" :disabled="busy" @click="runPublishedRevision">Start run</button>
+            <button class="btn btn-primary" type="button" :disabled="busy" @click="runPublishedRevision">{{ t('workflow.startRun') }}</button>
             <div v-if="runResult" class="workflow-run-result" role="status">
               <strong>{{ runResult.status }}</strong><code>{{ runResult.id }}</code>
             </div>
@@ -1084,17 +1098,17 @@ function nodeDragStopped(): void { persistLayout() }
             <section class="panel workflow-canvas-panel">
               <div class="workflow-canvas-toolbar">
                 <div class="workflow-canvas-actions">
-                  <button v-if="canEdit" class="btn btn-outline" type="button" :disabled="canvasNodes.length >= 100" @click="addNode('TASK')">+ Task</button>
-                  <button v-if="canEdit" class="btn btn-outline" type="button" :disabled="canvasNodes.length >= 100" @click="addNode('CONDITION')">+ Condition</button>
-                  <span v-if="!canEdit" class="workflow-readonly-label">Read-only snapshot</span>
+                  <button v-if="canEdit" class="btn btn-outline" type="button" :disabled="canvasNodes.length >= 100" @click="addNode('TASK')">{{ t('workflow.addTask') }}</button>
+                  <button v-if="canEdit" class="btn btn-outline" type="button" :disabled="canvasNodes.length >= 100" @click="addNode('CONDITION')">{{ t('workflow.addCondition') }}</button>
+                  <span v-if="!canEdit" class="workflow-readonly-label">{{ t('workflow.readOnly') }}</span>
                 </div>
                 <div class="workflow-canvas-actions">
-                  <button class="canvas-icon-btn" type="button" aria-label="Zoom out" @click="zoomOut()">−</button>
-                  <button class="canvas-icon-btn" type="button" aria-label="Zoom in" @click="zoomIn()">+</button>
-                  <button class="canvas-icon-btn" type="button" aria-label="Fit workflow to canvas" @click="fitView({ padding: 0.18 })">Fit</button>
+                  <button class="canvas-icon-btn" type="button" :aria-label="t('workflow.zoomOut')" @click="zoomOut()">−</button>
+                  <button class="canvas-icon-btn" type="button" :aria-label="t('workflow.zoomIn')" @click="zoomIn()">+</button>
+                  <button class="canvas-icon-btn" type="button" :aria-label="t('workflow.fitLabel')" @click="fitView({ padding: 0.18 })">{{ t('workflow.fit') }}</button>
                 </div>
               </div>
-              <div class="workflow-canvas" tabindex="0" aria-label="Workflow graph canvas. Press N to add a task, Shift N to add a condition, arrow keys to select nodes, and Delete to remove the selection."
+              <div class="workflow-canvas" tabindex="0" :aria-label="t('workflow.canvasHelp')"
                 @keydown="onCanvasKeydown">
                 <VueFlow v-model:nodes="canvasNodes" v-model:edges="canvasEdges"
                   :nodes-draggable="canEdit" :nodes-connectable="canEdit" :elements-selectable="true"
@@ -1103,50 +1117,49 @@ function nodeDragStopped(): void { persistLayout() }
                   @connect="onConnect" @node-click="onNodeClick" @edge-click="onEdgeClick"
                   @pane-click="onPaneClick" @node-drag-stop="nodeDragStopped" />
                 <div v-if="!canvasNodes.length" class="workflow-canvas-empty">
-                  <strong>Empty graph</strong><span>Add a task node to begin.</span>
+                  <strong>{{ t('workflow.emptyGraph') }}</strong><span>{{ t('workflow.emptyGraphHint') }}</span>
                 </div>
               </div>
               <div class="workflow-canvas-footer">
-                <span>{{ canvasNodes.length }} / 100 nodes</span><span>{{ canvasEdges.length }} / 500 edges</span>
+                <span>{{ t('workflow.nodeCount', { count: canvasNodes.length }) }}</span><span>{{ t('workflow.edgeCount', { count: canvasEdges.length }) }}</span>
                 <span :class="['workflow-validity', validationErrors.length ? 'invalid' : 'valid']">
-                  {{ validationErrors.length ? validationErrors.length + ' validation issue(s)' : 'Graph valid' }}
+                  {{ validationErrors.length ? t('workflow.issueCount', { count: validationErrors.length }) : t('workflow.graphValid') }}
                 </span>
-                <span class="workflow-shortcuts">N Task · Shift+N Condition · Arrows Select · Delete Remove</span>
+                <span class="workflow-shortcuts">{{ t('workflow.shortcuts') }}</span>
               </div>
             </section>
-
             <aside class="panel workflow-inspector">
-              <div class="workflow-inspector-heading"><strong>Inspector</strong><small>{{ viewMode === 'draft' ? 'Draft properties' : 'Published snapshot' }}</small></div>
+              <div class="workflow-inspector-heading"><strong>{{ t('workflow.inspector') }}</strong><small>{{ viewMode === 'draft' ? t('workflow.draftProperties') : t('workflow.publishedSnapshot') }}</small></div>
               <template v-if="selectedNodeDraft">
                 <div class="workflow-inspector-title">
                   <span class="workflow-inspector-glyph">{{ selectedNodeDraft.type === 'CONDITION' ? '◇' : '▣' }}</span>
-                  <div><strong>{{ selectedNodeDraft.type }} node</strong><small>{{ selectedNodeDraft.id }}</small></div>
-                  <button v-if="canEdit" class="canvas-icon-btn danger" type="button" aria-label="Delete selected node" @click="deleteSelected">×</button>
+                  <div><strong>{{ t('workflow.nodeKind', { type: selectedNodeDraft.type }) }}</strong><small>{{ selectedNodeDraft.id }}</small></div>
+                  <button v-if="canEdit" class="canvas-icon-btn danger" type="button" :aria-label="t('workflow.deleteNode')" @click="deleteSelected">×</button>
                 </div>
                 <fieldset :disabled="!canEdit">
-                  <label>Node ID
+                  <label>{{ t('workflow.nodeId') }}
                     <input v-model="selectedNodeDraft.id" maxlength="128" @input="markNodeDraftDirty" />
                   </label>
-                  <label>Label
-                    <input v-model="selectedNodeDraft.label" maxlength="100" placeholder="Optional display label" @input="markNodeDraftDirty" />
+                  <label>{{ t('workflow.label') }}
+                    <input v-model="selectedNodeDraft.label" maxlength="100" :placeholder="t('workflow.labelPlaceholder')" @input="markNodeDraftDirty" />
                   </label>
-                  <div class="workflow-static-field"><span>Type</span><strong>{{ selectedNodeDraft.type }}</strong><small>To change type, remove the node and add the other type.</small></div>
+                  <div class="workflow-static-field"><span>{{ t('workflow.type') }}</span><strong>{{ selectedNodeDraft.type }}</strong><small>{{ t('workflow.typeHint') }}</small></div>
                   <template v-if="selectedNodeDraft.type === 'TASK'">
-                    <label>Trusted handler
+                    <label>{{ t('workflow.handler') }}
                       <select v-model="selectedNodeDraft.handlerKey" @change="markNodeDraftDirty">
                         <option value="safe.echo">safe.echo</option><option value="safe.fail">safe.fail</option>
                       </select>
                     </label>
-                    <label>Parameters JSON object
+                    <label>{{ t('workflow.parameters') }}
                       <textarea v-model="taskParametersText" rows="5" maxlength="16384" spellcheck="false" @input="markNodeDraftDirty" />
                     </label>
                     <div class="workflow-number-fields">
-                      <label>Timeout seconds<input v-model.number="selectedNodeDraft.timeoutSeconds" type="number" min="1" max="86400" @input="markNodeDraftDirty" /></label>
-                      <label>Max attempts<input v-model.number="selectedNodeDraft.maxAttempts" type="number" min="1" max="10" @input="markNodeDraftDirty" /></label>
+                      <label>{{ t('workflow.timeout') }}<input v-model.number="selectedNodeDraft.timeoutSeconds" type="number" min="1" max="86400" @input="markNodeDraftDirty" /></label>
+                      <label>{{ t('workflow.maxAttempts') }}<input v-model.number="selectedNodeDraft.maxAttempts" type="number" min="1" max="10" @input="markNodeDraftDirty" /></label>
                     </div>
                   </template>
                   <template v-else-if="selectedNodeDraft.type === 'CONDITION'">
-                    <label>Condition operator
+                    <label>{{ t('workflow.operator') }}
                       <select v-model="conditionOp" @change="markNodeDraftDirty">
                         <option value="equals">equals</option><option value="notEquals">notEquals</option>
                         <option value="exists">exists</option><option value="in">in</option>
@@ -1154,75 +1167,75 @@ function nodeDragStopped(): void { persistLayout() }
                       </select>
                     </label>
                     <template v-if="conditionOp !== 'and' && conditionOp !== 'or'">
-                      <label>Safe JSON field path
+                      <label>{{ t('workflow.path') }}
                         <input v-model="conditionPath" placeholder="$.region" @input="markNodeDraftDirty" />
                       </label>
                     </template>
-                    <label v-if="conditionOp === 'equals' || conditionOp === 'notEquals'">Scalar value (JSON)
+                    <label v-if="conditionOp === 'equals' || conditionOp === 'notEquals'">{{ t('workflow.scalar') }}
                       <textarea v-model="conditionValueJson" rows="2" spellcheck="false" @input="markNodeDraftDirty" />
                     </label>
-                    <label v-else-if="conditionOp === 'in'">Values array (JSON, 1–20 scalars)
+                    <label v-else-if="conditionOp === 'in'">{{ t('workflow.values') }}
                       <textarea v-model="conditionValuesJson" rows="3" spellcheck="false" @input="markNodeDraftDirty" />
                     </label>
-                    <label v-else-if="conditionOp === 'and' || conditionOp === 'or'">Child conditions AST (JSON)
+                    <label v-else-if="conditionOp === 'and' || conditionOp === 'or'">{{ t('workflow.children') }}
                       <textarea v-model="conditionChildrenJson" rows="6" spellcheck="false" @input="markNodeDraftDirty" />
                     </label>
-                    <p class="workflow-field-hint">Only equals, notEquals, exists, in, and/or are accepted. Arbitrary scripts and SQL are never evaluated.</p>
+                    <p class="workflow-field-hint">{{ t('workflow.conditionHint') }}</p>
                   </template>
-                  <p v-if="nodeEditorError" class="notice error" role="alert">{{ nodeEditorError }}</p>
+                  <p v-if="nodeEditorError" class="notice error" role="alert">{{ t(nodeEditorError) }}</p>
                   <button v-if="canEdit" class="btn btn-primary workflow-apply-node" type="button" :disabled="!nodeDraftDirty"
-                    @click="applyNodeDraft">Apply node changes</button>
-                  <p v-if="nodeDraftDirty" class="workflow-field-hint">Changes in this inspector are not on the canvas until applied.</p>
+                    @click="applyNodeDraft">{{ t('workflow.apply') }}</button>
+                  <p v-if="nodeDraftDirty" class="workflow-field-hint">{{ t('workflow.applyHint') }}</p>
                 </fieldset>
               </template>
               <template v-else-if="selectedCanvasEdge">
                 <div class="workflow-inspector-title">
-                  <span class="workflow-inspector-glyph">↳</span><div><strong>Connection</strong><small>{{ selectedCanvasEdge.source }} → {{ selectedCanvasEdge.target }}</small></div>
-                  <button v-if="canEdit" class="canvas-icon-btn danger" type="button" aria-label="Delete selected edge" @click="deleteSelected">×</button>
+                  <span class="workflow-inspector-glyph">↳</span><div><strong>{{ t('workflow.connection') }}</strong><small>{{ selectedCanvasEdge.source }} → {{ selectedCanvasEdge.target }}</small></div>
+                  <button v-if="canEdit" class="canvas-icon-btn danger" type="button" :aria-label="t('workflow.deleteEdge')" @click="deleteSelected">×</button>
                 </div>
-                <div class="workflow-static-field"><span>Edge ID</span><code>{{ selectedCanvasEdge.id }}</code></div>
-                <label>Branch
+                <div class="workflow-static-field"><span>{{ t('workflow.edgeId') }}</span><code>{{ selectedCanvasEdge.id }}</code></div>
+                <label>{{ t('workflow.branch') }}
                   <select :value="selectedEdgeBranch" :disabled="!canEdit" @change="onEdgeBranchSelect">
                     <option v-if="selectedCanvasSourceType === 'TASK'" value="ALWAYS">ALWAYS</option>
                     <template v-else><option value="TRUE">TRUE</option><option value="FALSE">FALSE</option></template>
                   </select>
                 </label>
-                <p class="workflow-field-hint">Task edges use ALWAYS. Condition nodes require exactly one TRUE and one FALSE outgoing edge.</p>
+                <p class="workflow-field-hint">{{ t('workflow.branchHint') }}</p>
               </template>
               <div v-else class="workflow-inspector-empty">
-                <div class="workflow-inspector-glyph">⌖</div><strong>Select a node or edge</strong>
-                <p>Choose a node to edit its trusted handler or condition AST. Select an edge to change its branch.</p>
+                <div class="workflow-inspector-glyph">⌖</div><strong>{{ t('workflow.selectEmpty') }}</strong>
+                <p>{{ t('workflow.selectEmptyHint') }}</p>
               </div>
             </aside>
           </div>
 
           <div v-if="conflictNotice" class="panel workflow-conflict-panel" role="alert">
-            <div class="workflow-conflict-heading"><strong>Draft version conflict</strong><span class="pill-grey">Local changes preserved</span></div>
-            <p>{{ conflictNotice }}</p>
+            <div class="workflow-conflict-heading"><strong>{{ t('workflow.conflictTitle') }}</strong><span class="pill-grey">{{ t('workflow.conflictKept') }}</span></div>
+            <p>{{ t(conflictNotice) }}</p>
             <div v-if="conflictRemote" class="workflow-conflict-meta">
-              Server draft v{{ conflictRemote.draftVersion }} · updated {{ conflictRemote.updatedAt }}
+              {{ t('workflow.serverDraft', { version: conflictRemote.draftVersion, time: conflictRemote.updatedAt }) }}
             </div>
             <div v-if="conflictRemote" class="workflow-conflict-actions">
-              <button class="btn btn-outline" type="button" @click="discardLocalForRemote">Load server version and discard local</button>
-              <button class="btn btn-primary" type="button" @click="rebaseLocalDraft">Keep local and rebase on v{{ conflictRemote.draftVersion }}</button>
+              <button class="btn btn-outline" type="button" @click="discardLocalForRemote">{{ t('workflow.loadServer') }}</button>
+              <button class="btn btn-primary" type="button" @click="rebaseLocalDraft">{{ t('workflow.keepLocal', { version: conflictRemote.draftVersion }) }}</button>
             </div>
             <div class="workflow-conflict-diff">
-              <div><strong>Local graph (without canvas positions)</strong><pre>{{ localConflictJson }}</pre></div>
-              <div><strong>Server graph</strong><pre>{{ remoteConflictJson || 'Server version could not be fetched. Refresh before retrying.' }}</pre></div>
+              <div><strong>{{ t('workflow.localGraph') }}</strong><pre>{{ localConflictJson }}</pre></div>
+              <div><strong>{{ t('workflow.serverGraph') }}</strong><pre>{{ remoteConflictJson || t('workflow.serverMissing') }}</pre></div>
             </div>
           </div>
 
           <div class="panel workflow-validation">
             <div class="workflow-validation-heading">
-              <div><strong>Graph validation</strong><small>Client feedback only; Metadata validates again before persistence and publication.</small></div>
+              <div><strong>{{ t('workflow.validation') }}</strong><small>{{ t('workflow.validationHint') }}</small></div>
               <span :class="['workflow-validity', validationErrors.length ? 'invalid' : 'valid']">
-                {{ validationErrors.length ? 'Needs attention' : 'Valid schema v1' }}
+                {{ validationErrors.length ? t('workflow.needsAttention') : t('workflow.validSchema') }}
               </span>
             </div>
             <ul v-if="validationErrors.length" class="workflow-validation-list">
-              <li v-for="problem in validationErrors" :key="problem">{{ problem }}</li>
+              <li v-for="(problem, index) in validationErrors" :key="index">{{ t('graph.' + problem.key, { ...problem }) }}</li>
             </ul>
-            <p v-else class="workflow-validation-ok">No local structural or safety issues found. Published revisions remain immutable.</p>
+            <p v-else class="workflow-validation-ok">{{ t('workflow.validationOk') }}</p>
           </div>
         </template>
       </section>

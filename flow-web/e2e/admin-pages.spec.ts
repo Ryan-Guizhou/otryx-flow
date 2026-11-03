@@ -2,6 +2,10 @@ import { expect, test, type Page } from '@playwright/test'
 
 const projectId = '00000000-0000-4000-8000-000000000001'
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('flow.locale', 'en'))
+})
+
 async function mockApi(page: Page) {
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname
@@ -40,12 +44,33 @@ async function mockApi(page: Page) {
       await route.fulfill({ json: [] })
       return
     }
+    if (path === '/api/v1/overview') {
+      await route.fulfill({ json: { projects: 1, jobs: 0, runs: 0, workersOnline: 0 } })
+      return
+    }
+    if (path === '/api/v1/workers') {
+      await route.fulfill({ json: [] })
+      return
+    }
+    if (path === '/api/v1/handlers') {
+      await route.fulfill({ json: [{ handlerKey: 'safe.echo', displayName: 'Echo', parameterSchema: '{}', supportsCancel: true, enabled: true }] })
+      return
+    }
+    if (path.includes('/job-runs')) {
+      await route.fulfill({ json: [] })
+      return
+    }
     if (path === '/api/v1/audit') {
       await route.fulfill({ json: [] })
       return
     }
-    if (path.includes('/jobs')) {
-      await route.fulfill({ json: [] })
+    if (path.includes('/jobs') && method === 'GET') {
+      await route.fulfill({ json: [{
+        id: '00000000-0000-4000-8000-000000000010', projectId, name: 'Echo job',
+        handlerKey: 'safe.echo', parametersJson: '{}', timeoutSeconds: 30, maxAttempts: 2,
+        draftVersion: 1, publishedRevision: 0, lastPublishedDraftVersion: 0,
+        updatedAt: '2026-11-03T00:00:00Z', enabled: true, archived: false,
+      }] })
       return
     }
     await route.fulfill({ status: 404, json: { code: 'NOT_MOCKED' } })
@@ -93,6 +118,26 @@ test('job handler field only accepts a safe prefix', async ({ page }) => {
   await mockApi(page)
   await signIn(page, 'admin')
   await page.getByRole('button', { name: 'Jobs' }).click()
+  await expect(page.getByRole('button', { name: 'Edit draft' })).toBeVisible()
+  await page.getByRole('button', { name: 'Edit draft' }).click()
+  await expect(page.getByRole('heading', { name: 'Edit job draft' })).toBeVisible()
+  await page.getByRole('button', { name: 'Cancel' }).click()
   await page.getByRole('button', { name: 'New job' }).click()
   await expect(page.locator('#job-handler')).toHaveAttribute('pattern', 'safe\\.[a-z][a-z0-9_.-]{0,120}')
+  await page.locator('.modal').getByRole('button', { name: 'Cancel' }).click()
+  await page.getByTitle('Sign out').click()
+  await expect(page.getByRole('heading', { name: 'Sign out?' })).toBeVisible()
+})
+
+test('language switch updates navigation and audit', async ({ page }) => {
+  await mockApi(page)
+  await signIn(page, 'admin')
+  await page.getByRole('button', { name: '中文' }).click()
+  await expect(page.getByRole('navigation', { name: '主导航' })).toBeVisible()
+  await page.getByRole('button', { name: '审计' }).click()
+  await expect(page.getByRole('heading', { name: '变更记录' })).toBeVisible()
+  await page.getByRole('button', { name: '总览' }).click()
+  await expect(page.getByRole('heading', { name: /欢迎回来/ })).toBeVisible()
+  await page.getByRole('button', { name: 'English' }).click()
+  await expect(page.getByRole('heading', { name: /Good to see you/ })).toBeVisible()
 })

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { EngineRun, Project } from './api'
 import { listRuns } from './api'
 
 const props = defineProps<{ projects: Project[] }>()
+const { t } = useI18n()
 const projectId = ref('')
 const runs = ref<EngineRun[]>([])
 const busy = ref(false)
@@ -15,7 +17,7 @@ async function reload() {
   error.value = ''
   try { runs.value = await listRuns(projectId.value) }
   catch (problem) {
-    error.value = problem instanceof Error ? problem.message : 'Unable to query Engine'
+    error.value = t('errors.unableEngine')
     runs.value = []
   } finally { busy.value = false }
 }
@@ -30,25 +32,25 @@ watch(projectId, () => { void reload() }, { immediate: true })
 
 <template>
   <div class="page-title-row">
-    <div><div class="eyebrow">PERSISTED EXECUTIONS</div><h1>Engine runs</h1>
-      <p class="muted">Records are created from real Scheduler Outbox deliveries via OTRYX RPC and Engine Inbox.</p>
+    <div><div class="eyebrow">{{ t('runs.eyebrow') }}</div><h1>{{ t('runs.title') }}</h1>
+      <p class="muted">{{ t('runs.hint') }}</p>
     </div>
   </div>
   <div class="panel table-panel">
-    <div class="panel-heading"><div><h3>Logical runs <span class="count-tag">{{ runs.length }}</span></h3>
-      <p>WAITING_DISPATCH is persisted; DISPATCHED is durably queued; SUCCEEDED or FAILED means the Worker outcome reached the Engine Inbox.</p></div>
-      <select v-model="projectId" aria-label="Project for Engine runs">
+    <div class="panel-heading"><div><h3>{{ t('runs.logical') }} <span class="count-tag">{{ runs.length }}</span></h3>
+      <p>{{ t('runs.logicalHint') }}</p></div>
+      <select v-model="projectId" :aria-label="t('runs.project')">
         <option v-for="project in props.projects" :key="project.id" :value="project.id">{{ project.name }}</option>
       </select>
-      <button class="btn btn-outline" type="button" :disabled="busy || !projectId" @click="reload">{{ busy ? 'Loading...' : 'Refresh' }}</button>
+      <button class="btn btn-outline" type="button" :disabled="busy || !projectId" @click="reload">{{ busy ? t('common.loading') : t('common.refresh') }}</button>
     </div>
     <p v-if="error" class="notice error" role="alert">{{ error }}</p>
-    <table v-if="runs.length" class="projects-table"><thead><tr><th>Run</th><th>Job revision</th><th>Scheduled (UTC)</th><th>State</th></tr></thead>
+    <table v-if="runs.length" class="projects-table"><thead><tr><th>{{ t('runs.colRun') }}</th><th>{{ t('runs.colRevision') }}</th><th>{{ t('runs.colScheduled') }}</th><th>{{ t('runs.colState') }}</th></tr></thead>
       <tbody><tr v-for="run in runs" :key="run.id"><td><strong class="mono">{{ run.id }}</strong><small class="muted"> {{ run.eventId }}</small></td>
         <td class="mono">{{ run.jobId }} / r{{ run.jobRevision }}</td><td class="mono">{{ run.plannedFireUtc }}</td>
         <td><span class="pill-grey">{{ run.status }}</span></td></tr></tbody></table>
-    <div v-else-if="!busy" class="empty-state"><h3>No Engine runs yet</h3>
-      <p>Create a Cron schedule under Jobs and wait for a real Trigger to be accepted. Published jobs execute only through explicitly allowlisted trusted Worker Handlers.</p>
+    <div v-else-if="!busy" class="empty-state"><h3>{{ t('runs.emptyTitle') }}</h3>
+      <p>{{ t('runs.emptyBody') }}</p>
     </div>
   </div>
 </template>

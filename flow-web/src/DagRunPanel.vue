@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type {
   ApiError,
   DagControlAudit,
@@ -19,8 +20,10 @@ import {
   listDagRuns,
   retryDagNode,
 } from './api'
+import { formatWhen } from './i18n'
 
 const props = defineProps<{ projects: Project[]; userRole: string }>()
+const { t, locale } = useI18n()
 const projectId = ref('')
 const runs = ref<DagRun[]>([])
 const selectedRunId = ref('')
@@ -72,16 +75,17 @@ function apiError(problem: unknown): ApiError {
 }
 function messageForError(problem: unknown): string {
   const e = apiError(problem)
-  if (e.status === 401) return 'Your session expired. Sign in again to continue.'
-  if (e.status === 403) return 'This action is not permitted for your role.'
-  if (e.status === 404) return 'The Run or project is no longer available.'
-  if (e.status === 409) return 'The Run changed concurrently. Current server state has been refreshed.'
-  if (e.status === 502 || e.status === 503) return 'The execution service is temporarily unavailable. Retry without changing the request key.'
-  return e.message || 'Workflow-run request failed.'
+  if (e.message === 'Immutable workflow revision hash does not match this Run.') return 'dag.hashMismatch'
+  if (e.message === 'Immutable workflow graph is invalid.') return 'dag.graphInvalid'
+  if (e.status === 401) return 'dag.errSession'
+  if (e.status === 403) return 'dag.errDenied'
+  if (e.status === 404) return 'dag.errMissing'
+  if (e.status === 409) return 'dag.errConflict'
+  if (e.status === 502 || e.status === 503) return 'dag.errUnavailable'
+  return 'dag.errFailed'
 }
 function formatTime(value: string): string {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
+  return formatWhen(value, locale.value, true)
 }
 function duration(run: DagRun): string {
   const start = Date.parse(run.createdAt)
@@ -147,7 +151,7 @@ async function reloadDetail(): Promise<void> {
     graphError.value = ''
     const tasks: Promise<unknown>[] = [
       listDagControlHistory(projectId.value, selectedRunId.value).then(value => { history.value = value })
-        .catch(problem => { error.value = 'Run loaded, but control history could not be read: ' + messageForError(problem) }),
+        .catch(() => { error.value = 'dag.historyFailed' }),
       reloadLogs(true),
     ]
     await Promise.all(tasks)
@@ -217,7 +221,7 @@ async function cancelSelectedRun(): Promise<void> {
   const run = detail.value.run
   const pending = cancelRequest.value
   if (!pending && run.status !== 'RUNNING') return
-  if (!pending && !window.confirm('Request cancellation for this workflow run? In-flight external side effects cannot be rolled back.')) return
+  if (!pending && !window.confirm(t('dag.confirmCancel'))) return
   const request = pending && pending.runId === run.id
     ? pending : { key: newKey(), version: run.runVersion, runId: run.id }
   cancelRequest.value = request
@@ -227,7 +231,7 @@ async function cancelSelectedRun(): Promise<void> {
   try {
     await cancelDagRun(projectId.value, request.runId, request.version, request.key)
     cancelRequest.value = null
-    statusMessage.value = 'Cancellation requested. The Run remains CANCEL_REQUESTED until Dispatcher fencing converges.'
+    statusMessage.value = 'dag.cancelRequested'
     await refreshAll()
   } catch (problem) {
     const e = apiError(problem)
@@ -258,7 +262,7 @@ async function retryNode(node: DagNode): Promise<void> {
     const next = { ...retryKeys.value }
     delete next[node.nodeId]
     retryKeys.value = next
-    statusMessage.value = 'A new logical NodeRun was accepted. Previous attempts remain immutable.'
+    statusMessage.value = 'dag.retryAccepted'
     await refreshAll()
   } catch (problem) {
     const e = apiError(problem)
@@ -303,30 +307,30 @@ watch(projectId, () => {
 <template>
   <div class="page-title-row">
     <div>
-      <div class="eyebrow">DURABLE DAG EXECUTIONS</div>
-      <h1>Workflow runs</h1>
-      <p class="muted">Run and NodeRun state comes from Engine storage; logs are separately persisted by Dispatcher.</p>
+      <div class="eyebrow">{{ t('dag.eyebrow') }}</div>
+      <h1>{{ t('dag.title') }}</h1>
+      <p class="muted">{{ t('dag.hint') }}</p>
     </div>
     <button class="btn btn-outline" type="button" :disabled="busy || detailBusy || !projectId" @click="refreshAll">
-      {{ busy || detailBusy ? 'Refreshing...' : 'Refresh' }}
+      {{ busy || detailBusy ? t('dag.refreshing') : t('common.refresh') }}
     </button>
   </div>
 
   <div class="panel table-panel">
     <div class="panel-heading">
-      <div><h3>DAG Runs <span class="count-tag">{{ filteredRuns.length }}</span></h3><p>Fixed workflow revisions; CANCEL_REQUESTED is not the same as CANCELLED.</p></div>
-      <select v-model="projectId" aria-label="Project for workflow runs" :disabled="busy || detailBusy">
+      <div><h3>{{ t('dag.heading') }} <span class="count-tag">{{ filteredRuns.length }}</span></h3><p>{{ t('dag.headingHint') }}</p></div>
+      <select v-model="projectId" :aria-label="t('dag.project')" :disabled="busy || detailBusy">
         <option v-for="project in props.projects" :key="project.id" :value="project.id">{{ project.name }}</option>
       </select>
-      <select v-model="statusFilter" aria-label="Filter workflow run status">
-        <option value="ALL">All statuses</option>
+      <select v-model="statusFilter" :aria-label="t('dag.filterStatus')">
+        <option value="ALL">{{ t('dag.allStatuses') }}</option>
         <option v-for="status in statuses" :key="status" :value="status">{{ status }}</option>
       </select>
     </div>
-    <p v-if="error" class="notice error" role="alert">{{ error }}</p>
-    <p v-if="statusMessage" class="notice" role="status">{{ statusMessage }}</p>
+    <p v-if="error" class="notice error" role="alert">{{ t(error) }}</p>
+    <p v-if="statusMessage" class="notice" role="status">{{ t(statusMessage) }}</p>
     <table v-if="filteredRuns.length" class="projects-table">
-      <thead><tr><th>Run</th><th>Revision</th><th>State</th><th>Duration</th><th>Updated</th><th></th></tr></thead>
+      <thead><tr><th>{{ t('dag.colRun') }}</th><th>{{ t('dag.colRevision') }}</th><th>{{ t('common.state') }}</th><th>{{ t('dag.colDuration') }}</th><th>{{ t('dag.colUpdated') }}</th><th></th></tr></thead>
       <tbody>
         <tr v-for="run in pagedRuns" :key="run.id">
           <td><strong class="mono">{{ run.id }}</strong><small class="muted">{{ run.workflowId }}</small></td>
@@ -334,48 +338,48 @@ watch(projectId, () => {
           <td><span class="pill-grey">{{ run.status }}</span></td>
           <td>{{ duration(run) }}</td>
           <td>{{ formatTime(run.updatedAt) }}</td>
-          <td><button class="btn btn-outline" type="button" :disabled="detailBusy" @click="selectRun(run.id)">Details</button></td>
+          <td><button class="btn btn-outline" type="button" :disabled="detailBusy" @click="selectRun(run.id)">{{ t('common.details') }}</button></td>
         </tr>
       </tbody>
     </table>
     <div v-else-if="!busy" class="empty-state">
-      <h3>{{ runs.length ? 'No Runs match this status' : 'No workflow runs yet' }}</h3>
-      <p>{{ runs.length ? 'Choose a different status filter.' : 'Publish a workflow revision in the Workflows canvas and start a run from that fixed revision.' }}</p>
+      <h3>{{ runs.length ? t('dag.emptyFiltered') : t('dag.emptyTitle') }}</h3>
+      <p>{{ runs.length ? t('dag.emptyFilteredHint') : t('dag.emptyBody') }}</p>
     </div>
     <div v-if="filteredRuns.length" class="dag-run-pagination">
-      <small>Page {{ currentPage }} of {{ pageCount }}</small>
-      <button class="btn btn-outline" type="button" :disabled="currentPage <= 1" @click="currentPage--">Previous</button>
-      <button class="btn btn-outline" type="button" :disabled="currentPage >= pageCount" @click="currentPage++">Next</button>
+      <small>{{ t('common.page', { current: currentPage, total: pageCount }) }}</small>
+      <button class="btn btn-outline" type="button" :disabled="currentPage <= 1" @click="currentPage--">{{ t('common.previous') }}</button>
+      <button class="btn btn-outline" type="button" :disabled="currentPage >= pageCount" @click="currentPage++">{{ t('common.next') }}</button>
     </div>
   </div>
 
   <div v-if="selectedRunId" class="panel dag-run-detail">
     <div class="dag-run-heading">
-      <div><div class="eyebrow">RUN DETAILS</div><h2>{{ detail?.run.status ?? 'Loading...' }}</h2><p class="mono muted">{{ selectedRunId }}</p></div>
+      <div><div class="eyebrow">{{ t('dag.detailsEyebrow') }}</div><h2>{{ detail?.run.status ?? t('common.loading') }}</h2><p class="mono muted">{{ selectedRunId }}</p></div>
       <div class="dag-run-actions">
-        <button v-if="isAdmin && (detail?.run.status === 'RUNNING' || (cancelRequest && cancelRequest.runId === detail?.run.id))" class="btn btn-outline" type="button" :disabled="busy || detailBusy" @click="cancelSelectedRun">{{ cancelRequest ? 'Retry same cancellation request' : 'Request cancellation' }}</button>
-        <span v-else-if="detail?.run.status === 'CANCEL_REQUESTED'" class="pill-grey">Cancellation in progress</span>
-        <button class="btn btn-outline" type="button" :disabled="busy || detailBusy" @click="reloadDetail">Refresh details</button>
+        <button v-if="isAdmin && (detail?.run.status === 'RUNNING' || (cancelRequest && cancelRequest.runId === detail?.run.id))" class="btn btn-outline" type="button" :disabled="busy || detailBusy" @click="cancelSelectedRun">{{ cancelRequest ? t('dag.retryCancel') : t('dag.requestCancel') }}</button>
+        <span v-else-if="detail?.run.status === 'CANCEL_REQUESTED'" class="pill-grey">{{ t('dag.cancelProgress') }}</span>
+        <button class="btn btn-outline" type="button" :disabled="busy || detailBusy" @click="reloadDetail">{{ t('dag.refreshDetails') }}</button>
       </div>
     </div>
-    <p v-if="detailBusy" class="muted" role="status">Loading authoritative Engine state...</p>
+    <p v-if="detailBusy" class="muted" role="status">{{ t('dag.loadingEngine') }}</p>
     <template v-if="detail">
       <div class="dag-run-meta">
-        <div><span>Workflow</span><strong>{{ detail.run.workflowId }}</strong></div>
-        <div><span>Revision</span><strong>r{{ detail.run.workflowRevision }}</strong></div>
-        <div><span>Duration</span><strong>{{ duration(detail.run) }}</strong></div>
-        <div><span>Run version</span><strong>v{{ detail.run.runVersion }}</strong></div>
-        <div class="dag-hash"><span>Graph SHA-256</span><code>{{ detail.run.graphSha256 }}</code></div>
+        <div><span>{{ t('dag.workflow') }}</span><strong>{{ detail.run.workflowId }}</strong></div>
+        <div><span>{{ t('dag.revision') }}</span><strong>r{{ detail.run.workflowRevision }}</strong></div>
+        <div><span>{{ t('dag.duration') }}</span><strong>{{ duration(detail.run) }}</strong></div>
+        <div><span>{{ t('dag.runVersion') }}</span><strong>v{{ detail.run.runVersion }}</strong></div>
+        <div class="dag-hash"><span>{{ t('dag.graphHash') }}</span><code>{{ detail.run.graphSha256 }}</code></div>
       </div>
-      <div class="dag-run-tabs" role="tablist" aria-label="Run detail sections">
-        <button type="button" role="tab" :aria-selected="activeTab === 'topology'" :class="{active:activeTab === 'topology'}" @click="activeTab = 'topology'">Immutable topology</button>
-        <button type="button" role="tab" :aria-selected="activeTab === 'nodes'" :class="{active:activeTab === 'nodes'}" @click="activeTab = 'nodes'">Node attempts</button>
-        <button type="button" role="tab" :aria-selected="activeTab === 'history'" :class="{active:activeTab === 'history'}" @click="activeTab = 'history'">Control history</button>
-        <button type="button" role="tab" :aria-selected="activeTab === 'logs'" :class="{active:activeTab === 'logs'}" @click="activeTab = 'logs'; if (!logs.length && !logBusy) reloadLogs(true)">Execution logs</button>
+      <div class="dag-run-tabs" role="tablist" :aria-label="t('dag.sections')">
+        <button type="button" role="tab" :aria-selected="activeTab === 'topology'" :class="{active:activeTab === 'topology'}" @click="activeTab = 'topology'">{{ t('dag.topology') }}</button>
+        <button type="button" role="tab" :aria-selected="activeTab === 'nodes'" :class="{active:activeTab === 'nodes'}" @click="activeTab = 'nodes'">{{ t('dag.attempts') }}</button>
+        <button type="button" role="tab" :aria-selected="activeTab === 'history'" :class="{active:activeTab === 'history'}" @click="activeTab = 'history'">{{ t('dag.history') }}</button>
+        <button type="button" role="tab" :aria-selected="activeTab === 'logs'" :class="{active:activeTab === 'logs'}" @click="activeTab = 'logs'; if (!logs.length && !logBusy) reloadLogs(true)">{{ t('dag.logs') }}</button>
       </div>
 
       <section v-if="activeTab === 'topology'">
-        <p v-if="graphError" class="notice error" role="alert">{{ graphError }}</p>
+        <p v-if="graphError" class="notice error" role="alert">{{ t(graphError) }}</p>
         <div v-else-if="graphNodes.length" class="dag-topology">
           <article v-for="node in graphNodes" :key="node.id" class="dag-topology-node">
             <div><strong>{{ node.label ?? node.id }}</strong><small class="muted mono">{{ node.id }} · {{ node.type }}</small></div>
@@ -384,16 +388,16 @@ watch(projectId, () => {
               <span v-for="edge in graphEdges.filter(item => item.source === node.id)" :key="edge.id">
                 {{ edge.branch }} → {{ edge.target }}
               </span>
-              <small v-if="!graphEdges.some(item => item.source === node.id)">Terminal node</small>
+              <small v-if="!graphEdges.some(item => item.source === node.id)">{{ t('dag.terminal') }}</small>
             </div>
           </article>
         </div>
-        <div v-else class="empty-state"><h3>Immutable topology unavailable</h3><p>The published revision could not be verified against the Run SHA-256.</p></div>
+        <div v-else class="empty-state"><h3>{{ t('dag.topologyMissing') }}</h3><p>{{ t('dag.topologyMissingHint') }}</p></div>
       </section>
 
       <section v-else-if="activeTab === 'nodes'">
         <table v-if="detail.nodes.length" class="projects-table">
-          <thead><tr><th>Node</th><th>Type</th><th>Logical attempt</th><th>State</th><th>Condition</th><th>Updated</th><th></th></tr></thead>
+          <thead><tr><th>{{ t('dag.colNode') }}</th><th>{{ t('dag.colType') }}</th><th>{{ t('dag.colAttempt') }}</th><th>{{ t('common.state') }}</th><th>{{ t('dag.colCondition') }}</th><th>{{ t('dag.colUpdated') }}</th><th></th></tr></thead>
           <tbody>
             <tr v-for="node in detail.nodes" :key="node.id">
               <td><strong>{{ node.nodeId }}</strong><small class="muted mono">{{ node.id }}</small></td>
@@ -404,40 +408,40 @@ watch(projectId, () => {
               <td>{{ formatTime(node.updatedAt) }}</td>
               <td>
                 <button v-if="isAdmin && ((detail.run.status === 'FAILED' && node.status === 'FAILED' && node.logicalAttempt === latestAttemptNumber(node.nodeId) && node.logicalAttempt < 3) || retryKeys[node.nodeId]?.runId === detail.run.id)"
-                  class="btn btn-outline" type="button" :disabled="busy || detailBusy" @click="retryNode(node)">{{ retryKeys[node.nodeId] ? 'Retry same request' : 'Retry logical attempt' }}</button>
+                  class="btn btn-outline" type="button" :disabled="busy || detailBusy" @click="retryNode(node)">{{ retryKeys[node.nodeId] ? t('dag.retrySame') : t('dag.retryLogical') }}</button>
               </td>
             </tr>
           </tbody>
         </table>
-        <div v-else class="empty-state"><h3>No node attempts</h3><p>The Engine has not materialized node execution state for this Run.</p></div>
+        <div v-else class="empty-state"><h3>{{ t('dag.noAttempts') }}</h3><p>{{ t('dag.noAttemptsHint') }}</p></div>
       </section>
 
       <section v-else-if="activeTab === 'history'">
         <table v-if="history.length" class="projects-table">
-          <thead><tr><th>Action</th><th>Node</th><th>Version</th><th>New NodeRun</th><th>Time</th></tr></thead>
+          <thead><tr><th>{{ t('dag.colAction') }}</th><th>{{ t('dag.colNode') }}</th><th>{{ t('dag.colVersion') }}</th><th>{{ t('dag.colNewNode') }}</th><th>{{ t('dag.colTime') }}</th></tr></thead>
           <tbody><tr v-for="(event, index) in history" :key="event.action + ':' + event.createdAt + ':' + index">
             <td>{{ event.action }}</td><td>{{ event.nodeId ?? '—' }}</td><td>v{{ event.oldVersion }} → v{{ event.newVersion }}</td>
             <td class="mono">{{ event.nodeRunId ?? '—' }}</td><td>{{ formatTime(event.createdAt) }}</td>
           </tr></tbody>
         </table>
-        <div v-else class="empty-state"><h3>No control history</h3><p>No cancellation or manual retry has been recorded for this Run.</p></div>
+        <div v-else class="empty-state"><h3>{{ t('dag.noHistory') }}</h3><p>{{ t('dag.noHistoryHint') }}</p></div>
       </section>
 
       <section v-else>
-        <p v-if="logError" class="notice error" role="alert">{{ logError }}</p>
+        <p v-if="logError" class="notice error" role="alert">{{ t(logError) }}</p>
         <table v-if="logs.length" class="projects-table">
-          <thead><tr><th>Time</th><th>Level</th><th>NodeRun</th><th>Message</th><th>Fields</th></tr></thead>
+          <thead><tr><th>{{ t('dag.colTime') }}</th><th>{{ t('dag.colLevel') }}</th><th>{{ t('dag.colNodeRun') }}</th><th>{{ t('dag.colMessage') }}</th><th>{{ t('dag.colFields') }}</th></tr></thead>
           <tbody><tr v-for="log in logs" :key="log.id">
             <td>{{ formatTime(log.createdAt) }}</td><td><span class="pill-grey">{{ log.level }}</span></td>
             <td class="mono">{{ log.nodeRunId }}</td><td class="dag-log-message">{{ log.message }}</td>
             <td><pre class="dag-log-fields">{{ log.fieldsJson }}</pre></td>
           </tr></tbody>
         </table>
-        <div v-else-if="!logBusy" class="empty-state"><h3>No execution logs</h3><p>Worker logs are bounded and redacted on the server before they are stored or returned.</p></div>
+        <div v-else-if="!logBusy" class="empty-state"><h3>{{ t('dag.noLogs') }}</h3><p>{{ t('dag.noLogsHint') }}</p></div>
         <div class="dag-log-footer">
-          <span class="muted">{{ logs.length }} log record(s) loaded</span>
-          <button v-if="logCursor" class="btn btn-outline" type="button" :disabled="logBusy" @click="reloadLogs(false)">{{ logBusy ? 'Loading...' : 'Load more' }}</button>
-          <button v-else class="btn btn-outline" type="button" :disabled="logBusy || !selectedRunId" @click="reloadLogs(true)">{{ logBusy ? 'Loading...' : 'Refresh logs' }}</button>
+          <span class="muted">{{ t('dag.logCount', { count: logs.length }) }}</span>
+          <button v-if="logCursor" class="btn btn-outline" type="button" :disabled="logBusy" @click="reloadLogs(false)">{{ logBusy ? t('common.loading') : t('dag.loadMore') }}</button>
+          <button v-else class="btn btn-outline" type="button" :disabled="logBusy || !selectedRunId" @click="reloadLogs(true)">{{ logBusy ? t('common.loading') : t('dag.refreshLogs') }}</button>
         </div>
       </section>
     </template>

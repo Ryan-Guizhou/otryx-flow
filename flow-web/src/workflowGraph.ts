@@ -19,6 +19,34 @@ const UI_EDGE_FIELDS = ['data', 'selected', 'animated', 'markerEnd', 'markerStar
 
 type JsonRecord = Record<string, unknown>
 export interface WorkflowPosition { x: number; y: number }
+export interface GraphIssue {
+  key: string
+  location?: string
+  field?: string
+  op?: string
+  index?: number
+  id?: string
+  source?: string
+  target?: string
+  branch?: string
+}
+
+function issue(key: string, params: Omit<GraphIssue, 'key'> = {}): GraphIssue {
+  return { key, ...params }
+}
+
+function dedupe(errors: GraphIssue[]): GraphIssue[] {
+  const seen = new Set<string>()
+  const unique: GraphIssue[] = []
+  for (const item of errors) {
+    const id = JSON.stringify(item)
+    if (seen.has(id)) continue
+    seen.add(id)
+    unique.push(item)
+    if (unique.length === 30) break
+  }
+  return unique
+}
 
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -33,9 +61,9 @@ function validIdentifier(value: unknown): value is string {
     && value.length <= MAX_IDENTIFIER_LENGTH && !value.includes('\u0000')
 }
 
-function onlyFields(value: JsonRecord, allowed: Set<string>, location: string, errors: string[]): void {
+function onlyFields(value: JsonRecord, allowed: Set<string>, location: string, errors: GraphIssue[]): void {
   for (const field of Object.keys(value)) {
-    if (!allowed.has(field)) errors.push(location + ' contains unsupported field "' + field + '".')
+    if (!allowed.has(field)) errors.push(issue('unsupportedField', { location, field }))
   }
 }
 
@@ -47,20 +75,20 @@ function scalar(value: unknown): value is WorkflowScalar {
     && byteLength(JSON.stringify(value)) <= 256
 }
 
-function validateCondition(value: unknown, depth: number, location: string, errors: string[]): void {
+function validateCondition(value: unknown, depth: number, location: string, errors: GraphIssue[]): void {
   if (depth > MAX_CONDITION_DEPTH) {
-    errors.push(location + ' exceeds the maximum condition depth of 6.')
+    errors.push(issue('conditionDepth', { location }))
     return
   }
   if (!isRecord(value) || typeof value.op !== 'string') {
-    errors.push(location + ' must be a structured condition object.')
+    errors.push(issue('conditionObject', { location }))
     return
   }
   const op = value.op
   if (op === 'and' || op === 'or') {
     onlyFields(value, new Set(['op', 'conditions']), location, errors)
     if (!Array.isArray(value.conditions) || value.conditions.length < 2 || value.conditions.length > 10) {
-      errors.push(location + ' ' + op + ' requires 2–10 child conditions.')
+      errors.push(issue('conditionChildren', { location, op }))
       return
     }
     value.conditions.forEach((child, index) => validateCondition(child, depth + 1,
@@ -68,11 +96,11 @@ function validateCondition(value: unknown, depth: number, location: string, erro
     return
   }
   if (!['equals', 'notEquals', 'exists', 'in'].includes(op)) {
-    errors.push(location + ' uses an unsupported operator.')
+    errors.push(issue('unsupportedOperator', { location }))
     return
   }
   if (!validIdentifier(value.path) || !JSON_PATH.test(value.path)) {
-    errors.push(location + ' path must be a safe field path such as $.region or $.user.country.')
+    errors.push(issue('conditionPath', { location }))
   }
   if (op === 'exists') {
     onlyFields(value, new Set(['op', 'path']), location, errors)
@@ -81,17 +109,17 @@ function validateCondition(value: unknown, depth: number, location: string, erro
   if (op === 'in') {
     onlyFields(value, new Set(['op', 'path', 'values']), location, errors)
     if (!Array.isArray(value.values) || value.values.length < 1 || value.values.length > MAX_LIST_VALUES) {
-      errors.push(location + ' in requires 1–20 scalar values.')
+      errors.push(issue('inValues', { location }))
       return
     }
     value.values.forEach((item, index) => {
-      if (!scalar(item)) errors.push(location + '.values[' + index + '] must be a bounded scalar.')
+      if (!scalar(item)) errors.push(issue('scalarItem', { location, index }))
     })
     return
   }
   onlyFields(value, new Set(['op', 'path', 'value']), location, errors)
   if (!Object.prototype.hasOwnProperty.call(value, 'value') || !scalar(value.value)) {
-    errors.push(location + ' requires a bounded scalar value.')
+    errors.push(issue('scalarValue', { location }))
   }
 }
 
@@ -140,21 +168,21 @@ export function serializeWorkflowGraph(graph: WorkflowGraphV1): string {
 }
 
 /** Client-side fast feedback; the metadata service remains the authoritative validator. */
-export function validateWorkflowGraph(input: unknown): string[] {
-  const errors: string[] = []
-  if (!isRecord(input)) return ['Graph must be a JSON object.']
+export function validateWorkflowGraph(input: unknown): GraphIssue[] {
+  const errors: GraphIssue[] = []
+  if (!isRecord(input)) return [issue('notObject')]
   onlyFields(input, GRAPH_FIELDS, 'Graph', errors)
-  if (input.schemaVersion !== 1) errors.push('Only workflow graph schemaVersion 1 is supported.')
+  if (input.schemaVersion !== 1) errors.push(issue('schemaVersion'))
   if (!Array.isArray(input.nodes) || input.nodes.length < 1 || input.nodes.length > MAX_NODES) {
-    errors.push('A workflow must contain 1–100 nodes.')
+    errors.push(issue('nodeCount'))
   }
   if (!Array.isArray(input.edges) || input.edges.length > MAX_EDGES) {
-    errors.push('A workflow may contain at most 500 edges.')
+    errors.push(issue('edgeCount'))
   }
-  if (!Array.isArray(input.nodes) || !Array.isArray(input.edges)) return errors.slice(0, 30)
+  if (!Array.isArray(input.nodes) || !Array.isArray(input.edges)) return dedupe(errors)
   let encoded = ''
-  try { encoded = JSON.stringify(input) } catch { errors.push('Graph cannot be serialized as JSON.') }
-  if (encoded && byteLength(encoded) > MAX_GRAPH_BYTES) errors.push('Graph JSON exceeds 48 KiB.')
+  try { encoded = JSON.stringify(input) } catch { errors.push(issue('notJson')) }
+  if (encoded && byteLength(encoded) > MAX_GRAPH_BYTES) errors.push(issue('tooLarge'))
 
   const nodes = input.nodes
   const edges = input.edges
@@ -165,46 +193,46 @@ export function validateWorkflowGraph(input: unknown): string[] {
   nodes.forEach((value, index) => {
     const location = 'Node ' + (index + 1)
     if (!isRecord(value)) {
-      errors.push(location + ' must be an object.')
+      errors.push(issue('nodeObject', { location }))
       return
     }
     if (!validIdentifier(value.id)) {
-      errors.push(location + ' needs a non-empty ID up to 128 characters.')
+      errors.push(issue('nodeId', { location }))
     } else if (nodeIds.has(value.id)) {
-      errors.push('Duplicate node ID "' + value.id + '".')
+      errors.push(issue('duplicateNodeId', { id: value.id }))
     } else {
       nodeIds.add(value.id)
     }
     if (value.type !== 'TASK' && value.type !== 'CONDITION') {
-      errors.push(location + ' type must be TASK or CONDITION.')
+      errors.push(issue('nodeType', { location }))
       return
     }
     onlyFields(value, value.type === 'TASK' ? TASK_FIELDS : CONDITION_NODE_FIELDS, location, errors)
     if (Object.prototype.hasOwnProperty.call(value, 'label')
         && (typeof value.label !== 'string' || !value.label.trim() || value.label.length > 100)) {
-      errors.push(location + ' label must contain 1–100 characters when provided.')
+      errors.push(issue('nodeLabel', { location }))
     }
     if (validIdentifier(value.id)) nodeTypes.set(value.id, value.type)
     if (value.type === 'TASK') {
       if (typeof value.handlerKey !== 'string' || !TRUSTED_HANDLERS.has(value.handlerKey)) {
-        errors.push(location + ' handler must be safe.echo or safe.fail.')
+        errors.push(issue('handler', { location }))
       }
       if (!isRecord(value.parameters)) {
-        errors.push(location + ' parameters must be a JSON object.')
+        errors.push(issue('parametersObject', { location }))
       } else {
         let params = ''
         try { params = JSON.stringify(value.parameters) } catch { params = '' }
         if (!params || byteLength(params) > MAX_NODE_PARAMS_BYTES) {
-          errors.push(location + ' parameters exceed 16 KiB or cannot be serialized.')
+          errors.push(issue('parametersSize', { location }))
         }
       }
       if (!Number.isInteger(value.timeoutSeconds) || Number(value.timeoutSeconds) < 1
           || Number(value.timeoutSeconds) > 86400) {
-        errors.push(location + ' timeoutSeconds must be an integer from 1 to 86400.')
+        errors.push(issue('timeout', { location }))
       }
       if (!Number.isInteger(value.maxAttempts) || Number(value.maxAttempts) < 1
           || Number(value.maxAttempts) > 10) {
-        errors.push(location + ' maxAttempts must be an integer from 1 to 10.')
+        errors.push(issue('maxAttempts', { location }))
       }
     } else {
       conditionBranches.set(String(value.id), new Set<string>())
@@ -221,37 +249,37 @@ export function validateWorkflowGraph(input: unknown): string[] {
   edges.forEach((value, index) => {
     const location = 'Edge ' + (index + 1)
     if (!isRecord(value)) {
-      errors.push(location + ' must be an object.')
+      errors.push(issue('edgeObject', { location }))
       return
     }
     onlyFields(value, EDGE_FIELDS, location, errors)
     for (const field of ['id', 'source', 'target']) {
-      if (!validIdentifier(value[field])) errors.push(location + ' ' + field + ' is required and limited to 128 characters.')
+      if (!validIdentifier(value[field])) errors.push(issue('edgeField', { location, field }))
     }
     if (!['ALWAYS', 'TRUE', 'FALSE'].includes(String(value.branch))) {
-      errors.push(location + ' branch must be ALWAYS, TRUE or FALSE.')
+      errors.push(issue('edgeBranch', { location }))
     }
     if (!validIdentifier(value.id) || !validIdentifier(value.source) || !validIdentifier(value.target)) return
-    if (edgeIds.has(value.id)) errors.push('Duplicate edge ID "' + value.id + '".')
+    if (edgeIds.has(value.id)) errors.push(issue('duplicateEdgeId', { id: value.id }))
     edgeIds.add(value.id)
     if (!nodeIds.has(value.source) || !nodeIds.has(value.target)) {
-      errors.push(location + ' references a node that does not exist.')
+      errors.push(issue('missingNode', { location }))
       return
     }
-    if (value.source === value.target) errors.push(location + ' cannot connect a node to itself.')
+    if (value.source === value.target) errors.push(issue('selfEdge', { location }))
     const pair = value.source + '\u0000' + value.target
-    if (directedPairs.has(pair)) errors.push('Duplicate directed edge from "' + value.source + '" to "' + value.target + '".')
+    if (directedPairs.has(pair)) errors.push(issue('duplicateDirected', { source: value.source, target: value.target }))
     directedPairs.add(pair)
     const sourceType = nodeTypes.get(value.source)
     if (sourceType === 'TASK' && value.branch !== 'ALWAYS') {
-      errors.push(location + ' from a TASK node must use ALWAYS.')
+      errors.push(issue('taskAlways', { location }))
     }
     if (sourceType === 'CONDITION') {
       if (value.branch !== 'TRUE' && value.branch !== 'FALSE') {
-        errors.push(location + ' from a CONDITION node must use TRUE or FALSE.')
+        errors.push(issue('conditionBranch', { location }))
       } else {
         const branches = conditionBranches.get(value.source)
-        if (branches?.has(value.branch)) errors.push('Condition "' + value.source + '" has a duplicate ' + value.branch + ' branch.')
+        if (branches?.has(value.branch)) errors.push(issue('duplicateBranch', { id: value.source, branch: value.branch }))
         branches?.add(value.branch)
       }
     }
@@ -263,7 +291,7 @@ export function validateWorkflowGraph(input: unknown): string[] {
 
   conditionBranches.forEach((branches, id) => {
     if (branches.size !== 2 || !branches.has('TRUE') || !branches.has('FALSE')) {
-      errors.push('Condition "' + id + '" must have exactly one TRUE edge and one FALSE edge.')
+      errors.push(issue('conditionEdges', { id }))
     }
   })
 
@@ -272,7 +300,7 @@ export function validateWorkflowGraph(input: unknown): string[] {
   indegree.forEach((degree, id) => {
     if (degree === 0) { ready.push(id); depth.set(id, 1) }
   })
-  if (nodeIds.size > 0 && ready.length === 0) errors.push('DAG has no entry node; check for a cycle.')
+  if (nodeIds.size > 0 && ready.length === 0) errors.push(issue('noEntry'))
   let processed = 0
   let maxDepth = 0
   while (ready.length) {
@@ -287,9 +315,9 @@ export function validateWorkflowGraph(input: unknown): string[] {
       if (nextDegree === 0) ready.push(target)
     }
   }
-  if (processed !== nodeIds.size) errors.push('DAG contains a cycle.')
-  if (maxDepth > MAX_DEPTH) errors.push('DAG depth exceeds 32 nodes.')
-  return [...new Set(errors)].slice(0, 30)
+  if (processed !== nodeIds.size) errors.push(issue('cycle'))
+  if (maxDepth > MAX_DEPTH) errors.push(issue('depth'))
+  return dedupe(errors)
 }
 
 /** Stable starting graph: one valid task node; canvas coordinates are never part of this object. */

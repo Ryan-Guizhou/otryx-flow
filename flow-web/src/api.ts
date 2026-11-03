@@ -3,6 +3,11 @@ export interface Project { id: string; name: string; createdAt: string }
 export type ApiError = Error & { status?: number; code?: string }
 
 let csrfToken = ''
+let onUnauthorized: (() => void) | null = null
+
+export function setUnauthorizedHandler(handler: () => void) {
+  onUnauthorized = handler
+}
 
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
@@ -10,6 +15,7 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (init.method && init.method !== 'GET') headers.set('X-XSRF-TOKEN', csrfToken)
   const response = await fetch(path, { ...init, headers, credentials: 'same-origin' })
   if (!response.ok) {
+    if (response.status === 401 && path !== '/api/v1/auth/login' && path !== '/api/v1/auth/me') onUnauthorized?.()
     const body = await response.json().catch(() => ({})) as { code?: string }
     const error = new Error(body.code ?? `HTTP_${response.status}`) as ApiError
     error.status = response.status
@@ -54,6 +60,8 @@ export interface Job {
   publishedRevision: number
   lastPublishedDraftVersion: number
   updatedAt: string
+  enabled: boolean
+  archived: boolean
 }
 export interface JobDraftInput {
   name: string
@@ -61,6 +69,9 @@ export interface JobDraftInput {
   parametersJson: string
   timeoutSeconds: number
   maxAttempts: number
+}
+export async function getJob(projectId: string, jobId: string): Promise<Job> {
+  return call(`/api/v1/projects/${encodeURIComponent(projectId)}/jobs/${encodeURIComponent(jobId)}`)
 }
 export async function listJobs(projectId: string): Promise<Job[]> {
   return call(`/api/v1/projects/${encodeURIComponent(projectId)}/jobs`)
@@ -73,6 +84,11 @@ export async function createJobDraft(projectId: string, input: JobDraftInput, re
 export async function saveJobDraft(projectId: string, job: Job, input: JobDraftInput): Promise<Job> {
   return call(`/api/v1/projects/${encodeURIComponent(projectId)}/jobs/${encodeURIComponent(job.id)}/draft`, {
     method: 'PUT', body: JSON.stringify({ ...input, expectedDraftVersion: job.draftVersion })
+  })
+}
+export async function archiveJob(projectId: string, job: Job): Promise<Job> {
+  return call(`/api/v1/projects/${encodeURIComponent(projectId)}/jobs/${encodeURIComponent(job.id)}/archive`, {
+    method: 'POST', body: JSON.stringify({ expectedDraftVersion: job.draftVersion })
   })
 }
 export async function publishJob(projectId: string, job: Job, requestKey: string): Promise<Job> {
@@ -135,6 +151,21 @@ export async function createSchedule(projectId: string, input: ScheduleInput, re
 export async function listScheduleTriggers(projectId: string, scheduleId: string): Promise<ScheduleTrigger[]> {
   return call(`/api/v1/projects/${encodeURIComponent(projectId)}/schedules/${encodeURIComponent(scheduleId)}/triggers`)
 }
+export async function updateSchedule(projectId: string, schedule: Schedule, input: ScheduleInput): Promise<Schedule> {
+  return call(`/api/v1/projects/${encodeURIComponent(projectId)}/schedules/${encodeURIComponent(schedule.id)}`, {
+    method: 'PUT', body: JSON.stringify({ ...input, expectedVersion: schedule.version })
+  })
+}
+export async function archiveSchedule(projectId: string, schedule: Schedule): Promise<Schedule> {
+  return call(`/api/v1/projects/${encodeURIComponent(projectId)}/schedules/${encodeURIComponent(schedule.id)}/archive`, {
+    method: 'POST', body: JSON.stringify({ expectedVersion: schedule.version })
+  })
+}
+export async function runScheduleNow(projectId: string, scheduleId: string, requestKey: string): Promise<JobRunResult> {
+  return call(`/api/v1/projects/${encodeURIComponent(projectId)}/schedules/${encodeURIComponent(scheduleId)}/run-now`, {
+    method: 'POST', headers: { 'Idempotency-Key': requestKey }
+  })
+}
 export async function toggleSchedule(projectId: string, scheduleId: string,
   expectedVersion: number, enabled: boolean): Promise<Schedule> {
   return call(`/api/v1/projects/${encodeURIComponent(projectId)}/schedules/${encodeURIComponent(scheduleId)}/enabled`, {
@@ -156,6 +187,75 @@ export interface EngineRun {
   status: 'WAITING_DISPATCH' | 'DISPATCHED' | 'SUCCEEDED' | 'FAILED'
   createdAt: string
 }
+export interface JobRun {
+  id: string
+  projectId: string
+  jobId: string
+  jobRevision: number
+  origin: string
+  status: string
+  controlState: string
+  runVersion: number
+  scheduleId: string | null
+  retryOfRunId: string | null
+  failureCode: string | null
+  createdAt: string
+  startedAt: string | null
+  finishedAt: string | null
+}
+export interface JobRunResult { code: string; runId: string; status: string; duplicate: boolean }
+export interface HandlerDefinition {
+  handlerKey: string
+  displayName: string
+  parameterSchema: string
+  supportsCancel: boolean
+  enabled: boolean
+}
+export interface WorkerRegistration {
+  workerId: string
+  heartbeatAt: string
+  status: string
+  capacity: number
+  occupied: number
+  handlersCsv: string
+  draining: boolean
+}
+export interface OverviewCounts { projects: number; jobs: number; runs: number; workersOnline: number }
+export async function listHandlers(): Promise<HandlerDefinition[]> { return call('/api/v1/handlers') }
+export async function listWorkerRegistrations(): Promise<WorkerRegistration[]> { return call('/api/v1/workers') }
+export async function overviewCounts(): Promise<OverviewCounts> { return call('/api/v1/overview') }
+export async function changePassword(currentPassword: string, nextPassword: string): Promise<void> {
+  await call('/api/v1/auth/change-password', { method: 'POST', body: JSON.stringify({ currentPassword, nextPassword }) })
+}
+export async function startJobRun(projectId: string, jobId: string, jobRevision: number, requestKey: string): Promise<JobRunResult> {
+  return call(`/api/v1/projects/${encodeURIComponent(projectId)}/jobs/${encodeURIComponent(jobId)}/runs`, {
+    method: 'POST', headers: { 'Idempotency-Key': requestKey },
+    body: JSON.stringify({ jobRevision, parameterOverrides: null })
+  })
+}
+export async function listJobRuns(projectId: string, query: Record<string, string> = {}): Promise<JobRun[]> {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(query)) if (value) params.set(key, value)
+  const suffix = params.size ? `?${params.toString()}` : ''
+  return call(`/api/v1/projects/${encodeURIComponent(projectId)}/job-runs${suffix}`)
+}
+export async function jobRunDetail(projectId: string, runId: string): Promise<JobRunDetail> {
+  return call(`/api/v1/projects/${encodeURIComponent(projectId)}/job-runs/${encodeURIComponent(runId)}`)
+}
+export async function cancelJobRun(projectId: string, runId: string, requestKey: string, expectedRunVersion = 0): Promise<JobRunResult> {
+  return call(`/api/v1/projects/${encodeURIComponent(projectId)}/job-runs/${encodeURIComponent(runId)}/cancel`, {
+    method: 'POST', headers: { 'Idempotency-Key': requestKey },
+    body: JSON.stringify({ expectedRunVersion })
+  })
+}
+export async function retryJobRun(projectId: string, runId: string, requestKey: string): Promise<JobRunResult> {
+  return call(`/api/v1/projects/${encodeURIComponent(projectId)}/job-runs/${encodeURIComponent(runId)}/retry`, {
+    method: 'POST', headers: { 'Idempotency-Key': requestKey }
+  })
+}
+export async function jobRunLogs(projectId: string, runId: string): Promise<{ items: { message: string; level: string; createdAt: string }[] }> {
+  return call(`/api/v1/projects/${encodeURIComponent(projectId)}/job-runs/${encodeURIComponent(runId)}/logs`)
+}
 export async function listRuns(projectId: string): Promise<EngineRun[]> {
   return call(`/api/v1/projects/${encodeURIComponent(projectId)}/runs`)
 }
@@ -172,6 +272,20 @@ export interface DispatchTask {
   leaseEpoch: number
   leaseUntilUtc: string | null
   updatedAt: string
+  workerId: string | null
+}
+export interface DispatchAttempt {
+  taskId: string
+  leaseEpoch: number
+  workerId: string
+  status: string
+  startedAt: string
+  finishedAt: string | null
+}
+export interface JobRunDetail {
+  run: JobRun
+  task: DispatchTask | null
+  attempts: DispatchAttempt[]
 }
 export async function listDispatchTasks(projectId: string): Promise<DispatchTask[]> {
   return call(`/api/v1/projects/${encodeURIComponent(projectId)}/dispatch-tasks`)

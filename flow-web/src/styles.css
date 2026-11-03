@@ -14,3 +14,13 @@
 .cron-form label { flex: 1 1 210px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 .cron-form input { width: 100%; padding: 11px 12px; border: 1px solid #dbe1e9; border-radius: 8px; background: white; }
 .cron-form button { white-space: nowrap; }
+.locale-switch{display:inline-flex;border:1px solid #e2e9f2;border-radius:9px;overflow:hidden;background:#fff}
+.locale-switch button{border:0;background:transparent;color:#68778c;font-size:11px;font-weight:700;padding:6px 10px}
+.locale-switch button.selected{background:#edf2ff;color:#3b60bf}
+.boot-screen{position:relative}
+.boot-locale,.login-locale{position:absolute;top:20px;right:20px;z-index:2}
+.login-form-pane{position:relative}
+html[lang="zh-CN"] .eyebrow,html[lang="zh-CN"] .kicker,html[lang="zh-CN"] .workspace-label,html[lang="zh-CN"] .nav-group-label,html[lang="zh-CN"] h1,html[lang="zh-CN"] h2,html[lang="zh-CN"] .login-story h1,html[lang="zh-CN"] .projects-table th{letter-spacing:0}
+html[lang="zh-CN"] .sidebar{width:272px}
+@media(max-width:1100px){html[lang="zh-CN"] .sidebar{width:236px}}
+
