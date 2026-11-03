@@ -3,8 +3,8 @@ spring:
     name: flow-api
   datasource:
     url: ${FLOW_DB_JDBC_URL:jdbc:mysql://localhost:3306/flow_identity?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
-    username: ${FLOW_DB_USER:flow_app}
-    password: ${FLOW_DB_PASSWORD:}
+    username: ${FLOW_DB_USER:root}
+    password: ${FLOW_DB_PASSWORD:123456}
   flyway:
     enabled: true
 server:
@@ -21,8 +21,8 @@ flow:
     lock-seconds: ${FLOW_AUTH_LOCK_SECONDS:900}
   bootstrap:
     admin-username: ${FLOW_ADMIN_USERNAME:admin}
-    admin-password: ${FLOW_ADMIN_PASSWORD:}
-    demo-guest-password: ${FLOW_DEMO_GUEST_PASSWORD:}
+    admin-password: ${FLOW_ADMIN_PASSWORD:LocalAdmin1234}
+    demo-guest-password: ${FLOW_DEMO_GUEST_PASSWORD:LocalAdmin1234}
 # 本机多服务同机启动时不单独开管理端口，避免都绑定 9091。容器内抓取指标时再打开。
 #management:
 #  server:

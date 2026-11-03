@@ -3,8 +3,8 @@ spring:
     name: flow-metadata
   datasource:
     url: ${FLOW_DB_JDBC_URL:jdbc:mysql://localhost:3306/flow_metadata?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
-    username: ${FLOW_DB_USER:flow_app}
-    password: ${FLOW_DB_PASSWORD:}
+    username: ${FLOW_DB_USER:root}
+    password: ${FLOW_DB_PASSWORD:123456}
   flyway:
     enabled: true
 server:
