@@ -1,5 +1,6 @@
 package com.peachsoft.otryx.flow.api.run;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.peachsoft.otryx.flow.api.audit.FlowAuditRecorder;
@@ -61,7 +62,8 @@ public class JobExecutionController {
     private static final String RPC = "1.0.0";
     private static final String KEY = "[a-zA-Z0-9_-]{16,80}";
     private static final int MAX_OVERRIDE_BYTES = 16 * 1024;
-    private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper()
+            .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
     @OtryxRpcReference(version = RPC) private JobRunRpc runs;
     @OtryxRpcReference(version = RPC) private JobRpc jobs;
     @OtryxRpcReference(version = RPC) private DispatcherRpc dispatcher;
