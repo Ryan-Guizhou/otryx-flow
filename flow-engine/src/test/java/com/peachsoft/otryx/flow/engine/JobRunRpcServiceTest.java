@@ -66,7 +66,7 @@ class JobRunRpcServiceTest {
     @Test
     void cancelIsIdempotentAndRetryKeepsTheOldRun() {
         var created = service.startManual(new StartManualJobRunCommand("admin", PROJECT, JOB, 1,
-                "request-key-abcdef12", "{\\\"value\\\":7}", null));
+                "request-key-abcdef12", "{\"value\":7}", null));
         var cancel = service.cancel(new CancelJobRunCommand("admin", PROJECT, created.runId(),
                 "cancel-key-01234567", 1));
         var again = service.cancel(new CancelJobRunCommand("admin", PROJECT, created.runId(),
@@ -82,7 +82,7 @@ class JobRunRpcServiceTest {
         assertEquals("CONFLICT", premature.code());
         assertEquals("RETRY", service.detail("admin", PROJECT, retried.runId()).origin());
         assertNotEquals(created.runId(), retried.runId());
-        assertEquals("{\\\"value\\\":7}", jdbc.queryForObject(
+        assertEquals("{\"value\":7}", jdbc.queryForObject(
                 "SELECT parameter_override FROM flow_workflow_run WHERE id=?", String.class, retried.runId()));
         assertEquals("CANCELLED", service.detail("admin", PROJECT, created.runId()).status());
     }
@@ -90,7 +90,7 @@ class JobRunRpcServiceTest {
     @Test
     void parameterOverridesMustBeBoundedJsonObjects() {
         assertEquals("CREATED", service.startManual(command("valid-object-0123456",
-                "{\\\"nested\\\":{\\\"x\\\":1}}")).code());
+                "{\"nested\":{\"x\":1}}")).code());
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
                 () -> service.startManual(command("invalid-array-0123456", "[1,2]")));
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
