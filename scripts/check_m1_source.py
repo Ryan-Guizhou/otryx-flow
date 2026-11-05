@@ -147,7 +147,7 @@ assert 'logsRequireRunOwnershipAndDelegateOnlyThatRunsNodeIds' in files['flow-ap
 assert 'handlerLogsAreFlushedAsynchronouslyThroughTheBoundedQueue' in files['flow-worker-sdk/src/test/java/com/peachsoft/otryx/flow/worker/sdk/WorkerRuntimeTest.java']
 assert 'getWorkflowRevision' in files['flow-web/src/DagRunPanel.vue']
 assert 'pagedRuns' in files['flow-web/src/DagRunPanel.vue']
-assert 'Retry same request' in files['flow-web/src/DagRunPanel.vue']
+assert 'retryDagNode' in files['flow-web/src/DagRunPanel.vue'] and "t('dag.retrySame')" in files['flow-web/src/DagRunPanel.vue']
 assert 'logs?limit=100' in (root/'scripts/test_m3_dag_e2e.sh').read_text(encoding='utf-8')
 assert 'Handler execution started' in (root/'scripts/test_m3_dag_e2e.sh').read_text(encoding='utf-8')
 print(f'PASS: M1/M2/M3 static contracts ({len(files)} source/config files)')
