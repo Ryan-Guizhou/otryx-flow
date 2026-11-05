@@ -217,9 +217,13 @@ public class JobRpcService implements JobRpc {
             if (current.archived() && !archive) return reply(CONFLICT, current, false);
             boolean nextEnabled = archive ? false : enabled;
             boolean nextArchived = archive || current.archived();
-            jdbc.update("UPDATE flow_job_definition SET enabled=?, archived=?, draft_version=draft_version+1, "
-                            + "updated_at=? WHERE id=? AND draft_version=?",
-                    nextEnabled, nextArchived, Timestamp.from(Instant.now()), id, expectedDraftVersion);
+            long nextDraftVersion = current.draftVersion() + 1;
+            long nextPublishedDraftVersion = current.lastPublishedDraftVersion() == current.draftVersion()
+                    ? nextDraftVersion : current.lastPublishedDraftVersion();
+            jdbc.update("UPDATE flow_job_definition SET enabled=?, archived=?, draft_version=?, "
+                            + "last_published_draft_version=?, updated_at=? WHERE id=? AND draft_version=?",
+                    nextEnabled, nextArchived, nextDraftVersion, nextPublishedDraftVersion,
+                    Timestamp.from(Instant.now()), id, expectedDraftVersion);
             return reply(OK, getJob(owner, project, id, false), false);
         });
     }
