@@ -249,6 +249,25 @@ class DispatcherRpcServiceTest {
     }
 
     @Test
+    void leasedDagWorkerIsFencedImmediatelyAfterDagCancellation() {
+        var command = event(2);
+        service.enqueue(command);
+        DispatchLeaseView lease = service.claim(new DispatchLeaseCommand(
+                "worker-one", "safe.echo", 1)).leases()[0];
+        var cancel = new DispatchCancelCommand(command.runId(), "admin", PROJECT, SCHEDULE, JOB, 1);
+        assertEquals("CANCELLED", service.cancelDagTask(cancel).taskStatus());
+        assertEquals("STALE", service.heartbeat(new DispatchHeartbeatCommand(
+                "worker-one", lease.taskId(), lease.leaseEpoch(), lease.leaseToken())).code());
+        assertEquals("STALE", service.complete(new DispatchCompleteCommand(
+                "worker-one", lease.taskId(), lease.leaseEpoch(), lease.leaseToken(), "SUCCEEDED")).code());
+        assertEquals("CANCELLED", jdbc.queryForObject(
+                "SELECT status FROM flow_dispatch_attempt WHERE task_id=? AND lease_epoch=?",
+                String.class, lease.taskId(), lease.leaseEpoch()));
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM flow_dispatch_outcome_outbox", Integer.class));
+    }
+
+    @Test
     void persistedCancellationWinsIfWorkerReportsFailureBeforeNextHeartbeat() {
         var command = event(2);
         service.enqueue(command);
