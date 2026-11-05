@@ -23,6 +23,7 @@ import com.peachsoft.otryx.flow.contracts.v1.DispatchTaskListReply;
 import com.peachsoft.otryx.flow.contracts.v1.DispatcherRpc;
 import java.time.Duration;
 import java.time.Instant;
+import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -134,6 +135,49 @@ class WorkerRuntimeTest {
             assertTrue(rpc.completed.await(5, TimeUnit.SECONDS));
             assertEquals("CANCELLED", rpc.outcome.get());
             assertTrue(await(Duration.ofSeconds(3), () -> runtime.activeCount() == 0));
+        }
+    }
+
+    @Test
+    void nonCooperativeHandlerCannotCompleteAfterLeaseExpiry() throws Exception {
+        FakeDispatcher rpc = new FakeDispatcher();
+        rpc.cancelRequested.set(true);
+        CountDownLatch began = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicInteger interrupts = new AtomicInteger();
+        try (WorkerRuntime runtime = new WorkerRuntime(rpc, settings(1, 10), Map.of("safe.echo", (payload, ctx) -> {
+            began.countDown();
+            while (true) {
+                try {
+                    if (release.await(100, TimeUnit.MILLISECONDS)) return;
+                } catch (InterruptedException ignored) {
+                    // Deliberately simulate a third-party Handler that ignores interruption.
+                    interrupts.incrementAndGet();
+                }
+            }
+        }))) {
+            runtime.start();
+            assertTrue(began.await(5, TimeUnit.SECONDS));
+            assertTrue(await(Duration.ofSeconds(5), () -> interrupts.get() >= 1));
+
+            Field runningField = WorkerRuntime.class.getDeclaredField("running");
+            runningField.setAccessible(true);
+            Map<?, ?> running = (Map<?, ?>) runningField.get(runtime);
+            Object task = running.values().iterator().next();
+            Field leaseDeadline = task.getClass().getDeclaredField("leaseDeadline");
+            leaseDeadline.setAccessible(true);
+            leaseDeadline.set(task, Instant.now().minusSeconds(1));
+            runtime.tickOnce();
+
+            assertTrue(await(Duration.ofSeconds(3), () -> interrupts.get() >= 2));
+            assertEquals(1, runtime.activeCount(), "A non-cooperative Handler still owns its local slot");
+            assertEquals(0, rpc.completionCount.get(), "Expired leases must not report a stale completion");
+
+            release.countDown();
+            assertTrue(await(Duration.ofSeconds(5), () -> runtime.activeCount() == 0));
+            assertEquals(0, rpc.completionCount.get(), "The fenced Worker must not complete after it exits");
+        } finally {
+            release.countDown();
         }
     }
 
