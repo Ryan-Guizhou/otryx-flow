@@ -1,5 +1,7 @@
 package com.peachsoft.otryx.flow.engine;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.peachsoft.otryx.flow.contracts.v1.CancelJobRunCommand;
 import com.peachsoft.otryx.flow.contracts.v1.JobRunListReply;
 import com.peachsoft.otryx.flow.contracts.v1.JobRunMutationReply;
@@ -38,6 +40,8 @@ public class JobRunRpcService implements JobRunRpc {
     private static final Pattern KEY = Pattern.compile("[a-zA-Z0-9_-]{16,80}");
     private static final int MAX_RUNS = 100;
     private static final String WAITING = "WAITING_DISPATCH";
+    private static final int MAX_OVERRIDE_BYTES = 16 * 1024;
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
     private final JdbcTemplate jdbc;
     private final TransactionTemplate tx;
 
@@ -57,7 +61,24 @@ public class JobRunRpcService implements JobRunRpc {
         if (command.jobRevision() < 1) throw new IllegalArgumentException("Invalid job revision");
         String retry = command.retryOfRunId() == null || command.retryOfRunId().isBlank()
                 ? null : uuid(command.retryOfRunId());
-        String override = normalizeOverride(command.parameterOverrideJson());
+        String override;
+        if (retry == null) {
+            override = normalizeOverride(command.parameterOverrideJson());
+        } else {
+            List<RetrySource> sources = jdbc.query("SELECT job_id, job_revision, status, parameter_override "
+                            + "FROM flow_workflow_run WHERE id=? AND owner_username=? AND project_id=?",
+                    (rs, index) -> new RetrySource(rs.getString("job_id"), rs.getInt("job_revision"),
+                            rs.getString("status"), rs.getString("parameter_override")),
+                    retry, owner, project);
+            if (sources.isEmpty()) return new JobRunMutationReply("NOT_FOUND", null, null, false);
+            RetrySource source = sources.getFirst();
+            if (!job.equals(source.jobId()) || command.jobRevision() != source.jobRevision()
+                    || !("FAILED".equals(source.status()) || "CANCELLED".equals(source.status())
+                    || "SUCCEEDED".equals(source.status()))) {
+                return new JobRunMutationReply("CONFLICT", retry, source.status(), false);
+            }
+            override = normalizeOverride(source.parameterOverride());
+        }
         String origin = retry == null ? "MANUAL" : "RETRY";
         String fingerprint = fingerprint(owner, project, job, command.jobRevision(), key, override, retry);
         JobRunMutationReply previous = replay(owner, key, fingerprint);
@@ -170,12 +191,22 @@ public class JobRunRpcService implements JobRunRpc {
     }
 
     private static String normalizeOverride(String json) {
-        if (json == null || json.isBlank() || "{}".equals(json)) return null;
-        if (json.getBytes(StandardCharsets.UTF_8).length > 16 * 1024) {
+        if (json == null || json.isBlank() || "{}".equals(json.trim())) return null;
+        if (json.getBytes(StandardCharsets.UTF_8).length > MAX_OVERRIDE_BYTES) {
             throw new IllegalArgumentException("Invalid parameter override");
         }
-        return json;
+        try {
+            JsonNode value = JSON_MAPPER.readTree(json);
+            if (value == null || !value.isObject()) {
+                throw new IllegalArgumentException("Parameter override must be a JSON object");
+            }
+            return json;
+        } catch (com.fasterxml.jackson.core.JsonProcessingException invalid) {
+            throw new IllegalArgumentException("Invalid parameter override JSON", invalid);
+        }
     }
+
+    private record RetrySource(String jobId, int jobRevision, String status, String parameterOverride) { }
 
     private static String fingerprint(String owner, String project, String job, int revision, String key,
             String override, String retry) {
