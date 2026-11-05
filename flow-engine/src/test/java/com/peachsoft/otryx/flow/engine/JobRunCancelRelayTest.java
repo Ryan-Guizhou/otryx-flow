@@ -1,6 +1,7 @@
 package com.peachsoft.otryx.flow.engine;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -11,6 +12,10 @@ import com.peachsoft.otryx.flow.contracts.v1.DispatcherRpc;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -89,6 +94,64 @@ class JobRunCancelRelayTest {
         assertEquals(0, relay.relayOnce());
         verifyNoInteractions(dispatcher);
         assertEquals("IN_FLIGHT", outboxState());
+    }
+
+    @Test
+    void rpcFailureSchedulesRetryUsingDatabaseClock() {
+        insertRun();
+        insertOutbox("PENDING", Timestamp.from(Instant.now().minusSeconds(1)));
+        when(dispatcher.cancelTask(any())).thenThrow(new IllegalStateException("dispatcher unavailable"));
+
+        assertEquals(0, relay.relayOnce());
+        assertEquals("PENDING", outboxState());
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT attempts FROM flow_engine_run_cancel_outbox WHERE run_id=?", Integer.class, RUN));
+        assertTrue(jdbc.queryForObject("SELECT next_attempt_at > CURRENT_TIMESTAMP(3) "
+                + "FROM flow_engine_run_cancel_outbox WHERE run_id=?", Boolean.class, RUN));
+
+        jdbc.update("UPDATE flow_engine_run_cancel_outbox SET next_attempt_at=TIMESTAMP '2000-01-01 00:00:00' "
+                + "WHERE run_id=?", RUN);
+        when(dispatcher.cancelTask(any())).thenReturn(
+                new DispatchCancelReply("CANCEL_REQUESTED", "CANCEL_REQUESTED"));
+        assertEquals(1, relay.relayOnce());
+        assertEquals("DELIVERED", outboxState());
+        assertEquals(2, jdbc.queryForObject(
+                "SELECT attempts FROM flow_engine_run_cancel_outbox WHERE run_id=?", Integer.class, RUN));
+    }
+
+    @Test
+    void expiredClaimCannotAcknowledgeAfterAnotherRelayTakesOwnership() throws Exception {
+        insertRun();
+        insertOutbox("PENDING", Timestamp.from(Instant.now().minusSeconds(1)));
+        CountDownLatch firstEntered = new CountDownLatch(1);
+        CountDownLatch releaseFirst = new CountDownLatch(1);
+        AtomicInteger calls = new AtomicInteger();
+        when(dispatcher.cancelTask(any())).thenAnswer(invocation -> {
+            if (calls.incrementAndGet() == 1) {
+                firstEntered.countDown();
+                assertTrue(releaseFirst.await(5, TimeUnit.SECONDS));
+                return new DispatchCancelReply("CANCELLED", "CANCELLED");
+            }
+            return new DispatchCancelReply("CANCEL_REQUESTED", "CANCEL_REQUESTED");
+        });
+
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            var first = executor.submit(relay::relayOnce);
+            assertTrue(firstEntered.await(5, TimeUnit.SECONDS));
+            jdbc.update("UPDATE flow_engine_run_cancel_outbox SET lease_until=TIMESTAMP '2000-01-01 00:00:00' "
+                    + "WHERE run_id=?", RUN);
+
+            assertEquals(1, relay.relayOnce());
+            assertEquals("CANCEL_REQUESTED", runStatus());
+            releaseFirst.countDown();
+            assertEquals(0, first.get(5, TimeUnit.SECONDS));
+            assertEquals("CANCEL_REQUESTED", runStatus());
+            assertEquals("DELIVERED", outboxState());
+            assertEquals(2, jdbc.queryForObject(
+                    "SELECT attempts FROM flow_engine_run_cancel_outbox WHERE run_id=?", Integer.class, RUN));
+        } finally {
+            releaseFirst.countDown();
+        }
     }
 
     private void insertRun() {
