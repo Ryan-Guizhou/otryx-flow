@@ -138,6 +138,8 @@ export const zhCN: typeof en = {
     edit: '编辑草稿',
     publish: '发布修订',
     run: '立即运行',
+    enable: '启用',
+    disable: '禁用',
     emptyTitle: '此项目还没有任务',
     emptyBody: '创建 Handler 草稿，发布修订，然后在执行节点在线时运行。',
   },
