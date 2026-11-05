@@ -98,7 +98,7 @@ assert 'COPY flow-scheduler-core ./flow-scheduler-core' in (root/'deploy/Dockerf
 assert 'flow-metadata/src/main/resources/db/migration/V3__workflow_definition.sql' in files
 assert 'flow_workflow_revision' in src and 'graph_sha256' in src
 assert 'WorkflowDagValidator.validate' in files['flow-metadata/src/main/java/com/peachsoft/otryx/flow/metadata/workflow/WorkflowDefinitionGraph.java']
-assert "hasRole('ADMIN')" in files['flow-api/src/main/java/com/peachsoft/otryx/flow/api/workflow/WorkflowController.java']
+assert "hasAnyRole('ADMIN','OPERATOR')" in files['flow-api/src/main/java/com/peachsoft/otryx/flow/api/workflow/WorkflowController.java']
 assert (root/'scripts/test_m3_workflow_e2e.sh').is_file()
 assert 'FLOW_E2E_M3_WORKFLOWS' in (root/'.github/workflows/m1-integration.yml').read_text(encoding='utf-8')
 assert 'bash scripts/test_m3_workflow_e2e.sh' in (root/'scripts/test_m1_e2e.sh').read_text(encoding='utf-8')
