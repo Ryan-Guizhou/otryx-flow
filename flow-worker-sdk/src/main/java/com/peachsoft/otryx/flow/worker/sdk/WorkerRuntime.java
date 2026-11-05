@@ -310,10 +310,11 @@ public final class WorkerRuntime implements AutoCloseable {
                     task.lease.handlerKey(),
                     failed.getClass().getSimpleName());
         } finally {
+            boolean restoreInterrupt = Thread.interrupted();
             totalExecutionNanos.addAndGet(Math.max(0L, System.nanoTime() - startedNanos));
             if (success) {
                 completedTasks.incrementAndGet();
-            } else if (task.cancelled.get() || Thread.currentThread().isInterrupted()) {
+            } else if (task.cancelled.get() || restoreInterrupt) {
                 cancelledTasks.incrementAndGet();
             } else {
                 failedTasks.incrementAndGet();
@@ -325,6 +326,7 @@ public final class WorkerRuntime implements AutoCloseable {
             }
             running.remove(task.lease.taskId(), task);
             capacity.release(); // The slot is freed only after the handler body actually exits.
+            if (restoreInterrupt) Thread.currentThread().interrupt();
         }
     }
 
