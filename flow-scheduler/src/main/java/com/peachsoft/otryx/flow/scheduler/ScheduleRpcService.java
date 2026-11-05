@@ -1,6 +1,7 @@
 package com.peachsoft.otryx.flow.scheduler;
 
 import com.peachsoft.otryx.flow.contracts.v1.JobRpc;
+import com.peachsoft.otryx.flow.contracts.v1.JobView;
 import com.peachsoft.otryx.flow.contracts.v1.ScheduleCreateCommand;
 import com.peachsoft.otryx.flow.contracts.v1.ScheduleListReply;
 import com.peachsoft.otryx.flow.contracts.v1.ScheduleMutationReply;
@@ -70,10 +71,9 @@ public class ScheduleRpcService implements ScheduleRpc {
         String fingerprint = fingerprint(project, job, command);
         ScheduleView prior = existingByKey(owner, key);
         if (prior != null) return replay(prior, project, job, command, fingerprint);
-        // Cross-service auth is performed via a bounded RPC outside any Scheduler DB transaction.
-        if (jobs.revision(owner, project, job, command.jobRevision()) == null) {
-            return reply(NOT_FOUND, null, false);
-        }
+        // Cross-service authorization and revision checks stay outside Scheduler DB transactions.
+        String jobValidation = validateActiveJob(owner, project, job, command.jobRevision());
+        if (jobValidation != null) return reply(jobValidation, null, false);
         try {
             return tx.execute(ignored -> {
                 String id = UUID.randomUUID().toString();
@@ -160,7 +160,8 @@ public class ScheduleRpcService implements ScheduleRpc {
         String id = uuid(command.scheduleId());
         String job = uuid(command.jobId());
         SchedulePlanner.MisfirePolicy.valueOf(command.misfirePolicy());
-        if (jobs.revision(owner, project, job, command.jobRevision()) == null) return reply(NOT_FOUND, null, false);
+        String jobValidation = validateActiveJob(owner, project, job, command.jobRevision());
+        if (jobValidation != null) return reply(jobValidation, null, false);
         Instant next = planner.next(command.expression(), command.timeZone(), Instant.now());
         return tx.execute(ignored -> {
             ScheduleView current = owned(owner, project, id);
@@ -194,6 +195,13 @@ public class ScheduleRpcService implements ScheduleRpc {
                     id, expectedVersion);
             return reply(OK, owned(owner, project, id), false);
         });
+    }
+
+    private String validateActiveJob(String owner, String project, String job, int revision) {
+        JobView definition = jobs.get(owner, project, job);
+        if (definition == null) return NOT_FOUND;
+        if (!definition.enabled() || definition.archived()) return CONFLICT;
+        return jobs.revision(owner, project, job, revision) == null ? NOT_FOUND : null;
     }
 
     private ScheduleMutationReply replay(ScheduleView schedule, String project, String job,
