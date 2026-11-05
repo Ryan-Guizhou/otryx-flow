@@ -91,6 +91,11 @@ export async function archiveJob(projectId: string, job: Job): Promise<Job> {
     method: 'POST', body: JSON.stringify({ expectedDraftVersion: job.draftVersion })
   })
 }
+export async function setJobEnabled(projectId: string, job: Job, enabled: boolean): Promise<Job> {
+  return call(`/api/v1/projects/${encodeURIComponent(projectId)}/jobs/${encodeURIComponent(job.id)}/enabled`, {
+    method: 'POST', body: JSON.stringify({ enabled, expectedDraftVersion: job.draftVersion })
+  })
+}
 export async function publishJob(projectId: string, job: Job, requestKey: string): Promise<Job> {
   return call(`/api/v1/projects/${encodeURIComponent(projectId)}/jobs/${encodeURIComponent(job.id)}/publish`, {
     method: 'POST', headers: { 'Idempotency-Key': requestKey },
