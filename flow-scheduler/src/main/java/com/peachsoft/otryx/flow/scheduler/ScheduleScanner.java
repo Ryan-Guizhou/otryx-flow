@@ -25,6 +25,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * 多实例行锁扫描器：READ_COMMITTED / SKIP_LOCKED / 唯一 Fire / 同事务 Outbox。
  * <p>整个数据库事务内禁止 RPC；ScheduleOutboxRelay 在事务外转发已提交火点。
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/5 14:00
  */
 @Component
 public class ScheduleScanner {
