@@ -1,6 +1,7 @@
 package com.peachsoft.otryx.flow.scheduler;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.peachsoft.otryx.flow.contracts.v1.JobRevisionView;
@@ -20,7 +21,13 @@ import org.springframework.test.util.ReflectionTestUtils;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-/** 两个独立 Scanner 对同一共享数据库抢占同一个到期游标，最多写入一个逻辑火点。 */
+/**
+ * 两个独立 Scanner 对同一共享数据库抢占同一个到期游标，最多写入一个逻辑火点。
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/5 14:00
+ */
 class ScheduleScannerTest {
     @Test
     void duplicateScannersCommitSingleTriggerAndMatchingOutbox() throws Exception {
