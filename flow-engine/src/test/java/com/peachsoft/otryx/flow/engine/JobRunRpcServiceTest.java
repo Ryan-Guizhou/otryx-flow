@@ -95,6 +95,8 @@ class JobRunRpcServiceTest {
                 () -> service.startManual(command("invalid-array-0123456", "[1,2]")));
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
                 () -> service.startManual(command("invalid-json-0123456", "{not-json}")));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> service.startManual(command("trailing-json-0123456", "{\"valid\":true} {\"extra\":true}")));
     }
 
     private static StartManualJobRunCommand command(String key, String override) {
