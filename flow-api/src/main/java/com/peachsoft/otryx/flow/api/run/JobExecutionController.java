@@ -79,15 +79,21 @@ public class JobExecutionController {
         if (!allowed(user, projectId)) return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(Map.of("code", "PROJECT_NOT_FOUND"));
         JobView definition = jobs.get(user.getName(), projectId, jobId);
-        if (definition == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("code", "JOB_NOT_FOUND"));
+        if (definition == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("code", "JOB_NOT_FOUND"));
+        }
         if (!definition.enabled() || definition.archived()) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("code", "JOB_DISABLED"));
         }
         JobRevisionView revision = jobs.revision(user.getName(), projectId, jobId, body.jobRevision());
-        if (revision == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("code", "JOB_REVISION_NOT_FOUND"));
+        if (revision == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("code", "JOB_REVISION_NOT_FOUND"));
+        }
         if (body.parameterOverrides() != null && !body.parameterOverrides().isBlank()) {
             if (!validParameterOverride(body.parameterOverrides())) return bad("INVALID_PARAMETER_OVERRIDE");
-            if (!HandlerPolicy.allowed(revision.handlerKey(), body.parameterOverrides())) return bad("HANDLER_REJECTED");
+            if (!HandlerPolicy.allowed(revision.handlerKey(), body.parameterOverrides())) {
+                return bad("HANDLER_REJECTED");
+            }
         }
         if (!handlerReady(revision.handlerKey())) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("code", "HANDLER_UNAVAILABLE"));
@@ -164,7 +170,9 @@ public class JobExecutionController {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("code", "RUN_NOT_TERMINAL"));
         }
         JobView definition = jobs.get(user.getName(), projectId, previous.jobId());
-        if (definition == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("code", "JOB_NOT_FOUND"));
+        if (definition == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("code", "JOB_NOT_FOUND"));
+        }
         if (!definition.enabled() || definition.archived()) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("code", "JOB_DISABLED"));
         }
@@ -235,7 +243,9 @@ public class JobExecutionController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("code", "SCHEDULE_NOT_FOUND"));
         }
         JobView definition = jobs.get(user.getName(), projectId, schedule.jobId());
-        if (definition == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("code", "JOB_NOT_FOUND"));
+        if (definition == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("code", "JOB_NOT_FOUND"));
+        }
         if (!definition.enabled() || definition.archived()) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("code", "JOB_DISABLED"));
         }
