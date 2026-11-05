@@ -81,6 +81,45 @@ code="$(curl --max-time 12 -sS -o /dev/null -w '%{http_code}' -b "$FLOW_M2_COOKI
   -H 'Content-Type: application/json' -H "X-XSRF-TOKEN: $FLOW_M2_TOKEN" \
   -d "{\"expectedVersion\":$version,\"enabled\":true}" "$URL/$SCHEDULE_ID/enabled")"
 [ "$code" = 409 ] || { echo "Stale schedule toggle expected 409, got $code"; exit 1; }
+
+paused_version="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["version"])' "$WORK/paused.json")"
+code="$(curl --max-time 12 -sS -o "$WORK/resumed.json" -w '%{http_code}' -b "$FLOW_M2_COOKIE" \
+  -H 'Content-Type: application/json' -H "X-XSRF-TOKEN: $FLOW_M2_TOKEN" \
+  -d "{\"expectedVersion\":$paused_version,\"enabled\":true}" "$URL/$SCHEDULE_ID/enabled")"
+[ "$code" = 200 ] || { echo "Resume expected 200, got $code"; cat "$WORK/resumed.json"; exit 1; }
+resumed_version="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["version"])' "$WORK/resumed.json")"
+cat > "$WORK/update.json" <<JSON
+{"expectedVersion":$resumed_version,"jobId":"$FLOW_M2_JOB_ID","jobRevision":2,"expression":"*/10 * * * * *","timeZone":"Etc/UTC","misfirePolicy":"SKIP"}
+JSON
+code="$(curl --max-time 12 -sS -o "$WORK/updated.json" -w '%{http_code}' -X PUT -b "$FLOW_M2_COOKIE" \
+  -H 'Content-Type: application/json' -H "X-XSRF-TOKEN: $FLOW_M2_TOKEN" \
+  --data-binary @"$WORK/update.json" "$URL/$SCHEDULE_ID")"
+[ "$code" = 200 ] || { echo "Cron update expected 200, got $code"; cat "$WORK/updated.json"; exit 1; }
+python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));assert d["expression"]=="*/10 * * * * *" and d["misfirePolicy"]=="SKIP" and d["scheduleRevision"]==2' "$WORK/updated.json"
+
+# The Schedule panel's immediate action is a real Job Run, not a synthetic Cron fire.
+docker compose --profile worker-demo up -d flow-worker-demo
+worker_ready=0
+for attempt in $(seq 1 25); do
+  curl --max-time 8 -fsS -b "$FLOW_M2_COOKIE" "$BASE/api/v1/workers" > "$WORK/workers.json" || true
+  if python3 -c 'import json,sys;rows=json.load(open(sys.argv[1]));assert any(r["status"]=="ONLINE" and "safe.echo" in r["handlersCsv"].split(",") for r in rows)' "$WORK/workers.json" 2>/dev/null; then worker_ready=1; break; fi
+  sleep 2
+done
+[ "$worker_ready" = 1 ] || { echo 'No online Worker for Cron Run now acceptance'; exit 1; }
+RUN_KEY="$(python3 -c 'import uuid;print(uuid.uuid4())')"
+code="$(curl --max-time 12 -sS -o "$WORK/run-now.json" -w '%{http_code}' -b "$FLOW_M2_COOKIE" \
+  -H "X-XSRF-TOKEN: $FLOW_M2_TOKEN" -H "Idempotency-Key: $RUN_KEY" \
+  -X POST "$BASE/api/v1/projects/$FLOW_M2_PROJECT_ID/schedules/$SCHEDULE_ID/run-now")"
+[ "$code" = 202 ] || { echo "Cron Run now expected 202, got $code"; cat "$WORK/run-now.json"; exit 1; }
+RUN_ID="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["runId"])' "$WORK/run-now.json")"
+run_success=0
+for attempt in $(seq 1 30); do
+  run_state="$(mysql_query "SELECT status FROM flow_workflow_run WHERE id='$RUN_ID'" || true)"
+  if [ "$run_state" = "SUCCEEDED" ]; then run_success=1; break; fi
+  sleep 1
+done
+[ "$run_success" = 1 ] || { echo "Cron Run now did not complete: ${run_state:-missing}"; exit 1; }
+
 if [ "${FLOW_E2E_M2_ENGINE:-0}" = 1 ]; then
   FLOW_M2_SCHEDULE_ID="$SCHEDULE_ID" bash scripts/test_m2_engine_e2e.sh
 fi

@@ -1,6 +1,10 @@
 package com.peachsoft.otryx.flow.api.run;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.peachsoft.otryx.flow.api.audit.FlowAuditRecorder;
+import com.peachsoft.otryx.flow.api.job.HandlerPolicy;
 import com.peachsoft.otryx.flow.contracts.v1.CancelJobRunCommand;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchLogPageView;
 import com.peachsoft.otryx.flow.contracts.v1.DispatchTaskView;
@@ -9,6 +13,7 @@ import com.peachsoft.otryx.flow.contracts.v1.HandlerCatalogRpc;
 import com.peachsoft.otryx.flow.contracts.v1.HandlerDefinitionView;
 import com.peachsoft.otryx.flow.contracts.v1.JobRevisionView;
 import com.peachsoft.otryx.flow.contracts.v1.JobRpc;
+import com.peachsoft.otryx.flow.contracts.v1.JobView;
 import com.peachsoft.otryx.flow.contracts.v1.JobRunMutationReply;
 import com.peachsoft.otryx.flow.contracts.v1.JobRunRpc;
 import com.peachsoft.otryx.flow.contracts.v1.JobRunView;
@@ -56,6 +61,9 @@ import org.springframework.web.bind.annotation.RestController;
 public class JobExecutionController {
     private static final String RPC = "1.0.0";
     private static final String KEY = "[a-zA-Z0-9_-]{16,80}";
+    private static final int MAX_OVERRIDE_BYTES = 16 * 1024;
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper()
+            .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
     @OtryxRpcReference(version = RPC) private JobRunRpc runs;
     @OtryxRpcReference(version = RPC) private JobRpc jobs;
     @OtryxRpcReference(version = RPC) private DispatcherRpc dispatcher;
@@ -72,8 +80,23 @@ public class JobExecutionController {
         if (!id(projectId) || !id(jobId) || key == null || !key.matches(KEY)) return bad("INVALID_RUN_REQUEST");
         if (!allowed(user, projectId)) return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(Map.of("code", "PROJECT_NOT_FOUND"));
+        JobView definition = jobs.get(user.getName(), projectId, jobId);
+        if (definition == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("code", "JOB_NOT_FOUND"));
+        }
+        if (!definition.enabled() || definition.archived()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("code", "JOB_DISABLED"));
+        }
         JobRevisionView revision = jobs.revision(user.getName(), projectId, jobId, body.jobRevision());
-        if (revision == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("code", "JOB_NOT_FOUND"));
+        if (revision == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("code", "JOB_REVISION_NOT_FOUND"));
+        }
+        if (body.parameterOverrides() != null && !body.parameterOverrides().isBlank()) {
+            if (!validParameterOverride(body.parameterOverrides())) return bad("INVALID_PARAMETER_OVERRIDE");
+            if (!HandlerPolicy.allowed(revision.handlerKey(), body.parameterOverrides())) {
+                return bad("HANDLER_REJECTED");
+            }
+        }
         if (!handlerReady(revision.handlerKey())) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("code", "HANDLER_UNAVAILABLE"));
         }
@@ -148,6 +171,13 @@ public class JobExecutionController {
                 && !"SUCCEEDED".equals(previous.status())) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("code", "RUN_NOT_TERMINAL"));
         }
+        JobView definition = jobs.get(user.getName(), projectId, previous.jobId());
+        if (definition == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("code", "JOB_NOT_FOUND"));
+        }
+        if (!definition.enabled() || definition.archived()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("code", "JOB_DISABLED"));
+        }
         JobRevisionView revision = jobs.revision(user.getName(), projectId, previous.jobId(), previous.jobRevision());
         if (revision == null || !handlerReady(revision.handlerKey())) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("code", "HANDLER_UNAVAILABLE"));
@@ -214,6 +244,13 @@ public class JobExecutionController {
         if (schedule == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("code", "SCHEDULE_NOT_FOUND"));
         }
+        JobView definition = jobs.get(user.getName(), projectId, schedule.jobId());
+        if (definition == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("code", "JOB_NOT_FOUND"));
+        }
+        if (!definition.enabled() || definition.archived()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("code", "JOB_DISABLED"));
+        }
         JobRevisionView revision = jobs.revision(user.getName(), projectId, schedule.jobId(), schedule.jobRevision());
         if (revision == null || !handlerReady(revision.handlerKey())) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("code", "HANDLER_UNAVAILABLE"));
@@ -249,6 +286,19 @@ public class JobExecutionController {
         Instant created = Instant.parse(createdAt);
         if (start != null && created.isBefore(start)) return false;
         return end == null || !created.isAfter(end);
+    }
+
+    private static boolean validParameterOverride(String json) {
+        if (json == null || json.isBlank()
+                || json.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_OVERRIDE_BYTES) {
+            return false;
+        }
+        try {
+            JsonNode value = JSON_MAPPER.readTree(json);
+            return value != null && value.isObject();
+        } catch (com.fasterxml.jackson.core.JsonProcessingException invalid) {
+            return false;
+        }
     }
 
     private boolean handlerReady(String handlerKey) {

@@ -84,6 +84,21 @@ jobs:
           source .env
           set +a
           FLOW_E2E_RESTART_METADATA=1 bash scripts/test_m1_e2e.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run real browser acceptance against Compose
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          source .env
+          set +a
+          docker compose --profile worker-demo up -d flow-worker-demo
+          cd flow-web
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          npx playwright test --config=playwright.real.config.ts
       - name: Verify Prometheus scrapes Flow and Worker metrics
         shell: bash
         run: |

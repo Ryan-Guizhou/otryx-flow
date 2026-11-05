@@ -12,7 +12,7 @@ import AuditPanel from './AuditPanel.vue'
 import ExecutionCenter from './ExecutionCenter.vue'
 import LocaleSwitch from './LocaleSwitch.vue'
 import type { Project, Job, SessionUser, ApiError, CronPreview, OverviewCounts } from './api'
-import { archiveJob, changePassword, createProject, currentUser, listProjects, login, logout, overviewCounts, refreshCsrf, listJobs, createJobDraft, publishJob, previewCron, saveJobDraft, setUnauthorizedHandler, startJobRun } from './api'
+import { archiveJob, changePassword, createProject, currentUser, listProjects, login, logout, overviewCounts, refreshCsrf, listJobs, createJobDraft, publishJob, previewCron, saveJobDraft, setJobEnabled, setUnauthorizedHandler, startJobRun } from './api'
 import { formatWhen } from './i18n'
 
 type ViewKey = 'overview' | 'projects' | 'jobs' | 'workflows' | 'runs' | 'dag-runs' | 'queue' | 'workers' | 'settings' | 'audit'
@@ -195,6 +195,13 @@ async function runJob(job: Job) {
   } catch (err) { showError(friendly(err)) }
   finally { busy.value = false }
 }
+async function toggleJobEnabled(job: Job) {
+  if (!canOperate.value || busy.value) return
+  busy.value = true
+  try { await setJobEnabled(activeJobProject.value, job, !job.enabled); await reloadJobs() }
+  catch (err) { showError(friendly(err)) }
+  finally { busy.value = false }
+}
 async function archive(job: Job) {
   if (!canOperate.value || busy.value) return
   busy.value = true
@@ -294,7 +301,7 @@ function selectView(id: ViewKey) { activeView.value = id; clearError(); if (id =
               <button class="btn btn-outline" @click="reloadJobs">{{ t('common.refresh') }}</button>
             </div>
             <table v-if="jobs.length" class="projects-table"><thead><tr><th>{{ t('jobs.colJob') }}</th><th>{{ t('jobs.colHandler') }}</th><th>{{ t('jobs.colDraft') }}</th><th>{{ t('jobs.colPublished') }}</th><th>{{ t('jobs.colAction') }}</th></tr></thead>
-              <tbody><tr v-for="job in jobs" :key="job.id"><td><strong>{{ job.name }}</strong><small class="muted"> {{ job.id }}</small></td><td class="mono">{{ job.handlerKey }}</td><td>v{{ job.draftVersion }}</td><td>r{{ job.publishedRevision || t('common.none') }}</td><td><button class="btn btn-outline" @click="openJob(job)" :disabled="busy || !canOperate">{{ t('jobs.edit') }}</button> <button class="btn btn-outline" @click="releaseJob(job)" :disabled="busy || !canOperate || job.draftVersion <= job.lastPublishedDraftVersion">{{ t('jobs.publish') }}</button> <button class="btn btn-outline" :disabled="busy || !canOperate || !job.publishedRevision || job.enabled === false" @click="runJob(job)">{{ t('jobs.run') }}</button> <button class="btn btn-outline" :disabled="busy || !canOperate" @click="archive(job)">{{ t('common.archive') }}</button></td></tr></tbody></table>
+              <tbody><tr v-for="job in jobs" :key="job.id"><td><strong>{{ job.name }}</strong><small class="muted"> {{ job.id }}</small></td><td class="mono">{{ job.handlerKey }}</td><td>v{{ job.draftVersion }}</td><td>r{{ job.publishedRevision || t('common.none') }}</td><td><button class="btn btn-outline" @click="openJob(job)" :disabled="busy || !canOperate">{{ t('jobs.edit') }}</button> <button class="btn btn-outline" @click="releaseJob(job)" :disabled="busy || !canOperate || job.draftVersion <= job.lastPublishedDraftVersion">{{ t('jobs.publish') }}</button> <button class="btn btn-outline" :disabled="busy || !canOperate || !job.publishedRevision || job.enabled === false" @click="runJob(job)">{{ t('jobs.run') }}</button> <button class="btn btn-outline" :disabled="busy || !canOperate" @click="toggleJobEnabled(job)">{{ job.enabled ? t('jobs.disable') : t('jobs.enable') }}</button> <button class="btn btn-outline" :disabled="busy || !canOperate" @click="archive(job)">{{ t('common.archive') }}</button></td></tr></tbody></table>
             <div v-else class="empty-state"><div class="empty-icon">J</div><h3>{{ t('jobs.emptyTitle') }}</h3><p>{{ t('jobs.emptyBody') }}</p></div>
           </div>
           <SchedulePanel :project-id="activeJobProject" :jobs="jobs" />

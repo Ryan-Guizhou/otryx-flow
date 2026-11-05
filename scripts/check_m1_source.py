@@ -29,7 +29,7 @@ assert 'Idempotency-Key' in src
 security=files['flow-api/src/main/java/com/peachsoft/otryx/flow/api/security/FlowSecurityConfiguration.java']
 assert 'HttpStatusEntryPoint' in security and 'HttpStatus.UNAUTHORIZED' in security, 'Unauthenticated REST must send 401'
 assert 'new CookieCsrfTokenRepository()' in security and 'withHttpOnlyFalse' not in security, 'CSRF cookie must be HTTP-only'
-assert "hasRole('ADMIN')" in files['flow-api/src/main/java/com/peachsoft/otryx/flow/api/project/ProjectController.java']
+assert "hasAnyRole('ADMIN','OPERATOR')" in files['flow-api/src/main/java/com/peachsoft/otryx/flow/api/project/ProjectController.java']
 assert "@OtryxRpcIdempotent" in files['flow-contracts/src/main/java/com/peachsoft/otryx/flow/contracts/v1/ProjectRpc.java']
 assert 'UNIQUE (owner_username, request_key)' in src, 'Idempotent writes must be backed by a unique index'
 compose=files['compose.yaml']
@@ -98,7 +98,7 @@ assert 'COPY flow-scheduler-core ./flow-scheduler-core' in (root/'deploy/Dockerf
 assert 'flow-metadata/src/main/resources/db/migration/V3__workflow_definition.sql' in files
 assert 'flow_workflow_revision' in src and 'graph_sha256' in src
 assert 'WorkflowDagValidator.validate' in files['flow-metadata/src/main/java/com/peachsoft/otryx/flow/metadata/workflow/WorkflowDefinitionGraph.java']
-assert "hasRole('ADMIN')" in files['flow-api/src/main/java/com/peachsoft/otryx/flow/api/workflow/WorkflowController.java']
+assert "hasAnyRole('ADMIN','OPERATOR')" in files['flow-api/src/main/java/com/peachsoft/otryx/flow/api/workflow/WorkflowController.java']
 assert (root/'scripts/test_m3_workflow_e2e.sh').is_file()
 assert 'FLOW_E2E_M3_WORKFLOWS' in (root/'.github/workflows/m1-integration.yml').read_text(encoding='utf-8')
 assert 'bash scripts/test_m3_workflow_e2e.sh' in (root/'scripts/test_m1_e2e.sh').read_text(encoding='utf-8')
@@ -147,7 +147,7 @@ assert 'logsRequireRunOwnershipAndDelegateOnlyThatRunsNodeIds' in files['flow-ap
 assert 'handlerLogsAreFlushedAsynchronouslyThroughTheBoundedQueue' in files['flow-worker-sdk/src/test/java/com/peachsoft/otryx/flow/worker/sdk/WorkerRuntimeTest.java']
 assert 'getWorkflowRevision' in files['flow-web/src/DagRunPanel.vue']
 assert 'pagedRuns' in files['flow-web/src/DagRunPanel.vue']
-assert 'Retry same request' in files['flow-web/src/DagRunPanel.vue']
+assert 'retryDagNode' in files['flow-web/src/DagRunPanel.vue'] and "t('dag.retrySame')" in files['flow-web/src/DagRunPanel.vue']
 assert 'logs?limit=100' in (root/'scripts/test_m3_dag_e2e.sh').read_text(encoding='utf-8')
 assert 'Handler execution started' in (root/'scripts/test_m3_dag_e2e.sh').read_text(encoding='utf-8')
 print(f'PASS: M1/M2/M3 static contracts ({len(files)} source/config files)')

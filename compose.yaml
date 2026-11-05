@@ -62,6 +62,7 @@ services:
       FLOW_DB_USER: flow_app
       FLOW_DB_PASSWORD: ${FLOW_DB_PASSWORD:?Set an app password in .env}
       OTRYX_REGISTRY_ENDPOINTS: nacos:8848
+      FLOW_E2E_DELAY_HANDLER: ${FLOW_E2E_DELAY_HANDLER:-false}
       FLOW_RPC_ADVERTISED_HOST: flow-metadata
     depends_on:
       mysql: {condition: service_healthy}

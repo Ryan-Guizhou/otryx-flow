@@ -22,6 +22,10 @@ import org.springframework.transaction.support.TransactionTemplate;
  *
  * <p>先锁父 DAG Run 再锁 NodeRun；Inbox 插入、节点终态及后继推进在同一
  * Engine 本地事务执行，不跨服务访问 Dispatcher 数据库。
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/5 14:00
  */
 @Component
 public class DagNodeOutcomeService {
@@ -45,7 +49,8 @@ public class DagNodeOutcomeService {
      */
     public EngineOutcomeReply tryAcknowledge(EngineOutcomeCommand command) {
         if (command == null || command.leaseEpoch() < 1
-                || !("SUCCEEDED".equals(command.outcome()) || "FAILED".equals(command.outcome()))) {
+                || !("SUCCEEDED".equals(command.outcome()) || "FAILED".equals(command.outcome())
+                || "CANCELLED".equals(command.outcome()))) {
             throw new IllegalArgumentException("Invalid DAG outcome");
         }
         String nodeId = validUuid(command.runId());
@@ -88,6 +93,12 @@ public class DagNodeOutcomeService {
                                 + "AND delivery_state <> 'DEAD'",
                         Integer.class, nodeId);
                 if (staged == null || staged != 1) return conflict();
+                String parentStatus = jdbc.queryForObject(
+                        "SELECT status FROM flow_dag_run WHERE id=?", String.class, runId);
+                boolean parentCancelling = "CANCEL_REQUESTED".equals(parentStatus)
+                        || "CANCELLED".equals(parentStatus);
+                String nodeStatus = "CANCELLED".equals(command.outcome()) && !parentCancelling
+                        ? "FAILED" : command.outcome();
                 Timestamp now = Timestamp.from(Instant.now());
                 jdbc.update("INSERT INTO flow_dag_outcome_inbox "
                                 + "(event_id,node_run_id,task_id,project_id,lease_epoch,outcome,"
@@ -97,9 +108,10 @@ public class DagNodeOutcomeService {
                 int updated = jdbc.update("UPDATE flow_dag_node_run "
                                 + "SET status = ?, updated_at = ? WHERE id = ? "
                                 + "AND status IN ('READY','DISPATCHED','CANCEL_PENDING')",
-                        command.outcome(), now, nodeId);
+                        nodeStatus, now, nodeId);
                 if (updated != 1) throw new IllegalStateException("NodeRun terminal CAS lost");
-                coordinator.advanceLocked(runId);
+                if (parentCancelling) coordinator.reconcileCancellationLocked(runId);
+                else coordinator.advanceLocked(runId);
                 return new EngineOutcomeReply("ACCEPTED", nodeId, command.outcome());
             });
         } catch (DuplicateKeyException race) {

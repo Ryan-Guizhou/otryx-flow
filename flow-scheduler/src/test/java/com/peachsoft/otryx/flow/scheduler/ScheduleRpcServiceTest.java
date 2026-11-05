@@ -9,6 +9,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.peachsoft.otryx.flow.contracts.v1.JobRevisionView;
+import com.peachsoft.otryx.flow.contracts.v1.JobView;
+import com.peachsoft.otryx.flow.contracts.v1.ScheduleUpdateCommand;
 import com.peachsoft.otryx.flow.contracts.v1.JobRpc;
 import com.peachsoft.otryx.flow.contracts.v1.ScheduleCreateCommand;
 import com.peachsoft.otryx.flow.contracts.v1.ScheduleToggleCommand;
@@ -51,6 +53,8 @@ class ScheduleRpcServiceTest {
                 + "status VARCHAR(24), created_at TIMESTAMP(3))");
         service = new ScheduleRpcService(jdbc, new DataSourceTransactionManager(source));
         jobs = mock(JobRpc.class);
+        when(jobs.get("admin", PROJECT, JOB)).thenReturn(new JobView(JOB, PROJECT, "Safe job",
+                "safe.echo", "{}", 30, 2, 1, 1, 1, "2026-10-26T00:00:00Z", true, false));
         when(jobs.revision("admin", PROJECT, JOB, 1)).thenReturn(
                 new JobRevisionView(JOB, 1, "Safe job", "safe.echo", "{}", 30, 2, 1L,
                         "2026-10-26T00:00:00Z"));
@@ -93,6 +97,18 @@ class ScheduleRpcServiceTest {
                 paused.schedule().version(), true));
         assertTrue(resumed.schedule().enabled());
         assertEquals(paused.schedule().version()+1, resumed.schedule().version());
+    }
+
+    @Test
+    void disabledJobCannotCreateOrUpdateCronSchedule() {
+        var created = service.create(command("admin", UUID.randomUUID().toString(), "SKIP"));
+        assertEquals("OK", created.code());
+        when(jobs.get("admin", PROJECT, JOB)).thenReturn(new JobView(JOB, PROJECT, "Safe job",
+                "safe.echo", "{}", 30, 2, 1, 1, 1, "2026-10-26T00:00:00Z", false, false));
+        assertEquals("CONFLICT", service.create(command("admin", UUID.randomUUID().toString(), "SKIP")).code());
+        var update = new ScheduleUpdateCommand("admin", PROJECT, created.schedule().id(),
+                created.schedule().version(), JOB, 1, "0 */10 * * * *", "Etc/UTC", "SKIP");
+        assertEquals("CONFLICT", service.update(update).code());
     }
 
     private static ScheduleCreateCommand command(String owner, String key, String misfire) {

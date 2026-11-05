@@ -1,6 +1,7 @@
 package com.peachsoft.otryx.flow.engine;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.peachsoft.otryx.flow.contracts.v1.EngineOutcomeCommand;
 import com.peachsoft.otryx.flow.contracts.v1.ScheduleFireCommand;
@@ -11,7 +12,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 
-/** Engine Outcome Inbox 的完整载荷去重、终态不可倒退和冲突拒绝测试。 */
+/**
+ * Engine Outcome Inbox 的完整载荷去重、终态不可倒退和冲突拒绝测试。
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/5 14:00
+ */
 class EngineOutcomeTest {
     private static final String PROJECT = "00000000-0000-4000-8000-000000000001";
     private static final String SCHEDULE = "00000000-0000-4000-8000-000000000002";
@@ -29,7 +36,9 @@ class EngineOutcomeTest {
         jdbc.execute("CREATE TABLE flow_workflow_run (id VARCHAR(36) PRIMARY KEY, event_id VARCHAR(36) UNIQUE, "
                 + "owner_username VARCHAR(64), project_id VARCHAR(36), schedule_id VARCHAR(36), "
                 + "schedule_revision INT, job_id VARCHAR(36), job_revision INT, planned_fire_at_utc TIMESTAMP(3), "
-                + "origin VARCHAR(16), status VARCHAR(24), created_at TIMESTAMP(3), updated_at TIMESTAMP(3), "
+                + "origin VARCHAR(16), status VARCHAR(24), control_state VARCHAR(24) DEFAULT 'NONE', "
+                + "run_version BIGINT DEFAULT 1, finished_at TIMESTAMP(3), "
+                + "created_at TIMESTAMP(3), updated_at TIMESTAMP(3), "
                 + "UNIQUE(schedule_id, schedule_revision, planned_fire_at_utc, origin))");
         jdbc.execute("CREATE TABLE flow_engine_dispatch_outbox (run_id VARCHAR(36) PRIMARY KEY, "
                 + "event_id VARCHAR(36) UNIQUE, delivery_state VARCHAR(16), claim_token VARCHAR(36), "

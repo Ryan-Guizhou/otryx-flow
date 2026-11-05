@@ -3,7 +3,9 @@ package com.peachsoft.otryx.flow.metadata.job;
 import com.peachsoft.otryx.flow.contracts.v1.HandlerCatalogRpc;
 import com.peachsoft.otryx.flow.contracts.v1.HandlerDefinitionView;
 import com.peachsoft.otryx.spring.annotation.OtryxRpcService;
+import java.util.ArrayList;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
@@ -18,6 +20,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 @OtryxRpcService(interfaceClass = HandlerCatalogRpc.class, version = "1.0.0")
 public class HandlerCatalogRpcService implements HandlerCatalogRpc {
     private final JdbcTemplate jdbc;
+    @Value("${FLOW_E2E_DELAY_HANDLER:false}")
+    private boolean e2eDelayHandlerEnabled;
 
     /** 只查询 Metadata 自己的目录表。 */
     public HandlerCatalogRpcService(JdbcTemplate jdbc) {
@@ -30,6 +34,11 @@ public class HandlerCatalogRpcService implements HandlerCatalogRpc {
                         + "supports_cancel, enabled FROM flow_handler_catalog ORDER BY handler_key LIMIT 100",
                 (rs, index) -> new HandlerDefinitionView(rs.getString(1), rs.getString(2), rs.getString(3),
                         rs.getBoolean(4), rs.getBoolean(5)));
+        if (e2eDelayHandlerEnabled) {
+            List<HandlerDefinitionView> available = new ArrayList<>(rows);
+            available.add(new HandlerDefinitionView("safe.delay", "E2E cancellable delay", "{}", true, true));
+            return available.toArray(HandlerDefinitionView[]::new);
+        }
         return rows.toArray(HandlerDefinitionView[]::new);
     }
 }

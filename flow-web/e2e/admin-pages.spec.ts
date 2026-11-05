@@ -7,6 +7,16 @@ test.beforeEach(async ({ page }) => {
 })
 
 async function mockApi(page: Page) {
+  const jobId = '00000000-0000-4000-8000-000000000010'
+  let jobEnabled = true
+  let jobDraftVersion = 1
+  const scheduleId = '00000000-0000-4000-8000-000000000020'
+  const schedule = {
+    id: scheduleId, projectId, jobId, jobRevision: 1, scheduleRevision: 1,
+    expression: '0 0 9 * * *', timeZone: 'Europe/Paris', misfirePolicy: 'SKIP',
+    enabled: true, nextFireUtc: '2026-11-06T08:00:00Z', version: 3, archived: false,
+    createdAt: '2026-11-03T00:00:00Z', updatedAt: '2026-11-03T00:00:00Z',
+  }
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname
     const method = route.request().method()
@@ -64,12 +74,40 @@ async function mockApi(page: Page) {
       await route.fulfill({ json: [] })
       return
     }
+    if (path.endsWith(`/jobs/${jobId}/enabled`) && method === 'POST') {
+      const body = route.request().postDataJSON() as { enabled: boolean; expectedDraftVersion: number }
+      expect(body.expectedDraftVersion).toBe(jobDraftVersion)
+      jobEnabled = body.enabled
+      jobDraftVersion += 1
+      await route.fulfill({ json: {
+        id: jobId, projectId, name: 'Echo job', handlerKey: 'safe.echo', parametersJson: '{}',
+        timeoutSeconds: 30, maxAttempts: 2, draftVersion: jobDraftVersion, publishedRevision: 1,
+        lastPublishedDraftVersion: 1, updatedAt: '2026-11-03T00:00:00Z', enabled: jobEnabled, archived: false,
+      } })
+      return
+    }
+    if (path === `/api/v1/projects/${projectId}/schedules` && method === 'GET') {
+      await route.fulfill({ json: [schedule] })
+      return
+    }
+    if (path === `/api/v1/projects/${projectId}/schedules/${scheduleId}/triggers` && method === 'GET') {
+      await route.fulfill({ json: [] })
+      return
+    }
+    if (path === `/api/v1/projects/${projectId}/schedules/${scheduleId}` && method === 'PUT') {
+      const body = route.request().postDataJSON() as {
+        jobId: string; jobRevision: number; expression: string; timeZone: string; misfirePolicy: string
+      }
+      Object.assign(schedule, body, { scheduleRevision: schedule.scheduleRevision + 1, version: schedule.version + 1 })
+      await route.fulfill({ json: schedule })
+      return
+    }
     if (path.includes('/jobs') && method === 'GET') {
       await route.fulfill({ json: [{
-        id: '00000000-0000-4000-8000-000000000010', projectId, name: 'Echo job',
+        id: jobId, projectId, name: 'Echo job',
         handlerKey: 'safe.echo', parametersJson: '{}', timeoutSeconds: 30, maxAttempts: 2,
-        draftVersion: 1, publishedRevision: 0, lastPublishedDraftVersion: 0,
-        updatedAt: '2026-11-03T00:00:00Z', enabled: true, archived: false,
+        draftVersion: jobDraftVersion, publishedRevision: 1, lastPublishedDraftVersion: 1,
+        updatedAt: '2026-11-03T00:00:00Z', enabled: jobEnabled, archived: false,
       }] })
       return
     }
@@ -140,4 +178,50 @@ test('language switch updates navigation and audit', async ({ page }) => {
   await expect(page.getByRole('heading', { name: /欢迎回来/ })).toBeVisible()
   await page.getByRole('button', { name: 'English' }).click()
   await expect(page.getByRole('heading', { name: /Good to see you/ })).toBeVisible()
+})
+
+test('admin can disable and re-enable a published job with draft-version CAS', async ({ page }) => {
+  await mockApi(page)
+  await signIn(page, 'admin')
+  await page.getByRole('button', { name: 'Jobs' }).click()
+  await expect(page.getByRole('button', { name: 'Disable' })).toBeVisible()
+
+  const disableRequest = page.waitForRequest(request =>
+    request.method() === 'POST' && request.url().endsWith('/jobs/00000000-0000-4000-8000-000000000010/enabled'))
+  await page.getByRole('button', { name: 'Disable' }).click()
+  expect((await disableRequest).postDataJSON()).toEqual({ enabled: false, expectedDraftVersion: 1 })
+  await expect(page.getByRole('button', { name: 'Enable' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Run now' })).toBeDisabled()
+
+  const enableRequest = page.waitForRequest(request =>
+    request.method() === 'POST' && request.url().endsWith('/jobs/00000000-0000-4000-8000-000000000010/enabled'))
+  await page.getByRole('button', { name: 'Enable' }).click()
+  expect((await enableRequest).postDataJSON()).toEqual({ enabled: true, expectedDraftVersion: 2 })
+  await expect(page.getByRole('button', { name: 'Disable' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Run now' })).toBeEnabled()
+})
+
+test('cron schedule edit form restores persisted values and submits an update', async ({ page }) => {
+  await mockApi(page)
+  await signIn(page, 'admin')
+  await page.getByRole('button', { name: 'Jobs' }).click()
+  await expect(page.getByRole('button', { name: 'Edit schedule' })).toBeVisible()
+  await page.getByRole('button', { name: 'Edit schedule' }).click()
+
+  await expect(page.locator('#schedule-cron')).toHaveValue('0 0 9 * * *')
+  await expect(page.locator('#schedule-zone')).toHaveValue('Europe/Paris')
+  await expect(page.locator('#schedule-misfire')).toHaveValue('SKIP')
+
+  await page.locator('#schedule-cron').fill('0 */10 * * * *')
+  const update = page.waitForRequest(request =>
+    request.method() === 'PUT' && request.url().endsWith('/schedules/00000000-0000-4000-8000-000000000020'))
+  await page.getByRole('button', { name: 'Update schedule' }).click()
+  expect((await update).postDataJSON()).toMatchObject({
+    jobId: '00000000-0000-4000-8000-000000000010',
+    jobRevision: 1,
+    expression: '0 */10 * * * *',
+    timeZone: 'Europe/Paris',
+    misfirePolicy: 'SKIP',
+  })
+  await expect(page.getByRole('button', { name: 'Edit schedule' })).toBeVisible()
 })
