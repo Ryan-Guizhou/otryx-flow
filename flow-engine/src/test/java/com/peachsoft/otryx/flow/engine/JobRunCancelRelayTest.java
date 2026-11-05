@@ -100,7 +100,11 @@ class JobRunCancelRelayTest {
     void rpcFailureSchedulesRetryUsingDatabaseClock() {
         insertRun();
         insertOutbox("PENDING", Timestamp.from(Instant.now().minusSeconds(1)));
-        when(dispatcher.cancelTask(any())).thenThrow(new IllegalStateException("dispatcher unavailable"));
+        AtomicInteger calls = new AtomicInteger();
+        when(dispatcher.cancelTask(any())).thenAnswer(invocation -> {
+            if (calls.getAndIncrement() == 0) throw new IllegalStateException("dispatcher unavailable");
+            return new DispatchCancelReply("CANCEL_REQUESTED", "CANCEL_REQUESTED");
+        });
 
         assertEquals(0, relay.relayOnce());
         assertEquals("PENDING", outboxState());
@@ -111,8 +115,6 @@ class JobRunCancelRelayTest {
 
         jdbc.update("UPDATE flow_engine_run_cancel_outbox SET next_attempt_at=TIMESTAMP '2000-01-01 00:00:00' "
                 + "WHERE run_id=?", RUN);
-        when(dispatcher.cancelTask(any())).thenReturn(
-                new DispatchCancelReply("CANCEL_REQUESTED", "CANCEL_REQUESTED"));
         assertEquals(1, relay.relayOnce());
         assertEquals("DELIVERED", outboxState());
         assertEquals(2, jdbc.queryForObject(
