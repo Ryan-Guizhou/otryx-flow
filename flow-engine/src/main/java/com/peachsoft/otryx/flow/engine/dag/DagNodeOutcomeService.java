@@ -89,6 +89,12 @@ public class DagNodeOutcomeService {
                                 + "AND delivery_state <> 'DEAD'",
                         Integer.class, nodeId);
                 if (staged == null || staged != 1) return conflict();
+                String parentStatus = jdbc.queryForObject(
+                        "SELECT status FROM flow_dag_run WHERE id=?", String.class, runId);
+                boolean parentCancelling = "CANCEL_REQUESTED".equals(parentStatus)
+                        || "CANCELLED".equals(parentStatus);
+                String nodeStatus = "CANCELLED".equals(command.outcome()) && !parentCancelling
+                        ? "FAILED" : command.outcome();
                 Timestamp now = Timestamp.from(Instant.now());
                 jdbc.update("INSERT INTO flow_dag_outcome_inbox "
                                 + "(event_id,node_run_id,task_id,project_id,lease_epoch,outcome,"
@@ -98,9 +104,10 @@ public class DagNodeOutcomeService {
                 int updated = jdbc.update("UPDATE flow_dag_node_run "
                                 + "SET status = ?, updated_at = ? WHERE id = ? "
                                 + "AND status IN ('READY','DISPATCHED','CANCEL_PENDING')",
-                        command.outcome(), now, nodeId);
+                        nodeStatus, now, nodeId);
                 if (updated != 1) throw new IllegalStateException("NodeRun terminal CAS lost");
-                coordinator.advanceLocked(runId);
+                if (parentCancelling) coordinator.reconcileCancellationLocked(runId);
+                else coordinator.advanceLocked(runId);
                 return new EngineOutcomeReply("ACCEPTED", nodeId, command.outcome());
             });
         } catch (DuplicateKeyException race) {
