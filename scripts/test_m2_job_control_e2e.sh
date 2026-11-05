@@ -180,4 +180,10 @@ code="$(curl --connect-timeout 3 --max-time 12 -sS -o "$WORK/archived-run.json" 
   -H "Idempotency-Key: $(python3 -c 'import uuid;print(uuid.uuid4())')" \
   --data-binary @"$WORK/start.json" "$JOBS/$JOB/runs")"
 [ "$code" = 409 ] || { echo "Archived Job manual Run expected 409, got $code"; cat "$WORK/archived-run.json"; exit 1; }
+SCHEDULE_KEY="$(python3 -c 'import uuid;print(uuid.uuid4())')"
+code="$(curl --connect-timeout 3 --max-time 12 -sS -o "$WORK/archived-schedule.json" -w '%{http_code}' \
+  -b "$FLOW_M2_COOKIE" -H 'Content-Type: application/json' -H "X-XSRF-TOKEN: $FLOW_M2_TOKEN" \
+  -H "Idempotency-Key: $SCHEDULE_KEY" --data-binary @"$WORK/schedule.json" \
+  "$BASE/api/v1/projects/$FLOW_M2_PROJECT_ID/schedules")"
+[ "$code" = 409 ] || { echo "Archived Job Cron create expected 409, got $code"; cat "$WORK/archived-schedule.json"; exit 1; }
 echo 'PASS: disabled Job emitted no Cron Fire; disabled and archived Jobs reject manual and scheduled execution'
