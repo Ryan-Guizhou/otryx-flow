@@ -136,6 +136,8 @@ export const en = {
     edit: 'Edit draft',
     publish: 'Publish revision',
     run: 'Run now',
+    enable: 'Enable',
+    disable: 'Disable',
     emptyTitle: 'No jobs in this project',
     emptyBody: 'Create a handler draft, publish a revision, then run it when a worker is online.',
   },
