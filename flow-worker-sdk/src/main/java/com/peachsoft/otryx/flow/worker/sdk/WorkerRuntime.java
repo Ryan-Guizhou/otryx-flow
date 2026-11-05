@@ -196,27 +196,42 @@ public final class WorkerRuntime implements AutoCloseable {
     public void tickOnce() {
         Instant now = Instant.now();
         for (RunningTask task : running.values()) {
-            if (task.terminal.get()) continue;
-            if (!now.isBefore(task.executionDeadline) || !now.isBefore(task.leaseDeadline)) {
+            if (task.terminal.get() || task.leaseInvalidated.get()) continue;
+            if (!now.isBefore(task.leaseDeadline)) {
                 task.cancelled.set(true);
-                Thread thread = task.thread;
-                if (thread != null) thread.interrupt();
-                if (task.terminal.compareAndSet(false, true)) report(task, "FAILED");
+                task.leaseInvalidated.set(true);
+                task.heartbeatStopped.set(true);
+                interrupt(task);
                 continue;
             }
+            if (!now.isBefore(task.executionDeadline)) {
+                task.timedOut.set(true);
+                task.cancelled.set(true);
+                task.heartbeatStopped.set(true);
+                interrupt(task);
+                continue;
+            }
+            if (task.heartbeatStopped.get()) continue;
             try {
                 DispatchMutationReply reply = dispatcher.heartbeat(new DispatchHeartbeatCommand(
                         settings.workerId(), task.lease.taskId(), task.lease.leaseEpoch(),
                         task.lease.leaseToken()));
-                if (reply == null || !"OK".equals(reply.code())) {
-                    task.terminal.set(true);
+                if (reply != null && "OK".equals(reply.code())) {
+                    task.leaseDeadline = Instant.now().plusSeconds(LEASE_SECONDS);
+                } else if (reply != null && "CANCEL_REQUESTED".equals(reply.code())) {
+                    task.cancelRequested.set(true);
                     task.cancelled.set(true);
-                    Thread thread = task.thread;
-                    if (thread != null) thread.interrupt();
-                    LOGGER.warn("Worker lost current lease: taskId={}, epoch={}",
+                    task.heartbeatStopped.set(true);
+                    interrupt(task);
+                    LOGGER.info("Worker cancellation requested: taskId={}, epoch={}",
                             task.lease.taskId(), task.lease.leaseEpoch());
                 } else {
-                    task.leaseDeadline = Instant.now().plusSeconds(LEASE_SECONDS);
+                    task.cancelled.set(true);
+                    task.leaseInvalidated.set(true);
+                    task.heartbeatStopped.set(true);
+                    interrupt(task);
+                    LOGGER.warn("Worker lost current lease: taskId={}, epoch={}",
+                            task.lease.taskId(), task.lease.leaseEpoch());
                 }
             } catch (RuntimeException uncertain) {
                 // RPC 回执未知时不延长本地对租约有效性的判断。
@@ -224,6 +239,11 @@ public final class WorkerRuntime implements AutoCloseable {
                         task.lease.taskId(), uncertain.getClass().getSimpleName());
             }
         }
+    }
+
+    private static void interrupt(RunningTask task) {
+        Thread thread = task.thread;
+        if (thread != null) thread.interrupt();
     }
 
     /**
@@ -263,6 +283,10 @@ public final class WorkerRuntime implements AutoCloseable {
             context.log("INFO", "Handler execution started", Map.of("handlerKey", task.lease.handlerKey()));
             context.checkCancelled();
             task.handler.execute(task.lease.parametersJson(), context);
+            if (!Instant.now().isBefore(task.executionDeadline)) {
+                task.timedOut.set(true);
+                task.cancelled.set(true);
+            }
             context.checkCancelled();
             success = true;
             context.log("INFO", "Handler execution finished", Map.of("outcome", "SUCCEEDED"));
@@ -294,7 +318,11 @@ public final class WorkerRuntime implements AutoCloseable {
             } else {
                 failedTasks.incrementAndGet();
             }
-            if (task.terminal.compareAndSet(false, true)) report(task, success ? "SUCCEEDED" : "FAILED");
+            String outcome = success ? "SUCCEEDED"
+                    : task.cancelRequested.get() ? "CANCELLED" : "FAILED";
+            if (task.terminal.compareAndSet(false, true) && !task.leaseInvalidated.get()) {
+                report(task, outcome);
+            }
             running.remove(task.lease.taskId(), task);
             capacity.release(); // The slot is freed only after the handler body actually exits.
         }
@@ -507,9 +535,10 @@ public final class WorkerRuntime implements AutoCloseable {
     public boolean requestCancel(String taskId) {
         RunningTask task = running.get(Objects.requireNonNull(taskId));
         if (task == null) return false;
+        task.cancelRequested.set(true);
         task.cancelled.set(true);
-        Thread thread = task.thread;
-        if (thread != null) thread.interrupt();
+        task.heartbeatStopped.set(true);
+        interrupt(task);
         return true;
     }
 
@@ -535,9 +564,10 @@ public final class WorkerRuntime implements AutoCloseable {
             }
         }
         for (RunningTask task : running.values()) {
+            task.cancelRequested.set(true);
             task.cancelled.set(true);
-            Thread thread = task.thread;
-            if (thread != null) thread.interrupt();
+            task.heartbeatStopped.set(true);
+            interrupt(task);
         }
     }
 
@@ -573,6 +603,10 @@ public final class WorkerRuntime implements AutoCloseable {
         private final DispatchLeaseView lease;
         private final WorkerHandler handler;
         private final AtomicBoolean cancelled = new AtomicBoolean();
+        private final AtomicBoolean cancelRequested = new AtomicBoolean();
+        private final AtomicBoolean heartbeatStopped = new AtomicBoolean();
+        private final AtomicBoolean leaseInvalidated = new AtomicBoolean();
+        private final AtomicBoolean timedOut = new AtomicBoolean();
         private final AtomicBoolean terminal = new AtomicBoolean();
         private final AtomicLong logSequence = new AtomicLong();
         private final Instant executionDeadline;

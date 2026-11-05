@@ -115,8 +115,25 @@ class WorkerRuntimeTest {
             assertTrue(began.await(5, TimeUnit.SECONDS));
             assertTrue(runtime.requestCancel(rpc.taskId));
             assertTrue(rpc.completed.await(5, TimeUnit.SECONDS));
-            assertEquals("FAILED", rpc.outcome.get());
+            assertEquals("CANCELLED", rpc.outcome.get());
             assertFalse(runtime.requestCancel("missing-task-id"));
+        }
+    }
+
+    @Test
+    void dispatcherCancellationInterruptsHandlerAndReportsCancelled() throws Exception {
+        FakeDispatcher rpc = new FakeDispatcher();
+        rpc.cancelRequested.set(true);
+        CountDownLatch began = new CountDownLatch(1);
+        try (WorkerRuntime runtime = new WorkerRuntime(rpc, settings(1, 10), Map.of("safe.echo", (payload, ctx) -> {
+            began.countDown();
+            while (true) { ctx.checkCancelled(); Thread.sleep(20); }
+        }))) {
+            runtime.start();
+            assertTrue(began.await(5, TimeUnit.SECONDS));
+            assertTrue(rpc.completed.await(5, TimeUnit.SECONDS));
+            assertEquals("CANCELLED", rpc.outcome.get());
+            assertTrue(await(Duration.ofSeconds(3), () -> runtime.activeCount() == 0));
         }
     }
 
@@ -201,6 +218,7 @@ class WorkerRuntimeTest {
         final AtomicReference<String> logMessages = new AtomicReference<>("");
         final AtomicReference<String> outcome = new AtomicReference<>();
         final AtomicBoolean staleHeartbeat = new AtomicBoolean();
+        final AtomicBoolean cancelRequested = new AtomicBoolean();
         final CountDownLatch completed = new CountDownLatch(1);
         @Override
         public DispatchEnqueueReply enqueue(DispatchEnqueueCommand unused) {
@@ -233,7 +251,8 @@ class WorkerRuntimeTest {
         }
         @Override public DispatchMutationReply heartbeat(DispatchHeartbeatCommand request) {
             heartbeats.incrementAndGet();
-            return new DispatchMutationReply(staleHeartbeat.get() ? "STALE" : "OK", "LEASED");
+            String code = staleHeartbeat.get() ? "STALE" : cancelRequested.get() ? "CANCEL_REQUESTED" : "OK";
+            return new DispatchMutationReply(code, "CANCEL_REQUESTED".equals(code) ? code : "LEASED");
         }
         @Override public com.peachsoft.otryx.flow.contracts.v1.ProjectAdmissionView getAdmission(
                 String owner, String project) {

@@ -596,14 +596,30 @@ public class DispatcherRpcService implements DispatcherRpc {
             if (SUCCEEDED.equals(old.status()) || FAILED.equals(old.status())) {
                 return new DispatchCancelReply("TERMINAL", old.status());
             }
-            if (!CANCELLED.equals(old.status())) {
-                jdbc.update("UPDATE flow_dispatch_task SET status='CANCELLED', lease_epoch=lease_epoch+1, "
-                                + "lease_token=NULL, worker_id=NULL, lease_until=NULL, updated_at=? "
-                                + "WHERE id=? AND status IN ('READY','LEASED')", now, old.id());
+            if (CANCELLED.equals(old.status())) {
+                return new DispatchCancelReply(CANCELLED, CANCELLED);
+            }
+            if ("CANCEL_REQUESTED".equals(old.status())) {
+                return new DispatchCancelReply("CANCEL_REQUESTED", "CANCEL_REQUESTED");
+            }
+            if ("LEASED".equals(old.status())) {
+                int changed = jdbc.update("UPDATE flow_dispatch_task SET status='CANCEL_REQUESTED', updated_at=? "
+                                + "WHERE id=? AND status='LEASED'",
+                        now, old.id());
+                if (changed != 1) throw new IllegalStateException("Task cancellation state CAS lost");
+                return new DispatchCancelReply("CANCEL_REQUESTED", "CANCEL_REQUESTED");
+            }
+            if (READY.equals(old.status())) {
+                int changed = jdbc.update("UPDATE flow_dispatch_task SET status='CANCELLED', "
+                                + "lease_epoch=lease_epoch+1, lease_token=NULL, worker_id=NULL, "
+                                + "lease_until=NULL, updated_at=? WHERE id=? AND status='READY'",
+                        now, old.id());
+                if (changed != 1) throw new IllegalStateException("Ready task cancellation CAS lost");
                 jdbc.update("UPDATE flow_dispatch_attempt SET status='CANCELLED', finished_at=? "
                                 + "WHERE task_id=? AND status='LEASED'", now, old.id());
+                return new DispatchCancelReply(CANCELLED, CANCELLED);
             }
-            return new DispatchCancelReply(CANCELLED, CANCELLED);
+            return new DispatchCancelReply("TERMINAL", old.status());
         });
     }
 
@@ -669,7 +685,13 @@ public class DispatcherRpcService implements DispatcherRpc {
                         + "AND lease_epoch = ? AND lease_token = ? AND lease_until > ?",
                 Timestamp.from(now.toInstant().plusSeconds(LEASE_SECONDS)), now,
                 task, worker, command.leaseEpoch(), token, now);
-        return changed == 1 ? new DispatchMutationReply("OK", LEASED)
+        if (changed == 1) return new DispatchMutationReply("OK", LEASED);
+        List<String> statuses = jdbc.query("SELECT status FROM flow_dispatch_task "
+                        + "WHERE id = ? AND worker_id = ? AND lease_epoch = ? AND lease_token = ? "
+                        + "AND lease_until > ?",
+                (rs, index) -> rs.getString(1), task, worker, command.leaseEpoch(), token, now);
+        return !statuses.isEmpty() && "CANCEL_REQUESTED".equals(statuses.getFirst())
+                ? new DispatchMutationReply("CANCEL_REQUESTED", "CANCEL_REQUESTED")
                 : new DispatchMutationReply(STALE, null);
     }
 
@@ -677,7 +699,8 @@ public class DispatcherRpcService implements DispatcherRpc {
     @Override
     public DispatchMutationReply complete(DispatchCompleteCommand command) {
         if (command == null || command.leaseEpoch() < 1
-                || !(SUCCEEDED.equals(command.outcome()) || FAILED.equals(command.outcome()))) {
+                || !(SUCCEEDED.equals(command.outcome()) || FAILED.equals(command.outcome())
+                || CANCELLED.equals(command.outcome()))) {
             throw new IllegalArgumentException("Invalid dispatch completion");
         }
         String worker = validateWorker(command.workerId());
@@ -685,28 +708,32 @@ public class DispatcherRpcService implements DispatcherRpc {
         String token = validateUuid(command.leaseToken());
         return tx.execute(ignored -> {
             Timestamp now = dbNow();
-            List<int[]> attempts = jdbc.query("SELECT attempts, max_attempts FROM flow_dispatch_task "
-                            + "WHERE id = ? AND status = 'LEASED' AND worker_id = ? "
-                            + "AND lease_epoch = ? AND lease_token = ? AND lease_until > ? FOR UPDATE",
-                    (rs, idx) -> new int[]{rs.getInt("attempts"), rs.getInt("max_attempts")},
+            List<String[]> attempts = jdbc.query("SELECT attempts, max_attempts, status FROM flow_dispatch_task "
+                            + "WHERE id = ? AND worker_id = ? AND lease_epoch = ? AND lease_token = ? "
+                            + "AND lease_until > ? AND status IN ('LEASED','CANCEL_REQUESTED') FOR UPDATE",
+                    (rs, idx) -> new String[]{rs.getString("attempts"), rs.getString("max_attempts"),
+                            rs.getString("status")},
                     task, worker, command.leaseEpoch(), token, now);
             if (attempts.isEmpty()) return new DispatchMutationReply(STALE, null);
-            boolean retry = FAILED.equals(command.outcome()) && attempts.getFirst()[0] < attempts.getFirst()[1];
-            String nextStatus = retry ? READY : command.outcome();
+            int attemptNumber = Integer.parseInt(attempts.getFirst()[0]);
+            int maxAttempts = Integer.parseInt(attempts.getFirst()[1]);
+            boolean cancelPending = "CANCEL_REQUESTED".equals(attempts.getFirst()[2]);
+            boolean retry = FAILED.equals(command.outcome()) && !cancelPending && attemptNumber < maxAttempts;
+            String nextStatus = CANCELLED.equals(command.outcome()) ? CANCELLED
+                    : retry ? READY : command.outcome();
             Timestamp nextAt = Timestamp.from(now.toInstant().plusSeconds(
-                    Math.min(1L << Math.min(attempts.getFirst()[0], 5), 30L)));
-            int changed = jdbc.update("UPDATE flow_dispatch_task SET status = ?, "
+                    Math.min(1L << Math.min(attemptNumber, 5), 30L)));
+            int changed = jdbc.update("UPDATE flow_dispatch_task SET status = ?, next_attempt_at = ?, "
                             + "lease_token = NULL, worker_id = NULL, lease_until = NULL, "
-                            + "next_attempt_at = ?, updated_at = ? "
-                            + "WHERE id = ? AND status = 'LEASED' AND lease_epoch = ? AND lease_token = ? "
-                            + "AND lease_until > ?",
+                            + "updated_at = ? WHERE id = ? AND status IN ('LEASED','CANCEL_REQUESTED') "
+                            + "AND lease_epoch = ? AND lease_token = ? AND lease_until > ?",
                     nextStatus, nextAt, now, task, command.leaseEpoch(), token, now);
             if (changed != 1) return new DispatchMutationReply(STALE, null);
             int recorded = jdbc.update("UPDATE flow_dispatch_attempt SET status = ?, finished_at = ? "
                             + "WHERE task_id = ? AND lease_epoch = ? AND lease_token = ? AND status = 'LEASED'",
                     command.outcome(), now, task, command.leaseEpoch(), token);
             if (recorded != 1) throw new IllegalStateException("Attempt record missing");
-            if (SUCCEEDED.equals(nextStatus) || FAILED.equals(nextStatus)) {
+            if (SUCCEEDED.equals(nextStatus) || FAILED.equals(nextStatus) || CANCELLED.equals(nextStatus)) {
                 stageOutcome(task, command.leaseEpoch(), nextStatus, now);
             }
             return new DispatchMutationReply("OK", nextStatus);
@@ -718,25 +745,28 @@ public class DispatcherRpcService implements DispatcherRpc {
         Integer expired = tx.execute(ignored -> {
             Timestamp now = dbNow();
             List<TaskRow> rows = jdbc.query("SELECT * FROM flow_dispatch_task "
-                            + "WHERE status = 'LEASED' AND lease_until <= ? AND attempts >= max_attempts "
+                            + "WHERE (status = 'LEASED' AND lease_until <= ? AND attempts >= max_attempts) "
+                            + "OR (status = 'CANCEL_REQUESTED' AND lease_until <= ?) "
                             + "ORDER BY lease_until, id LIMIT ? FOR UPDATE SKIP LOCKED",
-                    (rs, idx) -> readTask(rs), now, REAPER_LIMIT);
+                    (rs, idx) -> readTask(rs), now, now, REAPER_LIMIT);
             for (TaskRow row : rows) {
-                int changed = jdbc.update("UPDATE flow_dispatch_task SET status = 'FAILED', "
-                                + "lease_token = NULL, worker_id = NULL, lease_until = NULL, updated_at = ? "
-                                + "WHERE id = ? AND status = 'LEASED' AND lease_epoch = ? AND lease_until <= ?",
-                        now, row.id(), row.epoch(), now);
+                boolean cancelRequested = "CANCEL_REQUESTED".equals(row.status());
+                String outcome = cancelRequested ? CANCELLED : FAILED;
+                int changed = jdbc.update("UPDATE flow_dispatch_task SET status = ?, "
+                                + "lease_epoch = lease_epoch + ?, lease_token = NULL, worker_id = NULL, "
+                                + "lease_until = NULL, updated_at = ? "
+                                + "WHERE id = ? AND status = ? AND lease_epoch = ? AND lease_until <= ?",
+                        outcome, cancelRequested ? 1 : 0, now, row.id(), row.status(), row.epoch(), now);
                 if (changed != 1) throw new IllegalStateException("Expired lease fencing mismatch");
-                jdbc.update("UPDATE flow_dispatch_attempt SET status = 'EXPIRED', finished_at = ? "
+                jdbc.update("UPDATE flow_dispatch_attempt SET status = ?, finished_at = ? "
                                 + "WHERE task_id = ? AND lease_epoch = ? AND status = 'LEASED'",
-                        now, row.id(), row.epoch());
-                stageOutcome(row.id(), row.epoch(), FAILED, now);
+                        cancelRequested ? CANCELLED : "EXPIRED", now, row.id(), row.epoch());
+                stageOutcome(row.id(), row.epoch(), outcome, now);
             }
             return rows.size();
         });
         return expired == null ? 0 : expired;
     }
-
 
     /** 将终态任务作为唯一、持久的 Engine 结果事件写入 Dispatcher 自有事务。 */
     private void stageOutcome(String taskId, long epoch, String outcome, Timestamp now) {
