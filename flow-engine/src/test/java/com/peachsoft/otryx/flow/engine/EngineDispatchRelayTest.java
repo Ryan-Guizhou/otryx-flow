@@ -52,8 +52,9 @@ class EngineDispatchRelayTest {
         jdbc.execute("CREATE TABLE flow_workflow_run (id VARCHAR(36) PRIMARY KEY, event_id VARCHAR(36) UNIQUE, "
                 + "owner_username VARCHAR(64), project_id VARCHAR(36), schedule_id VARCHAR(36), "
                 + "schedule_revision INT, job_id VARCHAR(36), job_revision INT, planned_fire_at_utc TIMESTAMP(3), "
-                + "origin VARCHAR(16), status VARCHAR(24), parameter_override TEXT, "
-                + "created_at TIMESTAMP(3), updated_at TIMESTAMP(3))");
+                + "origin VARCHAR(16), status VARCHAR(24), control_state VARCHAR(24) DEFAULT 'NONE', "
+                + "run_version BIGINT DEFAULT 1, failure_code VARCHAR(64), finished_at TIMESTAMP(3), "
+                + "parameter_override TEXT, created_at TIMESTAMP(3), updated_at TIMESTAMP(3))");
         jdbc.execute("CREATE TABLE flow_engine_dispatch_outbox (run_id VARCHAR(36) PRIMARY KEY, "
                 + "event_id VARCHAR(36) UNIQUE, delivery_state VARCHAR(16), claim_token VARCHAR(36), "
                 + "lease_until TIMESTAMP(3), attempts INT, next_attempt_at TIMESTAMP(3) "
@@ -115,6 +116,17 @@ class EngineDispatchRelayTest {
         assertEquals("DEAD", state(runId));
         assertEquals("WAITING_DISPATCH", runState(runId));
         verifyNoInteractions(dispatcher);
+    }
+
+    @Test
+    void permanentCapacityRejectionFailsRunInsteadOfRetryingForever() {
+        String runId = engine.acceptScheduledFire(event()).runId();
+        when(dispatcher.enqueue(any())).thenReturn(new DispatchEnqueueReply("CAPACITY_REJECTED", null, null));
+        assertEquals(0, relay.relayOnce());
+        assertEquals("DEAD", state(runId));
+        assertEquals("FAILED", runState(runId));
+        assertEquals("CAPACITY_REJECTED", jdbc.queryForObject(
+                "SELECT failure_code FROM flow_workflow_run WHERE id=?", String.class, runId));
     }
 
     private String state(String id) {
