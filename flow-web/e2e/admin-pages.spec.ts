@@ -99,7 +99,7 @@ async function mockApi(page: Page) {
         jobId: string; jobRevision: number; expression: string; timeZone: string; misfirePolicy: string
       }
       Object.assign(schedule, body, { scheduleRevision: schedule.scheduleRevision + 1, version: schedule.version + 1 })
-      await route.fulfill({ json: { code: 'OK', schedule, duplicate: false } })
+      await route.fulfill({ json: schedule })
       return
     }
     if (path.includes('/jobs') && method === 'GET') {
