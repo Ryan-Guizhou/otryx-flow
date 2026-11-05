@@ -1,5 +1,6 @@
 package com.peachsoft.otryx.flow.api.job;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.peachsoft.otryx.flow.api.audit.FlowAuditRecorder;
 import com.peachsoft.otryx.flow.contracts.v1.JobCreateDraftCommand;
@@ -49,7 +50,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class JobController {
     private static final String RPC_VERSION = "1.0.0";
     private static final int MAX_JSON_BYTES = 16 * 1024;
-    private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper()
+            .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
     private static final String REQUEST_KEY_PATTERN = "[a-zA-Z0-9_-]{16,80}";
     @OtryxRpcReference(version = RPC_VERSION)
     private JobRpc jobs;
