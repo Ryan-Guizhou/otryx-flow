@@ -18,7 +18,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.test.util.ReflectionTestUtils;
 
-/** 验证普通 Job 取消 Outbox 的租约恢复及取消状态收敛。 */
+/**
+ * 验证普通 Job 取消 Outbox 的租约恢复及取消状态收敛。
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/5 14:00
+ */
 class JobRunCancelRelayTest {
     private static final String PROJECT = "00000000-0000-4000-8000-000000000001";
     private static final String RUN = "00000000-0000-4000-8000-000000000002";
