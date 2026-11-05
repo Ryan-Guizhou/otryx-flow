@@ -86,6 +86,28 @@ class JobRpcServiceTest {
     }
 
     @Test
+    void enablementDoesNotMarkPublishedContentAsAnUnpublishedDraft() {
+        String job = service.createDraft(create(UUID.randomUUID().toString(), "Toggle state")).job().id();
+        assertEquals("OK", service.publish(new JobPublishCommand("admin", PROJECT, job, 1,
+                UUID.randomUUID().toString())).code());
+
+        var disabled = service.setEnabled("admin", PROJECT, job, false, 1);
+        assertEquals("OK", disabled.code());
+        assertEquals(2L, disabled.job().draftVersion());
+        assertEquals(2L, disabled.job().lastPublishedDraftVersion());
+        assertEquals(1, disabled.job().publishedRevision());
+        assertEquals(false, disabled.job().enabled());
+
+        assertEquals("OK", service.saveDraft(new JobDraftUpdateCommand("admin", PROJECT, job, 2,
+                "Unpublished edit", "safe.echo", "{}", 10, 2)).code());
+        var enabled = service.setEnabled("admin", PROJECT, job, true, 3);
+        assertEquals("OK", enabled.code());
+        assertEquals(4L, enabled.job().draftVersion());
+        assertEquals(2L, enabled.job().lastPublishedDraftVersion());
+        assertEquals(true, enabled.job().enabled());
+    }
+
+    @Test
     void wrongOwnerAndProjectHaveNoAccess() {
         String job = service.createDraft(create(UUID.randomUUID().toString(), "Shared? No")).job().id();
         assertEquals(0, service.list("other", PROJECT).jobs().length);
