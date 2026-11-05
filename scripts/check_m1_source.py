@@ -29,7 +29,7 @@ assert 'Idempotency-Key' in src
 security=files['flow-api/src/main/java/com/peachsoft/otryx/flow/api/security/FlowSecurityConfiguration.java']
 assert 'HttpStatusEntryPoint' in security and 'HttpStatus.UNAUTHORIZED' in security, 'Unauthenticated REST must send 401'
 assert 'new CookieCsrfTokenRepository()' in security and 'withHttpOnlyFalse' not in security, 'CSRF cookie must be HTTP-only'
-assert "hasRole('ADMIN')" in files['flow-api/src/main/java/com/peachsoft/otryx/flow/api/project/ProjectController.java']
+assert "hasAnyRole('ADMIN','OPERATOR')" in files['flow-api/src/main/java/com/peachsoft/otryx/flow/api/project/ProjectController.java']
 assert "@OtryxRpcIdempotent" in files['flow-contracts/src/main/java/com/peachsoft/otryx/flow/contracts/v1/ProjectRpc.java']
 assert 'UNIQUE (owner_username, request_key)' in src, 'Idempotent writes must be backed by a unique index'
 compose=files['compose.yaml']
