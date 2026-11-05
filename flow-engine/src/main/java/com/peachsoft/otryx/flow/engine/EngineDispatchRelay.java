@@ -98,8 +98,10 @@ public class EngineDispatchRelay {
                     } else {
                         quarantine(claim, "DISPATCHER_CONFLICT");
                     }
-                } else if ("CAPACITY_WAIT".equals(result.code()) || "CAPACITY_REJECTED".equals(result.code())) {
+                } else if ("CAPACITY_WAIT".equals(result.code())) {
                     retry(claim, result.code());
+                } else if ("CAPACITY_REJECTED".equals(result.code())) {
+                    rejectCapacity(claim);
                 } else {
                     retry(claim, "DISPATCHER_UNKNOWN_REPLY");
                 }
@@ -161,6 +163,23 @@ public class EngineDispatchRelay {
             return true;
         });
         return Boolean.TRUE.equals(confirmed);
+    }
+
+    private void rejectCapacity(Claimed claim) {
+        tx.execute(ignored -> {
+            Timestamp now = dbNow();
+            int changed = jdbc.update("UPDATE flow_engine_dispatch_outbox SET delivery_state='DEAD', "
+                            + "claim_token=NULL, lease_until=NULL, last_error='CAPACITY_REJECTED' "
+                            + "WHERE run_id=? AND claim_token=? AND delivery_state='IN_FLIGHT'",
+                    claim.runId(), claim.token());
+            if (changed == 1) {
+                jdbc.update("UPDATE flow_workflow_run SET status='FAILED', failure_code='CAPACITY_REJECTED', "
+                                + "finished_at=?, run_version=run_version+1, updated_at=? "
+                                + "WHERE id=? AND status='WAITING_DISPATCH'",
+                        now, now, claim.runId());
+            }
+            return null;
+        });
     }
 
     private void retry(Claimed claim, String reason) {
