@@ -3,6 +3,9 @@ package com.peachsoft.otryx.flow.scheduler;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.peachsoft.otryx.flow.contracts.v1.JobRevisionView;
+import com.peachsoft.otryx.flow.contracts.v1.JobRpc;
+import com.peachsoft.otryx.flow.contracts.v1.JobView;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.UUID;
@@ -13,6 +16,9 @@ import org.h2.jdbcx.JdbcDataSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.test.util.ReflectionTestUtils;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /** 两个独立 Scanner 对同一共享数据库抢占同一个到期游标，最多写入一个逻辑火点。 */
 class ScheduleScannerTest {
@@ -34,13 +40,30 @@ class ScheduleScannerTest {
                 + "event_type VARCHAR(48), payload_json TEXT, delivery_state VARCHAR(16), attempts INT, "
                 + "created_at TIMESTAMP(3), UNIQUE(trigger_id))");
         String schedule = UUID.randomUUID().toString();
+        String project = UUID.randomUUID().toString();
+        String job = UUID.randomUUID().toString();
+        String disabledSchedule = UUID.randomUUID().toString();
+        String disabledJob = UUID.randomUUID().toString();
         Instant due = Instant.now().minusSeconds(1);
-        jdbc.update("INSERT INTO flow_schedule_definition VALUES (?,'admin',?, ?,1,1,'0 0 * * * *'," 
-                        + "'Etc/UTC','FIRE_ONCE',true,?,1,?)", schedule, UUID.randomUUID().toString(), UUID.randomUUID().toString(),
+        jdbc.update("INSERT INTO flow_schedule_definition VALUES (?,'admin',?, ?,1,1,'0 0 * * * *',"
+                        + "'Etc/UTC','FIRE_ONCE',true,?,1,?)", schedule, project, job,
+                Timestamp.from(due), Timestamp.from(due));
+        jdbc.update("INSERT INTO flow_schedule_definition VALUES (?,'admin',?, ?,1,1,'0 0 * * * *',"
+                        + "'Etc/UTC','FIRE_ONCE',true,?,1,?)", disabledSchedule, project, disabledJob,
                 Timestamp.from(due), Timestamp.from(due));
         var manager = new DataSourceTransactionManager(source);
         ScheduleScanner a = new ScheduleScanner(jdbc, manager, new ObjectMapper());
         ScheduleScanner b = new ScheduleScanner(jdbc, manager, new ObjectMapper());
+        JobRpc jobs = mock(JobRpc.class);
+        when(jobs.get("admin", project, job)).thenReturn(new JobView(job, project, "Active job",
+                "safe.echo", "{}", 30, 2, 1, 1, 1, "2026-11-05T00:00:00Z", true, false));
+        when(jobs.get("admin", project, disabledJob)).thenReturn(new JobView(disabledJob, project,
+                "Disabled job", "safe.echo", "{}", 30, 2, 1, 1, 1,
+                "2026-11-05T00:00:00Z", false, false));
+        when(jobs.revision("admin", project, job, 1)).thenReturn(new JobRevisionView(job, 1,
+                "Active job", "safe.echo", "{}", 30, 2, 1L, "2026-11-05T00:00:00Z"));
+        ReflectionTestUtils.setField(a, "jobs", jobs);
+        ReflectionTestUtils.setField(b, "jobs", jobs);
         CountDownLatch go = new CountDownLatch(1);
         try (var threads = Executors.newFixedThreadPool(2)) {
             var first = threads.submit(() -> { go.await(); return a.scanOnce(); });
@@ -51,8 +74,13 @@ class ScheduleScannerTest {
         assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM flow_schedule_trigger", Integer.class));
         assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM flow_schedule_outbox", Integer.class));
         assertEquals("PENDING", jdbc.queryForObject("SELECT delivery_state FROM flow_schedule_outbox", String.class));
-        assertEquals(2L, jdbc.queryForObject("SELECT version FROM flow_schedule_definition", Long.class));
-        assertTrue(jdbc.queryForObject("SELECT next_fire_at_utc FROM flow_schedule_definition",
-                Timestamp.class).toInstant().isAfter(due));
+        assertEquals(2L, jdbc.queryForObject("SELECT version FROM flow_schedule_definition WHERE id=?",
+                Long.class, schedule));
+        assertEquals(false, jdbc.queryForObject("SELECT enabled FROM flow_schedule_definition WHERE id=?",
+                Boolean.class, disabledSchedule));
+        assertEquals(2L, jdbc.queryForObject("SELECT version FROM flow_schedule_definition WHERE id=?",
+                Long.class, disabledSchedule));
+        assertTrue(jdbc.queryForObject("SELECT next_fire_at_utc FROM flow_schedule_definition WHERE id=?",
+                Timestamp.class, schedule).toInstant().isAfter(due));
     }
 }
