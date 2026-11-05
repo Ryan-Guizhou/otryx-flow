@@ -51,12 +51,17 @@ class ScheduleScannerTest {
         String job = UUID.randomUUID().toString();
         String disabledSchedule = UUID.randomUUID().toString();
         String disabledJob = UUID.randomUUID().toString();
+        String archivedSchedule = UUID.randomUUID().toString();
+        String archivedJob = UUID.randomUUID().toString();
         Instant due = Instant.now().minusSeconds(1);
         jdbc.update("INSERT INTO flow_schedule_definition VALUES (?,'admin',?, ?,1,1,'0 0 * * * *',"
                         + "'Etc/UTC','FIRE_ONCE',true,?,1,?)", schedule, project, job,
                 Timestamp.from(due), Timestamp.from(due));
         jdbc.update("INSERT INTO flow_schedule_definition VALUES (?,'admin',?, ?,1,1,'0 0 * * * *',"
                         + "'Etc/UTC','FIRE_ONCE',true,?,1,?)", disabledSchedule, project, disabledJob,
+                Timestamp.from(due), Timestamp.from(due));
+        jdbc.update("INSERT INTO flow_schedule_definition VALUES (?,'admin',?, ?,1,1,'0 0 * * * *',"
+                        + "'Etc/UTC','FIRE_ONCE',true,?,1,?)", archivedSchedule, project, archivedJob,
                 Timestamp.from(due), Timestamp.from(due));
         var manager = new DataSourceTransactionManager(source);
         ScheduleScanner a = new ScheduleScanner(jdbc, manager, new ObjectMapper());
@@ -67,6 +72,9 @@ class ScheduleScannerTest {
         when(jobs.get("admin", project, disabledJob)).thenReturn(new JobView(disabledJob, project,
                 "Disabled job", "safe.echo", "{}", 30, 2, 1, 1, 1,
                 "2026-11-05T00:00:00Z", false, false));
+        when(jobs.get("admin", project, archivedJob)).thenReturn(new JobView(archivedJob, project,
+                "Archived job", "safe.echo", "{}", 30, 2, 1, 1, 1,
+                "2026-11-05T00:00:00Z", true, true));
         when(jobs.revision("admin", project, job, 1)).thenReturn(new JobRevisionView(job, 1,
                 "Active job", "safe.echo", "{}", 30, 2, 1L, "2026-11-05T00:00:00Z"));
         ReflectionTestUtils.setField(a, "jobs", jobs);
@@ -87,6 +95,10 @@ class ScheduleScannerTest {
                 Boolean.class, disabledSchedule));
         assertEquals(2L, jdbc.queryForObject("SELECT version FROM flow_schedule_definition WHERE id=?",
                 Long.class, disabledSchedule));
+        assertEquals(false, jdbc.queryForObject("SELECT enabled FROM flow_schedule_definition WHERE id=?",
+                Boolean.class, archivedSchedule));
+        assertEquals(2L, jdbc.queryForObject("SELECT version FROM flow_schedule_definition WHERE id=?",
+                Long.class, archivedSchedule));
         assertTrue(jdbc.queryForObject("SELECT next_fire_at_utc FROM flow_schedule_definition WHERE id=?",
                 Timestamp.class, schedule).toInstant().isAfter(due));
     }
