@@ -7,7 +7,11 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import com.peachsoft.otryx.flow.contracts.v1.JobRevisionView;
+import com.peachsoft.otryx.flow.contracts.v1.JobRpc;
+import com.peachsoft.otryx.flow.contracts.v1.JobView;
 import com.peachsoft.otryx.flow.contracts.v1.ScheduleFireCommand;
+import com.peachsoft.otryx.spring.annotation.OtryxRpcReference;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,6 +34,8 @@ public class ScheduleScanner {
     private final TransactionTemplate tx;
     private final SchedulePlanner planner;
     private final ObjectMapper mapper;
+    @OtryxRpcReference(version = "1.0.0")
+    private JobRpc jobs;
 
     /** 注入 Scheduler 私有数据库、事务管理器和统一 Cron 核心。 */
     public ScheduleScanner(JdbcTemplate jdbc, PlatformTransactionManager transactionManager, ObjectMapper mapper) {
@@ -57,22 +63,55 @@ public class ScheduleScanner {
      * @return 本轮实际持久化的逻辑火点数量
      */
     public int scanOnce() {
+        Timestamp observedNow = jdbc.queryForObject("SELECT CURRENT_TIMESTAMP(3)", Timestamp.class);
+        if (observedNow == null) throw new IllegalStateException("Database clock unavailable");
+        var candidates = jdbc.query("SELECT id, owner_username, project_id, job_id, job_revision, version "
+                        + "FROM flow_schedule_definition WHERE enabled = 1 AND next_fire_at_utc <= ? "
+                        + "ORDER BY next_fire_at_utc, id LIMIT ?",
+                (rs, row) -> new ScheduleCandidate(rs.getString("id"), rs.getString("owner_username"),
+                        rs.getString("project_id"), rs.getString("job_id"), rs.getInt("job_revision"),
+                        rs.getLong("version")),
+                observedNow, LOCK_BATCH);
+        List<String> eligibleIds = new java.util.ArrayList<>(candidates.size());
+        for (ScheduleCandidate candidate : candidates) {
+            JobView definition = jobs.get(candidate.ownerUsername(), candidate.projectId(), candidate.jobId());
+            boolean active = definition != null && definition.enabled() && !definition.archived();
+            if (active) {
+                JobRevisionView revision = jobs.revision(candidate.ownerUsername(), candidate.projectId(),
+                        candidate.jobId(), candidate.jobRevision());
+                active = revision != null;
+            }
+            if (active) {
+                eligibleIds.add(candidate.id());
+            } else {
+                // A disabled or archived Job pauses its Cron plans; re-enabling the Job does not silently resume them.
+                jdbc.update("UPDATE flow_schedule_definition SET enabled=0, version=version+1, "
+                                + "updated_at=CURRENT_TIMESTAMP(3) WHERE id=? AND version=? AND enabled=1",
+                        candidate.id(), candidate.version());
+            }
+        }
+        if (eligibleIds.isEmpty()) return 0;
+
         Integer committed = tx.execute(status -> {
             Timestamp now = jdbc.queryForObject("SELECT CURRENT_TIMESTAMP(3)", Timestamp.class);
             if (now == null) throw new IllegalStateException("Database clock unavailable");
-            Instant databaseNow = now.toInstant();
-            var due = jdbc.query("SELECT id, owner_username, project_id, job_id, job_revision, schedule_revision, cron_expr, time_zone, "
-                    + "misfire_policy, next_fire_at_utc, version FROM flow_schedule_definition "
-                    + "WHERE enabled = 1 AND next_fire_at_utc <= ? "
-                    + "ORDER BY next_fire_at_utc, id LIMIT ? FOR UPDATE SKIP LOCKED",
-                    (rs, row) -> readRow(rs), now, LOCK_BATCH);
+            String placeholders = String.join(",", java.util.Collections.nCopies(eligibleIds.size(), "?"));
+            String query = "SELECT id, owner_username, project_id, job_id, job_revision, schedule_revision, "
+                    + "cron_expr, time_zone, misfire_policy, next_fire_at_utc, version "
+                    + "FROM flow_schedule_definition WHERE enabled = 1 AND next_fire_at_utc <= ? "
+                    + "AND id IN (" + placeholders + ") ORDER BY next_fire_at_utc, id LIMIT ? FOR UPDATE SKIP LOCKED";
+            List<Object> arguments = new java.util.ArrayList<>(eligibleIds.size() + 2);
+            arguments.add(now);
+            arguments.addAll(eligibleIds);
+            arguments.add(LOCK_BATCH);
+            var due = jdbc.query(query, (rs, row) -> readRow(rs), arguments.toArray());
             int total = 0;
             for (ScheduleRow schedule : due) {
                 SchedulePlanner.Plan result = planner.plan(schedule.expression(), schedule.timeZone(),
-                        schedule.misfirePolicy(), schedule.nextFireUtc(), databaseNow);
+                        schedule.misfirePolicy(), schedule.nextFireUtc(), now.toInstant());
                 for (Instant fire : result.fires()) {
                     String eventId = fireId(schedule.id(), schedule.scheduleRevision(), fire);
-                    Timestamp createdAt = Timestamp.from(databaseNow);
+                    Timestamp createdAt = Timestamp.from(now.toInstant());
                     jdbc.update("INSERT INTO flow_schedule_trigger (id, schedule_id, schedule_revision, "
                             + "planned_fire_at_utc, origin, status, created_at) "
                             + "VALUES (?, ?, ?, ?, 'CRON', 'PENDING_ENGINE', ?)", eventId,
@@ -86,7 +125,7 @@ public class ScheduleScanner {
                 int updated = jdbc.update("UPDATE flow_schedule_definition SET next_fire_at_utc = ?, "
                                 + "version = version + 1, updated_at = ? "
                                 + "WHERE id = ? AND version = ? AND next_fire_at_utc = ? AND enabled = 1",
-                        Timestamp.from(result.nextFireUtc()), Timestamp.from(databaseNow), schedule.id(),
+                        Timestamp.from(result.nextFireUtc()), Timestamp.from(now.toInstant()), schedule.id(),
                         schedule.version(), Timestamp.from(schedule.nextFireUtc()));
                 if (updated != 1) {
                     throw new IllegalStateException("Schedule cursor CAS rejected");
@@ -120,6 +159,9 @@ public class ScheduleScanner {
                 rs.getString("misfire_policy"), rs.getTimestamp("next_fire_at_utc").toInstant(),
                 rs.getLong("version"));
     }
+
+    private record ScheduleCandidate(String id, String ownerUsername, String projectId,
+                                     String jobId, int jobRevision, long version) { }
 
     private record ScheduleRow(String id, String ownerUsername, String projectId, String jobId,
             int jobRevision, int scheduleRevision,
