@@ -106,7 +106,8 @@ public class EngineRpcService implements EngineRpc {
     @Override
     public EngineOutcomeReply acknowledgeTaskOutcome(EngineOutcomeCommand command) {
         if (command == null || command.leaseEpoch() < 1
-                || !("SUCCEEDED".equals(command.outcome()) || "FAILED".equals(command.outcome()))) {
+                || !("SUCCEEDED".equals(command.outcome()) || "FAILED".equals(command.outcome())
+                || "CANCELLED".equals(command.outcome()))) {
             throw new IllegalArgumentException("Invalid Engine task outcome");
         }
         if (dagNodeOutcomes != null) {
@@ -150,9 +151,11 @@ public class EngineRpcService implements EngineRpc {
                                 + "(event_id,engine_run_id,task_id,project_id,lease_epoch,outcome,"
                                 + "payload_fingerprint,accepted_at) VALUES (?,?,?,?,?,?,?,?)",
                         event, run, task, project, command.leaseEpoch(), command.outcome(), fingerprint, now);
-                int changed = jdbc.update("UPDATE flow_workflow_run SET status = ?, updated_at = ? "
+                int changed = jdbc.update("UPDATE flow_workflow_run SET status = ?, "
+                                + "control_state = CASE WHEN ? = 'CANCELLED' THEN 'CANCELLED' ELSE control_state END, "
+                                + "finished_at = ?, run_version = run_version + 1, updated_at = ? "
                                 + "WHERE id = ? AND status IN ('WAITING_DISPATCH','DISPATCHED','CANCEL_REQUESTED')",
-                        command.outcome(), now, run);
+                        command.outcome(), command.outcome(), now, now, run);
                 if (changed != 1) throw new IllegalStateException("Engine terminal outcome CAS lost");
                 return new EngineOutcomeReply("ACCEPTED", run, command.outcome());
             });
