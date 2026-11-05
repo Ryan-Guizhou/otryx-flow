@@ -1,6 +1,9 @@
 package com.peachsoft.otryx.flow.engine;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.peachsoft.otryx.flow.contracts.v1.EngineOutcomeCommand;
 import com.peachsoft.otryx.flow.contracts.v1.ScheduleFireCommand;
@@ -14,7 +17,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 
-/** 验证重投、并发 Inbox 去重、冲突拒绝、租户隔离和事务回滚。 */
+/**
+ * 验证重投、并发 Inbox 去重、冲突拒绝、租户隔离和事务回滚。
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/5 14:00
+ */
 class EngineRpcServiceTest {
     private static final String PROJECT = "00000000-0000-4000-8000-000000000001";
     private static final String SCHEDULE = "00000000-0000-4000-8000-000000000002";
