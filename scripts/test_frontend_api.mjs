@@ -354,14 +354,14 @@ test('FLOW-018 condition AST supports bounded operators and requires TRUE/FALSE 
   }
   assert.deepEqual(validateWorkflowGraph(graph), [])
   const missingBranch = { ...graph, edges: graph.edges.slice(0, 1) }
-  assert.ok(validateWorkflowGraph(missingBranch).some(message => message.includes('TRUE edge') || message.includes('FALSE edge')))
+  assert.ok(validateWorkflowGraph(missingBranch).some(issue => issue.key === 'conditionEdges'))
   const unsafePath = {
     ...graph,
     nodes: graph.nodes.map(node => node.id === 'C'
       ? { ...node, condition: { op: 'exists', path: '$.user; DROP TABLE users' } }
       : node)
   }
-  assert.ok(validateWorkflowGraph(unsafePath).some(message => message.includes('safe field path')))
+  assert.ok(validateWorkflowGraph(unsafePath).some(issue => issue.key === 'conditionPath'))
 })
 
 test('FLOW-018 graph validator rejects cycles, unsafe handlers, excess depth and unsupported fields', () => {
@@ -377,22 +377,22 @@ test('FLOW-018 graph validator rejects cycles, unsafe handlers, excess depth and
   }
   assert.ok(validateWorkflowGraph({ ...diamond, edges: [
     ...diamond.edges, { id: 'da', source: 'D', target: 'A', branch: 'ALWAYS' }
-  ] }).some(message => message.includes('cycle')))
+  ] }).some(issue => issue.key === 'cycle')))
   assert.ok(validateWorkflowGraph({ ...diamond, nodes: diamond.nodes.map(node =>
     node.id === 'A' ? { ...node, handlerKey: 'java.lang.Runtime.exec' } : node
-  ) }).some(message => message.includes('safe.echo or safe.fail')))
+  ) }).some(issue => issue.key === 'handler')))
   assert.ok(validateWorkflowGraph({ ...diamond, nodes: diamond.nodes.map(node =>
     node.id === 'A' ? { ...node, unexpected: true } : node
-  ) }).some(message => message.includes('unsupported field')))
+  ) }).some(issue => issue.key === 'unsupportedField')))
   const deepNodes = Array.from({ length: 33 }, (_, index) => taskNode('n' + index))
   const deepEdges = Array.from({ length: 32 }, (_, index) => ({
     id: 'e' + index, source: 'n' + index, target: 'n' + (index + 1), branch: 'ALWAYS'
   }))
   assert.ok(validateWorkflowGraph({ schemaVersion: 1, nodes: deepNodes, edges: deepEdges })
-    .some(message => message.includes('depth exceeds 32')))
+    .some(issue => issue.key === 'depth')))
   const oversized = Array.from({ length: 101 }, (_, index) => taskNode('n' + index))
   assert.ok(validateWorkflowGraph({ schemaVersion: 1, nodes: oversized, edges: [] })
-    .some(message => message.includes('1–100 nodes')))
+    .some(issue => issue.key === 'nodeCount')))
 })
 
 test('FLOW-018 serializer strips Vue Flow coordinates and runtime metadata before save or publish', () => {
