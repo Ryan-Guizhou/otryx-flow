@@ -132,11 +132,15 @@ public class JobRunCancelRelay {
 
     private void retry(Claimed item, String reason) {
         long seconds = Math.min(1L << Math.min(item.attempts(), 6), MAX_BACKOFF_SECONDS);
-        jdbc.update("UPDATE flow_engine_run_cancel_outbox SET delivery_state='PENDING', "
-                        + "claim_token=NULL, lease_until=NULL, next_attempt_at=?, last_error=? "
-                        + "WHERE run_id=? AND claim_token=? AND delivery_state='IN_FLIGHT'",
-                Timestamp.from(Instant.now().plusSeconds(seconds)), truncate(reason),
-                item.runId(), item.token());
+        tx.execute(ignored -> {
+            Timestamp now = dbNow();
+            jdbc.update("UPDATE flow_engine_run_cancel_outbox SET delivery_state='PENDING', "
+                            + "claim_token=NULL, lease_until=NULL, next_attempt_at=?, last_error=? "
+                            + "WHERE run_id=? AND claim_token=? AND delivery_state='IN_FLIGHT'",
+                    Timestamp.from(now.toInstant().plusSeconds(seconds)), truncate(reason),
+                    item.runId(), item.token());
+            return null;
+        });
     }
 
     private Timestamp dbNow() {
