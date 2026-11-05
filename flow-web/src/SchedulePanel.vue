@@ -112,7 +112,8 @@ async function toggle(row: Schedule) {
 
 function edit(row: Schedule) {
   if (busy.value) return
-  const job = candidates().find(item => item.id === row.jobId)
+  const availableJobs = candidates()
+  const job = availableJobs.find(item => item.id === row.jobId) ?? availableJobs[0]
   if (!job) {
     error.value = t('schedule.updateFailed')
     return
@@ -203,7 +204,7 @@ async function showTriggers(row: Schedule) {
               <button class="btn btn-outline" :disabled="busy" @click="toggle(row)">
                 {{ row.enabled ? t('schedule.pause') : t('schedule.resume') }}
               </button>
-              <button class="btn btn-outline" :disabled="busy || !candidates().some(job => job.id === row.jobId)"
+              <button class="btn btn-outline" :disabled="busy || !candidates().length"
                 @click="edit(row)">{{ t('schedule.edit') }}</button>
               <button class="btn btn-outline" :disabled="busy" @click="runOnce(row)">{{ t('schedule.runOnce') }}</button>
               <button class="btn btn-outline" :disabled="busy" @click="archive(row)">{{ t('common.archive') }}</button>
