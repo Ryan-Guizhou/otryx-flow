@@ -65,4 +65,6 @@ echo 'PASS: pure Cron + IANA zone + DST gap preview (not a scheduled trigger)'
 if [ "${FLOW_E2E_M2_SCHEDULES:-0}" = 1 ]; then
   FLOW_M2_JOB_ID="$JOB_ID" bash scripts/test_m2_scheduler_e2e.sh
 fi
-echo 'PASS: M2 persisted draft + stable idempotency + CAS + immutable revisions + RPC (and optional restart)'
+FLOW_M2_COOKIE="$FLOW_M2_COOKIE" FLOW_M2_TOKEN="$FLOW_M2_TOKEN" \
+  FLOW_M2_PROJECT_ID="$FLOW_M2_PROJECT_ID" bash scripts/test_m2_job_control_e2e.sh
+echo 'PASS: M2 persisted draft + stable idempotency + CAS + immutable revisions + Job control and cancellation recovery'
