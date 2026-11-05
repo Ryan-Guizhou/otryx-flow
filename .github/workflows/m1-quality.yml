@@ -111,3 +111,7 @@ jobs:
         run: node ../scripts/test_e2e_harness_offline.mjs
       - run: npm install --no-audit --no-fund
       - run: npm run build
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run browser interaction tests
+        run: npm run e2e
