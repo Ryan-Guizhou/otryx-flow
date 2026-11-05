@@ -249,6 +249,27 @@ class DispatcherRpcServiceTest {
     }
 
     @Test
+    void persistedCancellationWinsIfWorkerReportsFailureBeforeNextHeartbeat() {
+        var command = event(2);
+        service.enqueue(command);
+        DispatchLeaseView lease = service.claim(new DispatchLeaseCommand(
+                "worker-one", "safe.echo", 1)).leases()[0];
+        assertEquals("CANCEL_REQUESTED", service.cancelTask(
+                new com.peachsoft.otryx.flow.contracts.v1.DispatchTaskCancelCommand(
+                        "admin", PROJECT, command.runId())).code());
+
+        assertEquals("OK", service.complete(new DispatchCompleteCommand(
+                "worker-one", lease.taskId(), lease.leaseEpoch(), lease.leaseToken(), "FAILED")).code());
+        assertEquals("CANCELLED", jdbc.queryForObject(
+                "SELECT status FROM flow_dispatch_task WHERE id=?", String.class, lease.taskId()));
+        assertEquals("CANCELLED", jdbc.queryForObject(
+                "SELECT status FROM flow_dispatch_attempt WHERE task_id=? AND lease_epoch=?",
+                String.class, lease.taskId(), lease.leaseEpoch()));
+        assertEquals(1, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM flow_dispatch_outcome_outbox", Integer.class));
+    }
+
+    @Test
     void cancellationLeaseExpiryBecomesTerminalAndFenced() {
         var command = event(2);
         service.enqueue(command);
