@@ -377,22 +377,22 @@ test('FLOW-018 graph validator rejects cycles, unsafe handlers, excess depth and
   }
   assert.ok(validateWorkflowGraph({ ...diamond, edges: [
     ...diamond.edges, { id: 'da', source: 'D', target: 'A', branch: 'ALWAYS' }
-  ] }).some(issue => issue.key === 'cycle')))
+  ] }).some(issue => issue.key === 'cycle'))
   assert.ok(validateWorkflowGraph({ ...diamond, nodes: diamond.nodes.map(node =>
     node.id === 'A' ? { ...node, handlerKey: 'java.lang.Runtime.exec' } : node
-  ) }).some(issue => issue.key === 'handler')))
+  ) }).some(issue => issue.key === 'handler'))
   assert.ok(validateWorkflowGraph({ ...diamond, nodes: diamond.nodes.map(node =>
     node.id === 'A' ? { ...node, unexpected: true } : node
-  ) }).some(issue => issue.key === 'unsupportedField')))
+  ) }).some(issue => issue.key === 'unsupportedField'))
   const deepNodes = Array.from({ length: 33 }, (_, index) => taskNode('n' + index))
   const deepEdges = Array.from({ length: 32 }, (_, index) => ({
     id: 'e' + index, source: 'n' + index, target: 'n' + (index + 1), branch: 'ALWAYS'
   }))
   assert.ok(validateWorkflowGraph({ schemaVersion: 1, nodes: deepNodes, edges: deepEdges })
-    .some(issue => issue.key === 'depth')))
+    .some(issue => issue.key === 'depth'))
   const oversized = Array.from({ length: 101 }, (_, index) => taskNode('n' + index))
   assert.ok(validateWorkflowGraph({ schemaVersion: 1, nodes: oversized, edges: [] })
-    .some(issue => issue.key === 'nodeCount')))
+    .some(issue => issue.key === 'nodeCount'))
 })
 
 test('FLOW-018 serializer strips Vue Flow coordinates and runtime metadata before save or publish', () => {
