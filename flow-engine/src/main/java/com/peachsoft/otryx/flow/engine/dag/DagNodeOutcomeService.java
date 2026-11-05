@@ -22,6 +22,10 @@ import org.springframework.transaction.support.TransactionTemplate;
  *
  * <p>先锁父 DAG Run 再锁 NodeRun；Inbox 插入、节点终态及后继推进在同一
  * Engine 本地事务执行，不跨服务访问 Dispatcher 数据库。
+ *
+ * @Author Ryan-Guizhou
+ * @Version 0.1.0-SNAPSHOT
+ * @CreateTime 2026/11/5 14:00
  */
 @Component
 public class DagNodeOutcomeService {
