@@ -389,7 +389,7 @@ test('FLOW-018 graph validator rejects cycles, unsafe handlers, excess depth and
     id: 'e' + index, source: 'n' + index, target: 'n' + (index + 1), branch: 'ALWAYS'
   }))
   assert.ok(validateWorkflowGraph({ schemaVersion: 1, nodes: deepNodes, edges: deepEdges })
-    .some(issue => issue.key === 'depth'))
+    .some(issue => issue.key === 'conditionDepth'))
   const oversized = Array.from({ length: 101 }, (_, index) => taskNode('n' + index))
   assert.ok(validateWorkflowGraph({ schemaVersion: 1, nodes: oversized, edges: [] })
     .some(issue => issue.key === 'nodeCount'))
