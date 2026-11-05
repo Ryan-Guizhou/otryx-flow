@@ -29,7 +29,9 @@ class EngineOutcomeTest {
         jdbc.execute("CREATE TABLE flow_workflow_run (id VARCHAR(36) PRIMARY KEY, event_id VARCHAR(36) UNIQUE, "
                 + "owner_username VARCHAR(64), project_id VARCHAR(36), schedule_id VARCHAR(36), "
                 + "schedule_revision INT, job_id VARCHAR(36), job_revision INT, planned_fire_at_utc TIMESTAMP(3), "
-                + "origin VARCHAR(16), status VARCHAR(24), created_at TIMESTAMP(3), updated_at TIMESTAMP(3), "
+                + "origin VARCHAR(16), status VARCHAR(24), control_state VARCHAR(24) DEFAULT 'NONE', "
+                + "run_version BIGINT DEFAULT 1, finished_at TIMESTAMP(3), "
+                + "created_at TIMESTAMP(3), updated_at TIMESTAMP(3), "
                 + "UNIQUE(schedule_id, schedule_revision, planned_fire_at_utc, origin))");
         jdbc.execute("CREATE TABLE flow_engine_dispatch_outbox (run_id VARCHAR(36) PRIMARY KEY, "
                 + "event_id VARCHAR(36) UNIQUE, delivery_state VARCHAR(16), claim_token VARCHAR(36), "
