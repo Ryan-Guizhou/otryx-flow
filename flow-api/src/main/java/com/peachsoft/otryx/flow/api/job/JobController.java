@@ -148,6 +148,7 @@ public class JobController {
     public ResponseEntity<?> enabled(Principal principal, @PathVariable String projectId,
             @PathVariable String jobId, @Valid @RequestBody EnabledBody body) {
         if (!validId(projectId) || !validId(jobId)) return badRequest();
+        if (!allowed(principal, projectId)) return notFound();
         return respond(principal.getName(), jobs.setEnabled(principal.getName(), projectId, jobId,
                 body.enabled(), body.expectedDraftVersion()), HttpStatus.OK);
     }
