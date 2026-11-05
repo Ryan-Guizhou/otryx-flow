@@ -166,6 +166,8 @@ export const en = {
     fireOnce: 'Fire once',
     catchUp: 'Bounded catch-up',
     save: 'Save schedule',
+    update: 'Update schedule',
+    edit: 'Edit schedule',
     colRevision: 'Job revision',
     colCron: 'Cron / Zone',
     colNext: 'Next UTC fire',
