@@ -718,9 +718,10 @@ public class DispatcherRpcService implements DispatcherRpc {
             int attemptNumber = Integer.parseInt(attempts.getFirst()[0]);
             int maxAttempts = Integer.parseInt(attempts.getFirst()[1]);
             boolean cancelPending = "CANCEL_REQUESTED".equals(attempts.getFirst()[2]);
-            boolean retry = FAILED.equals(command.outcome()) && !cancelPending && attemptNumber < maxAttempts;
-            String nextStatus = CANCELLED.equals(command.outcome()) ? CANCELLED
-                    : retry ? READY : command.outcome();
+            // The persisted cancellation request wins if it was committed before this terminal CAS.
+            String effectiveOutcome = cancelPending ? CANCELLED : command.outcome();
+            boolean retry = FAILED.equals(effectiveOutcome) && attemptNumber < maxAttempts;
+            String nextStatus = retry ? READY : effectiveOutcome;
             Timestamp nextAt = Timestamp.from(now.toInstant().plusSeconds(
                     Math.min(1L << Math.min(attemptNumber, 5), 30L)));
             int changed = jdbc.update("UPDATE flow_dispatch_task SET status = ?, next_attempt_at = ?, "
@@ -731,7 +732,7 @@ public class DispatcherRpcService implements DispatcherRpc {
             if (changed != 1) return new DispatchMutationReply(STALE, null);
             int recorded = jdbc.update("UPDATE flow_dispatch_attempt SET status = ?, finished_at = ? "
                             + "WHERE task_id = ? AND lease_epoch = ? AND lease_token = ? AND status = 'LEASED'",
-                    command.outcome(), now, task, command.leaseEpoch(), token);
+                    effectiveOutcome, now, task, command.leaseEpoch(), token);
             if (recorded != 1) throw new IllegalStateException("Attempt record missing");
             if (SUCCEEDED.equals(nextStatus) || FAILED.equals(nextStatus) || CANCELLED.equals(nextStatus)) {
                 stageOutcome(task, command.leaseEpoch(), nextStatus, now);
