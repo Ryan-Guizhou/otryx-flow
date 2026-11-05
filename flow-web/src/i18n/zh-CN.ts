@@ -168,6 +168,8 @@ export const zhCN: typeof en = {
     fireOnce: '补触发一次',
     catchUp: '有限追赶',
     save: '保存调度',
+    update: '更新调度',
+    edit: '编辑调度',
     colRevision: '任务修订',
     colCron: 'Cron / 时区',
     colNext: '下次 UTC 触发',
