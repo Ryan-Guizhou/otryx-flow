@@ -45,7 +45,8 @@ public class DagNodeOutcomeService {
      */
     public EngineOutcomeReply tryAcknowledge(EngineOutcomeCommand command) {
         if (command == null || command.leaseEpoch() < 1
-                || !("SUCCEEDED".equals(command.outcome()) || "FAILED".equals(command.outcome()))) {
+                || !("SUCCEEDED".equals(command.outcome()) || "FAILED".equals(command.outcome())
+                || "CANCELLED".equals(command.outcome()))) {
             throw new IllegalArgumentException("Invalid DAG outcome");
         }
         String nodeId = validUuid(command.runId());
