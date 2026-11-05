@@ -1,5 +1,6 @@
 package com.peachsoft.otryx.flow.engine;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.peachsoft.otryx.flow.contracts.v1.CancelJobRunCommand;
@@ -41,7 +42,8 @@ public class JobRunRpcService implements JobRunRpc {
     private static final int MAX_RUNS = 100;
     private static final String WAITING = "WAITING_DISPATCH";
     private static final int MAX_OVERRIDE_BYTES = 16 * 1024;
-    private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
+    private static final ObjectMapper JSON_MAPPER = new ObjectMapper()
+            .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
     private final JdbcTemplate jdbc;
     private final TransactionTemplate tx;
 
